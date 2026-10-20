@@ -1,0 +1,91 @@
+# roam plan
+
+## Goal
+
+A 1:1 C++ port of navcat that is idiomatic, portable and readable. navcat's improvements over recast come with it: the world-level node and link pools, and runtime off-mesh links between any two tiles. Performance work and large-world support come after parity.
+
+## Decisions
+
+| topic | decision |
+|---|---|
+| language | C++20, written C-style |
+| scalar | `float`; tile vertices in world space |
+| naming | snake_case functions, PascalCase types, one namespace per module |
+| math | `struct Vec3 { float x, y, z; }` and friends; functions return by value |
+| containers | roam's own `Array<T>` and `Map<K, V>` (integer keys); no STL |
+| memory | allocator hook; running out of memory aborts |
+| errors | no exceptions; result structs with flags, as in navcat |
+| node refs | `uint64_t`, same bit layout as navcat (1 type, 31 index, 20 sequence); invalid is `~0ull` |
+| query filter | struct of function pointers plus `void *user_data` |
+| random | `float (*rand)(void *user_data)` plus user data |
+| build | CMake with presets `debug`, `release`, `web`; targets `roam` (core) and `roam_blocks` |
+| sorting | `sort::stable`, since JS `Array.prototype.sort` is stable and ordering affects output |
+
+## Layout
+
+```
+roam/                      the library; includes read "roam/generate/heightfield.h"
+  util/                    assert, memory, array, map, sort, index_pool
+  math/                    scalar, vec2, vec3, box3
+  geometry/                navcat src/geometry.ts
+  generate/                navcat src/generate/*
+  query/                   navcat src/query/*
+  debug/                   navcat src/debug.ts
+  blocks/                  navcat blocks/*, built as the separate roam_blocks target
+    geometry/  generators/  search/  agents/
+tests/                     mirrors roam/, files end in .test.cpp
+  harness/                 test.h, fixture loader, main
+  parity/                  tests against navcat fixtures
+demos/
+  app/                     sokol and imgui shell, camera, debug draw, model loading
+  examples/                one file per navcat example
+  assets/                  the .glb models the demos use
+bench/
+tools/navcat-fixtures/     the Node dumper
+llm/                       planning docs
+```
+
+- Folders are for finding files, not namespaces: `roam::heightfield::rasterize_triangles` lives in `roam/generate/heightfield.h`.
+- File names are navcat's names in snake_case. `three/` has no counterpart; the demo app draws `debug` primitives itself.
+
+From JS to C++:
+
+- `Record<string, X>` keyed by pool ids becomes an `Array<X>` of slots indexed by an `IndexPool` id, each with an `allocated` flag.
+- The tile position maps become a `Map<uint64_t, …>` keyed by packed (x, y, layer).
+- Result objects become result structs that own `Array`s.
+- `BuildContext` keeps its timings and logs, using a monotonic clock.
+
+## Parity testing
+
+1. `tools/navcat-fixtures/dump.mjs` imports navcat's built `dist`, runs the bench fixture (and later a few example models) through every generation stage plus seeded queries, and dumps each stage's output. It grows a stage at a time as stages are ported.
+   - Fixtures are never committed. The `navcat_fixtures` CMake target writes them to `build/<preset>/fixtures/`, and `roam_parity_tests` depends on it.
+   - The dumper refuses to run when navcat's `dist` is older than its sources; run `pnpm build` in navcat.
+   - Parity tests only build when Node and a navcat checkout (`ROAM_NAVCAT_DIR`, default `../navcat`) are found.
+   - File format: a u32 entry count, then per entry: u32 name length, name, u32 type (0 f64, 1 i32), u32 count, values. Little-endian.
+2. C++ tests load the fixtures and compare stage by stage: structure exactly, values within a float tolerance. The first stage that diverges tells you which file has the bug.
+3. Port navcat's `tst/*` suites.
+4. Use a tiny test harness written for roam, with no third-party test framework.
+
+## Demos
+
+- One app with an example picker. Each example is a file `demos/examples/example_<name>.cpp` that exposes `{ name, init, update, draw, ui }`.
+- Proposed stack: sokol (app, gfx, gl), Dear ImGui through sokol_imgui, and cgltf for navcat's `.glb` models.
+- Builds natively and with emscripten into a static site.
+
+## Phases
+
+0. Scaffolding (done): CMake and presets, `Array`, `Map`, `sort`, `index_pool`, allocator, assert, math, the test harness, the fixture dumper.
+1. Foundations: `node`, `geometry`.
+2. Generation, each stage golden-tested: input triangle mesh, heightfield, compact heightfield, regions, contour set, poly mesh, poly mesh detail, poly neighbours, nav mesh tile.
+3. Nav mesh core: structures, BV tree, `nav_mesh_api` (tiles, node and link pools, off-mesh connections).
+4. Demo app skeleton: a solo navmesh with debug draw.
+5. Queries: search, `find_node_path`, sliced search, `find_path`, `find_straight_path`, `find_smooth_path`, `raycast`, `move_along_surface`, random points, local neighbourhood.
+6. Blocks: chunky tri mesh, solo and tiled generators, flood fill, merge positions.
+7. Agents: path corridor, local boundary, obstacle avoidance, crowd.
+8. The remaining demos, and benchmarks against navcat on the same fixtures.
+
+## After parity
+
+- Performance: flatten per-node link arrays and add a reusable, generation-stamped search pool.
+- Large worlds: tile-local vertex storage.
+- A handoff from roam to navcat: roam writes a tile blob that navcat can import.
