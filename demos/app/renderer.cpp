@@ -278,6 +278,53 @@ void arrow(DrawList &list, Vec3 from, Vec3 to, Color color) {
     line(list, to, vec3::scale_and_add(back, side, -head * 0.5f), color);
 }
 
+static void perpendicular_axes(Vec3 direction, Vec3 &out_u, Vec3 &out_v) {
+    Vec3 reference = fabsf(direction.y) > 0.99f ? Vec3{1, 0, 0} : Vec3{0, 1, 0};
+    out_u = vec3::normalize(vec3::cross(direction, reference));
+    out_v = vec3::cross(out_u, direction);
+}
+
+void thick_line(DrawList &list, Vec3 a, Vec3 b, float width, Color color) {
+    Vec3 direction = vec3::subtract(b, a);
+    float length = vec3::length(direction);
+    if (length < 1e-6f) return;
+    Vec3 u, v;
+    perpendicular_axes(vec3::scale(direction, 1.0f / length), u, v);
+    const float radius = width * 0.5f;
+    const int side_count = 8;
+    for (int i = 0; i < side_count; i++) {
+        float a0 = (float)i / side_count * scalar::PI * 2;
+        float a1 = (float)(i + 1) / side_count * scalar::PI * 2;
+        Vec3 o0 = vec3::add(vec3::scale(u, cosf(a0) * radius), vec3::scale(v, sinf(a0) * radius));
+        Vec3 o1 = vec3::add(vec3::scale(u, cosf(a1) * radius), vec3::scale(v, sinf(a1) * radius));
+        triangle(list, vec3::add(a, o0), vec3::add(a, o1), vec3::add(b, o1), color);
+        triangle(list, vec3::add(a, o0), vec3::add(b, o1), vec3::add(b, o0), color);
+    }
+}
+
+void cone(DrawList &list, Vec3 base, Vec3 apex, float radius, Color color) {
+    Vec3 direction = vec3::subtract(apex, base);
+    float length = vec3::length(direction);
+    if (length < 1e-6f) return;
+    Vec3 u, v;
+    perpendicular_axes(vec3::scale(direction, 1.0f / length), u, v);
+    const int segment_count = 16;
+    for (int i = 0; i < segment_count; i++) {
+        float a0 = (float)i / segment_count * scalar::PI * 2;
+        float a1 = (float)(i + 1) / segment_count * scalar::PI * 2;
+        Vec3 b0 = vec3::add(base, vec3::add(vec3::scale(u, cosf(a0) * radius), vec3::scale(v, sinf(a0) * radius)));
+        Vec3 b1 = vec3::add(base, vec3::add(vec3::scale(u, cosf(a1) * radius), vec3::scale(v, sinf(a1) * radius)));
+        triangle(list, b0, b1, apex, color);
+        triangle(list, b0, b1, base, color);
+    }
+}
+
+void arrow_helper(DrawList &list, Vec3 origin, Vec3 direction, float length, Color color, float head_length, float head_width) {
+    Vec3 head_base = vec3::scale_and_add(origin, direction, length - head_length);
+    line(list, origin, head_base, color);
+    cone(list, head_base, vec3::scale_and_add(origin, direction, length), head_width * 0.5f, color);
+}
+
 void add_primitives(DrawList &list, const DebugPrimitives &primitives) {
     for (const DebugPrimitive &primitive : primitives) {
         float alpha = primitive.transparent ? primitive.opacity : 1.0f;

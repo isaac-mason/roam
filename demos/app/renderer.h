@@ -79,6 +79,9 @@ void box(DrawList &list, roam::Vec3 center, roam::Vec3 half_extents, Color color
 void circle(DrawList &list, roam::Vec3 center, float radius, Color color);
 void cylinder(DrawList &list, roam::Vec3 base, float radius, float height, Color color);
 void arrow(DrawList &list, roam::Vec3 from, roam::Vec3 to, Color color);
+void thick_line(DrawList &list, roam::Vec3 a, roam::Vec3 b, float width, Color color);
+void cone(DrawList &list, roam::Vec3 base, roam::Vec3 apex, float radius, Color color);
+void arrow_helper(DrawList &list, roam::Vec3 origin, roam::Vec3 direction, float length, Color color, float head_length, float head_width);
 
 void render(Renderer &renderer, const Camera &camera, const StaticDrawing *statics, uint32_t static_count, bool show_level);
 

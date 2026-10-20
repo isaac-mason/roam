@@ -28,6 +28,7 @@ namespace camera {
 
 Camera create();
 void frame_bounds(Camera &camera, roam::Box3 bounds);
+void look_from(Camera &camera, roam::Vec3 eye, roam::Vec3 target, float fov_y);
 void update(Camera &camera, float width, float height);
 void orbit(Camera &camera, float dx, float dy);
 void pan(Camera &camera, float dx, float dy);

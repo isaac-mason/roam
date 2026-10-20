@@ -21,6 +21,15 @@ void frame_bounds(Camera &camera, Box3 bounds) {
     camera.distance = radius / sinf(camera.fov_y * 0.5f);
 }
 
+void look_from(Camera &camera, Vec3 eye, Vec3 target, float fov_y) {
+    Vec3 offset = vec3::subtract(eye, target);
+    float horizontal = sqrtf(offset.x * offset.x + offset.z * offset.z);
+    camera.target = target;
+    camera.yaw = atan2f(offset.x, offset.z);
+    camera.pitch = atan2f(offset.y, horizontal);
+    camera.distance = vec3::length(offset) * tanf(fov_y * 0.5f) / tanf(camera.fov_y * 0.5f);
+}
+
 void update(Camera &camera, float width, float height) {
     camera.width = width;
     camera.height = height;
