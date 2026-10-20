@@ -127,6 +127,13 @@ const polyMeshEntries = (prefix, polyMesh) => [
     f64(`${prefix}.bounds`, polyMesh.bounds),
 ];
 
+const polyMeshDetailEntries = (prefix, detail) => [
+    i32(`${prefix}.mesh_count`, detail.nMeshes),
+    i32(`${prefix}.meshes`, detail.meshes),
+    f64(`${prefix}.vertices`, detail.vertices),
+    i32(`${prefix}.triangles`, detail.triangles),
+];
+
 const config = {
     cellSize: 0.15,
     cellHeight: 0.15,
@@ -140,6 +147,8 @@ const config = {
     maxSimplificationError: 1.3,
     maxEdgeLength: 12,
     maxVerticesPerPoly: 5,
+    detailSampleDistance: 6,
+    detailSampleMaxError: 1,
 };
 
 const options = {
@@ -147,6 +156,8 @@ const options = {
     walkableRadiusVoxels: Math.ceil(config.walkableRadiusWorld / config.cellSize),
     walkableClimbVoxels: Math.ceil(config.walkableClimbWorld / config.cellHeight),
     walkableHeightVoxels: Math.ceil(config.walkableHeightWorld / config.cellHeight),
+    detailSampleDistanceWorld: config.detailSampleDistance < 0.9 ? 0 : config.cellSize * config.detailSampleDistance,
+    detailSampleMaxErrorWorld: config.cellHeight * config.detailSampleMaxError,
 };
 
 const dumpSoloGeneration = (name, positions, indices) => {
@@ -165,6 +176,8 @@ const dumpSoloGeneration = (name, positions, indices) => {
         f64('options.max_simplification_error', options.maxSimplificationError),
         i32('options.max_edge_length', options.maxEdgeLength),
         i32('options.max_vertices_per_poly', options.maxVerticesPerPoly),
+        f64('options.detail_sample_distance', options.detailSampleDistanceWorld),
+        f64('options.detail_sample_max_error', options.detailSampleMaxErrorWorld),
     ];
 
     const ctx = navcat.BuildContext.create();
@@ -209,6 +222,9 @@ const dumpSoloGeneration = (name, positions, indices) => {
 
     const polyMesh = navcat.buildPolyMesh(ctx, contourSet, options.maxVerticesPerPoly);
     entries.push(...polyMeshEntries('poly_mesh.watershed', polyMesh));
+
+    const detail = navcat.buildPolyMeshDetail(ctx, polyMesh, chf, options.detailSampleDistanceWorld, options.detailSampleMaxErrorWorld);
+    entries.push(...polyMeshDetailEntries('poly_mesh_detail.watershed', detail));
 
     const monotone = buildCompact();
     navcat.erodeWalkableArea(options.walkableRadiusVoxels, monotone);

@@ -35,6 +35,8 @@ struct NavTestOptions {
     float max_simplification_error;
     int max_edge_length;
     int max_vertices_per_poly;
+    float detail_sample_distance;
+    float detail_sample_max_error;
 };
 
 inline NavTestOptions load_nav_test_options(const fixture::Fixture &nav_test) {
@@ -51,5 +53,7 @@ inline NavTestOptions load_nav_test_options(const fixture::Fixture &nav_test) {
     options.max_simplification_error = (float)fixture::number(nav_test, "options.max_simplification_error");
     options.max_edge_length = fixture::i32(nav_test, "options.max_edge_length").data[0];
     options.max_vertices_per_poly = fixture::i32(nav_test, "options.max_vertices_per_poly").data[0];
+    options.detail_sample_distance = (float)fixture::number(nav_test, "options.detail_sample_distance");
+    options.detail_sample_max_error = (float)fixture::number(nav_test, "options.detail_sample_max_error");
     return options;
 }
