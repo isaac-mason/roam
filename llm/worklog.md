@@ -22,8 +22,9 @@ Dated decisions and notable findings. The current design lives in `plan.md`; thi
 - **Query parity on nav-test** (60 path pairs, with both navcat patches applied in a scratch copy):
   - Exact: `find_path` results and node paths, raycast, `move_along_surface`, local neighbourhood, wall segments, random points.
   - Straight path 2/60, crossings 2/60, any-angle and sliced 2/60: precision ties at exact mesh vertices and edges. Examples: a crossing point that lands exactly on the end vertex in only one precision, and an any-angle raycast that ends exactly on a portal edge midpoint.
-  - Smooth path 14/60: the same vertex ties, compounded over many 0.5-unit steps, plus the navcat bug below.
+  - Smooth path 14/60: the same vertex ties, compounded over many 0.5-unit steps, plus the navcat zero-step bug (see 2026-10-21).
   - Test inputs only use points that are directly over a poly. Nearest-poly positions projected onto poly boundaries put rays and moves exactly on edges, which gave spurious tie mismatches.
+
 ## 2026-10-21
 
 - **navcat bug, fixed in both: `findSmoothPath` with a zero-length step.** If the steer target equals the current position (for example, standing exactly on an off-mesh connection start), `Math.min(stepSize, 0) / 0` is NaN. `moveAlongSurface` rejects the NaN target and the smooth path stops after its first point. roam steps zero distance when the length is 0, so the off-mesh connection is taken; `find_smooth_path_takes_off_mesh_connection_from_its_start` covers it. The navcat fix is `llm/navcat-smooth-path-zero-step.patch`.
