@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(ROAM_BUILD_TESTS "build roam's tests" ${PROJECT_IS_TOP_LEVEL})
+option(ROAM_BUILD_BENCH "build the benchmarks" ${PROJECT_IS_TOP_LEVEL})
 option(ROAM_BUILD_DEMOS "build the demo app, fetching sokol, imgui and cgltf" OFF)
 set(ROAM_NAVCAT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../navcat" CACHE PATH "navcat checkout used to generate parity fixtures")
 
@@ -66,6 +67,12 @@ if(ROAM_BUILD_TESTS)
     else()
         message(STATUS "roam: parity tests skipped, needs node and a navcat checkout at ROAM_NAVCAT_DIR (${ROAM_NAVCAT_DIR})")
     endif()
+endif()
+
+if(ROAM_BUILD_BENCH AND NOT EMSCRIPTEN)
+    add_executable(roam_bench bench/bench.cpp bench/main.cpp)
+    target_link_libraries(roam_bench PRIVATE roam_blocks)
+    roam_compile_options(roam_bench)
 endif()
 
 if(ROAM_BUILD_DEMOS)
