@@ -185,6 +185,147 @@ const lcg = (seed) => {
     };
 };
 
+const refValue = (ref) => (ref === null || ref === undefined || ref === navcat.INVALID_NODE_REF ? -1 : ref);
+
+const pointsEntries = (prefix, points, counts) => [
+    i32(`${prefix}.counts`, counts),
+    f64(`${prefix}.positions`, points.flatMap((point) => point.position)),
+    i32(`${prefix}.types`, points.map((point) => point.type)),
+    f64(`${prefix}.refs`, points.map((point) => refValue(point.nodeRef))),
+    i32(`${prefix}.flags`, points.map((point) => point.flags)),
+];
+
+const queryEntries = (navMesh, positions, halfExtents) => {
+    const filter = navcat.DEFAULT_QUERY_FILTER;
+    const pairs = [];
+    for (let i = 0; i < 60; i++) pairs.push([positions[i % positions.length], positions[(i * 37 + 11) % positions.length]]);
+
+    const out = {
+        pairStarts: [], pairEnds: [],
+        pathSuccess: [], pathFlags: [], nodePathCounts: [], nodePathRefs: [], straight: [], straightCounts: [], crossingCounts: [], smoothCounts: [],
+        anyAngleNodePathCounts: [], anyAngleNodePathRefs: [],
+        crossings: [],
+        smooth: [],
+        rayT: [], rayEdge: [], rayNormal: [], rayCounts: [], rayRefs: [],
+        moveSuccess: [], movePositions: [], moveRefs: [], moveCounts: [], moveVisited: [],
+        neighbourhoodCounts: [], neighbourhoodRefs: [],
+        wallCounts: [], wallVertices: [], wallRefs: [],
+        slicedStatus: [], slicedCounts: [], slicedRefs: [],
+    };
+
+    for (const [start, end] of pairs) {
+        out.pairStarts.push(...start);
+        out.pairEnds.push(...end);
+
+        const path = navcat.findPath(navMesh, start, end, halfExtents, filter);
+        out.pathSuccess.push(path.success ? 1 : 0);
+        out.pathFlags.push(path.flags);
+        const nodePath = path.nodePath ? path.nodePath.path : [];
+        out.nodePathCounts.push(nodePath.length);
+        out.nodePathRefs.push(...nodePath);
+        out.straight.push(...path.path);
+        out.straightCounts.push(path.path.length);
+
+        const anyAngle = navcat.findPath(navMesh, start, end, halfExtents, filter, { raycastDistance: 10 });
+        const anyAnglePath = anyAngle.nodePath ? anyAngle.nodePath.path : [];
+        out.anyAngleNodePathCounts.push(anyAnglePath.length);
+        out.anyAngleNodePathRefs.push(...anyAnglePath);
+
+        if (path.success) {
+            const crossings = navcat.findStraightPath(navMesh, path.startPosition, path.endPosition, nodePath, null, navcat.FindStraightPathOptions.ALL_CROSSINGS);
+            out.crossings.push(...crossings.path);
+            out.crossingCounts.push(crossings.path.length);
+        } else {
+            out.crossingCounts.push(0);
+        }
+
+        const smooth = navcat.findSmoothPath(navMesh, start, end, halfExtents, filter, { stepSize: 0.5, slop: 0.01, maxPoints: 256 });
+        out.smooth.push(...smooth.path);
+        out.smoothCounts.push(smooth.path.length);
+
+        const startRef = path.startNodeRef;
+        const ray = navcat.raycast(navMesh, startRef, path.startPosition, end, filter);
+        out.rayT.push(ray.t);
+        out.rayEdge.push(ray.hitEdgeIndex);
+        out.rayNormal.push(...ray.hitNormal);
+        out.rayCounts.push(ray.path.length);
+        out.rayRefs.push(...ray.path);
+
+        const move = navcat.moveAlongSurface(navMesh, startRef, path.startPosition, end, filter);
+        out.moveSuccess.push(move.success ? 1 : 0);
+        out.movePositions.push(...move.position);
+        out.moveRefs.push(refValue(move.nodeRef));
+        out.moveCounts.push(move.visited.length);
+        out.moveVisited.push(...move.visited);
+
+        const neighbourhood = navcat.findLocalNeighbourhood(navMesh, startRef, path.startPosition, 2, filter);
+        out.neighbourhoodCounts.push(neighbourhood.nodeRefs.length);
+        out.neighbourhoodRefs.push(...neighbourhood.nodeRefs);
+
+        const walls = navcat.getPolyWallSegments(navMesh, startRef, filter, true);
+        out.wallCounts.push(walls.segmentRefs.length);
+        out.wallVertices.push(...walls.segmentVerts);
+        out.wallRefs.push(...walls.segmentRefs.map(refValue));
+
+        const query = navcat.createSlicedNodePathQuery();
+        navcat.initSlicedFindNodePath(navMesh, query, startRef, path.endNodeRef, path.startPosition, path.endPosition, filter, navcat.SlicedFindNodePathInitFlags.ANY_ANGLE);
+        while (query.status & navcat.SlicedFindNodePathStatusFlags.IN_PROGRESS) navcat.updateSlicedFindNodePath(navMesh, query, 7);
+        const sliced = navcat.finalizeSlicedFindNodePath(navMesh, query);
+        out.slicedStatus.push(sliced.status);
+        out.slicedCounts.push(sliced.path.length);
+        out.slicedRefs.push(...sliced.path);
+    }
+
+    const random = lcg(99);
+    const randomPoints = [];
+    for (let i = 0; i < 20; i++) {
+        const point = navcat.findRandomPoint(navMesh, filter, random);
+        randomPoints.push(refValue(point.success ? point.nodeRef : -1), ...point.position);
+    }
+    const circleRandom = lcg(7);
+    const circlePoints = [];
+    for (let i = 0; i < 20; i++) {
+        const start = positions[i % positions.length];
+        const nearest = navcat.findNearestPoly(navcat.createFindNearestPolyResult(), navMesh, start, halfExtents, filter);
+        const point = navcat.findRandomPointAroundCircle(navMesh, nearest.nodeRef, start, 3, filter, circleRandom);
+        circlePoints.push(refValue(point.success ? point.nodeRef : -1), ...point.position);
+    }
+
+    return [
+        f64('paths.starts', out.pairStarts),
+        f64('paths.ends', out.pairEnds),
+        i32('paths.success', out.pathSuccess),
+        i32('paths.flags', out.pathFlags),
+        i32('paths.node_path_counts', out.nodePathCounts),
+        f64('paths.node_path_refs', out.nodePathRefs),
+        ...pointsEntries('paths.straight', out.straight, out.straightCounts),
+        i32('paths.any_angle_node_path_counts', out.anyAngleNodePathCounts),
+        f64('paths.any_angle_node_path_refs', out.anyAngleNodePathRefs),
+        ...pointsEntries('paths.crossings', out.crossings, out.crossingCounts),
+        ...pointsEntries('paths.smooth', out.smooth, out.smoothCounts),
+        f64('paths.ray_t', out.rayT),
+        i32('paths.ray_edge', out.rayEdge),
+        f64('paths.ray_normal', out.rayNormal),
+        i32('paths.ray_counts', out.rayCounts),
+        f64('paths.ray_refs', out.rayRefs),
+        i32('paths.move_success', out.moveSuccess),
+        f64('paths.move_positions', out.movePositions),
+        f64('paths.move_refs', out.moveRefs),
+        i32('paths.move_counts', out.moveCounts),
+        f64('paths.move_visited', out.moveVisited),
+        i32('paths.neighbourhood_counts', out.neighbourhoodCounts),
+        f64('paths.neighbourhood_refs', out.neighbourhoodRefs),
+        i32('paths.wall_counts', out.wallCounts),
+        f64('paths.wall_vertices', out.wallVertices),
+        f64('paths.wall_refs', out.wallRefs),
+        i32('paths.sliced_status', out.slicedStatus),
+        i32('paths.sliced_counts', out.slicedCounts),
+        f64('paths.sliced_refs', out.slicedRefs),
+        f64('random.points', randomPoints),
+        f64('random.circle_points', circlePoints),
+    ];
+};
+
 const config = {
     cellSize: 0.15,
     cellHeight: 0.15,
@@ -377,6 +518,11 @@ const dumpSoloGeneration = (name, positions, indices) => {
         f64('off_mesh.attachment', [attachment.offMeshNode, attachment.startPolyNode, attachment.endPolyNode]),
     );
     entries.push(...navMeshEntries('nav_mesh.with_off_mesh', navMesh));
+
+    const interior = successes.filter(
+        (index) => nearestPositions[index * 3] === queryPoints[index * 3] && nearestPositions[index * 3 + 2] === queryPoints[index * 3 + 2],
+    );
+    entries.push(...queryEntries(navMesh, interior.map((index) => nearestPositions.slice(index * 3, index * 3 + 3)), halfExtents));
 
     const monotone = buildCompact();
     navcat.erodeWalkableArea(options.walkableRadiusVoxels, monotone);

@@ -1,0 +1,108 @@
+diff -ru a/src/query/local-neighbourhood.ts b/src/query/local-neighbourhood.ts
+--- a/src/query/local-neighbourhood.ts	2026-10-20 23:41:48
++++ b/src/query/local-neighbourhood.ts	2026-10-20 23:41:48
+@@ -12,7 +12,7 @@
+     type SearchNode,
+     type SearchNodePool,
+ } from './nav-mesh-search';
+-import { getNodeRefType, type NodeRef, NodeType } from './node';
++import { getNodeRefType, INVALID_NODE_REF, type NodeRef, NodeType } from './node';
+ import type { QueryFilter } from './nav-mesh-api';
+ 
+ type SegmentInterval = {
+@@ -123,7 +123,7 @@
+ 
+         for (const linkIndex of node.links) {
+             const link = navMesh.links[linkIndex];
+-            if (!link || !link.toNodeRef) continue;
++            if (!link || link.toNodeRef === INVALID_NODE_REF) continue;
+ 
+             const neighbourRef = link.toNodeRef;
+ 
+@@ -275,7 +275,7 @@
+                 const link = navMesh.links[linkIndex];
+                 if (!link || link.edge !== j) continue;
+ 
+-                if (link.toNodeRef) {
++                if (link.toNodeRef !== INVALID_NODE_REF) {
+                     const neighbourTileAndPoly = getTileAndPolyByRef(link.toNodeRef, navMesh);
+                     if (neighbourTileAndPoly.success) {
+                         if (filter.passFilter(link.toNodeRef, navMesh)) {
+@@ -324,7 +324,7 @@
+ 
+         for (let k = 1; k < intervals.length; ++k) {
+             // portal segment
+-            if (includePortals && intervals[k].nodeRef) {
++            if (includePortals && intervals[k].nodeRef !== null) {
+                 const tmin = intervals[k].tmin / 255.0;
+                 const tmax = intervals[k].tmax / 255.0;
+ 
+diff -ru a/src/query/nav-mesh-api.ts b/src/query/nav-mesh-api.ts
+--- a/src/query/nav-mesh-api.ts	2026-10-20 23:41:48
++++ b/src/query/nav-mesh-api.ts	2026-10-20 23:41:48
+@@ -692,7 +692,7 @@
+     queryFilter: QueryFilter,
+ ): FindNearestPolyResult => {
+     result.success = false;
+-    result.nodeRef = 0;
++    result.nodeRef = INVALID_NODE_REF;
+     vec3.copy(result.position, center);
+ 
+     // get bounds for the query
+diff -ru a/src/query/nav-mesh-search.ts b/src/query/nav-mesh-search.ts
+--- a/src/query/nav-mesh-search.ts	2026-10-20 23:41:48
++++ b/src/query/nav-mesh-search.ts	2026-10-20 23:41:48
+@@ -452,7 +452,7 @@
+                             grandparentNode.position,
+                             neighbourSearchNode.position,
+                             filter,
+-                            grandparentNode.parentNodeRef ?? 0, // pass the great-grandparent for accurate cost calculations
++                            grandparentNode.parentNodeRef ?? INVALID_NODE_REF, // pass the great-grandparent for accurate cost calculations
+                         );
+ 
+                         // if the raycast didn't hit anything, we can take the shortcut
+@@ -1648,7 +1648,7 @@
+     endPosition: Vec3,
+     filter: QueryFilter,
+ ): RaycastResult => {
+-    return raycastBase(navMesh, startNodeRef, startPosition, endPosition, filter, false, 0);
++    return raycastBase(navMesh, startNodeRef, startPosition, endPosition, filter, false, INVALID_NODE_REF);
+ };
+ 
+ /**
+@@ -1700,7 +1700,7 @@
+ export const findRandomPoint = (navMesh: NavMesh, filter: QueryFilter, rand: () => number): FindRandomPointResult => {
+     const result: FindRandomPointResult = {
+         success: false,
+-        nodeRef: 0,
++        nodeRef: INVALID_NODE_REF,
+         position: [0, 0, 0],
+     };
+ 
+@@ -1758,7 +1758,7 @@
+         }
+     }
+ 
+-    if (!selectedPoly || !selectedPolyRef) {
++    if (!selectedPoly || selectedPolyRef === null) {
+         return result;
+     }
+ 
+@@ -1834,7 +1834,7 @@
+ ): FindRandomPointAroundCircleResult => {
+     const result: FindRandomPointAroundCircleResult = {
+         success: false,
+-        nodeRef: 0,
++        nodeRef: INVALID_NODE_REF,
+         position: [0, 0, 0],
+     };
+ 
+@@ -1998,7 +1998,7 @@
+         }
+     }
+ 
+-    if (!randomPoly || !randomTile || !randomPolyRef) {
++    if (!randomPoly || !randomTile || randomPolyRef === null) {
+         return result;
+     }
+ 

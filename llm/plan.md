@@ -72,7 +72,9 @@ From JS to C++:
 Dated decisions and the reasoning behind them are in `llm/worklog.md`.
 
 - **BV tree bounds** are quantized to `uint16_t` recast-style, with near-integers snapped first. navcat needs `llm/navcat-bv-tree-quantization.patch` to match.
-- **`find_nearest_poly` failure** returns `INVALID_NODE_REF`, where navcat returns `0`.
+- **Ref 0 is never treated as "none"**: roam uses `INVALID_NODE_REF`. navcat needs `llm/navcat-ref-zero-truthiness.patch` to match.
+- **Floating point contraction is off** for roam's targets, so results don't depend on whether the compiler fuses multiply-adds.
+- **Path queries** differ from navcat only at exact vertex and edge ties (see worklog).
 
 - **Detail mesh error ties.** Detail heights are whole multiples of `cell_height`, and `sample_max_error` is usually a multiple of it too. So the two "error greater than max" checks in `poly_mesh_detail` (edge simplification and sample insertion) often compare two mathematically equal values. roam rounds these ties in `float`, as recast does (same comparisons, no epsilon). navcat rounds them in JS doubles. On nav-test this adds one extra vertex to poly 39. The same happens in `triangulate_hull`, which starts from the ear with the shortest perimeter: a lone triangle has three equal perimeters, and symmetric polys have congruent ears. So float and double sometimes start from different ears, which rotates or reshapes the triangulation (nav-test poly 131). Decision (2026-10-20): keep the recast-aligned float behaviour. The detail parity test compares mesh by mesh: vertices must match within 1e-4, triangles must match up to rotation (flags rotate too), and a small budget of tied meshes (at most 2%) may differ by one vertex or by triangulation.
 

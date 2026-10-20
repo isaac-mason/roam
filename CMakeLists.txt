@@ -13,7 +13,7 @@ function(roam_compile_options target)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /GR- /EHs-c-)
     else()
-        target_compile_options(${target} PRIVATE -Wall -Wextra -fno-exceptions -fno-rtti)
+        target_compile_options(${target} PRIVATE -Wall -Wextra -fno-exceptions -fno-rtti -ffp-contract=off)
     endif()
 endfunction()
 
