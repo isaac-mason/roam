@@ -1,23 +1,10 @@
 #include "roam/generate/poly_mesh_detail.h"
 #include "tests/harness/fixture.h"
 #include "tests/harness/test.h"
+#include "tests/parity/detail_ties.h"
 #include "tests/parity/nav_test_pipeline.h"
 
 using namespace roam;
-
-static int rotate_edge_flags(int flags, int steps) {
-    int rotated = flags;
-    for (int i = 0; i < steps; i++) rotated = ((rotated >> 2) | ((rotated & 0x3) << 4)) & 0x3f;
-    return rotated;
-}
-
-static bool same_triangle(const int *actual, const int32_t *expected) {
-    for (int steps = 0; steps < 3; steps++) {
-        bool vertices_match = actual[0] == expected[steps % 3] && actual[1] == expected[(steps + 1) % 3] && actual[2] == expected[(steps + 2) % 3];
-        if (vertices_match && actual[3] == rotate_edge_flags(expected[3], steps)) return true;
-    }
-    return false;
-}
 
 TEST(watershed_poly_mesh_detail_matches_navcat_on_nav_test) {
     NavTest nav_test = load_nav_test();
@@ -36,36 +23,16 @@ TEST(watershed_poly_mesh_detail_matches_navcat_on_nav_test) {
     REQUIRE(meshes.count == detail.meshes.length);
 
     int tied_meshes = 0;
+    int different_meshes = 0;
     for (uint32_t m = 0; m < (uint32_t)detail.mesh_count; m++) {
-        int vertex_base = detail.meshes[m * 4];
-        int vertex_count = detail.meshes[m * 4 + 1];
-        int triangle_base = detail.meshes[m * 4 + 2];
-        int triangle_count = detail.meshes[m * 4 + 3];
-        int expected_vertex_base = meshes.data[m * 4];
-        int expected_vertex_count = meshes.data[m * 4 + 1];
-        int expected_triangle_base = meshes.data[m * 4 + 2];
-        int expected_triangle_count = meshes.data[m * 4 + 3];
-
-        if (vertex_count != expected_vertex_count) {
-            tied_meshes++;
-            CHECK(scalar::abs(vertex_count - expected_vertex_count) <= 1);
-            continue;
-        }
-
-        CHECK(triangle_count == expected_triangle_count);
-        if (triangle_count != expected_triangle_count) continue;
-
-        for (int v = 0; v < vertex_count * 3; v++) {
-            CHECK_NEAR(detail.vertices[(uint32_t)(vertex_base * 3 + v)], vertices.data[expected_vertex_base * 3 + v], 1e-4);
-        }
-        bool same_triangulation = true;
-        for (int t = 0; t < triangle_count; t++) {
-            same_triangulation = same_triangulation &&
-                                 same_triangle(&detail.triangles[(uint32_t)((triangle_base + t) * 4)], &triangles.data[(expected_triangle_base + t) * 4]);
-        }
-        if (!same_triangulation) tied_meshes++;
+        DetailMeshRange actual = {detail.meshes[m * 4], detail.meshes[m * 4 + 1], detail.meshes[m * 4 + 2], detail.meshes[m * 4 + 3]};
+        DetailMeshRange wanted = {meshes.data[m * 4], meshes.data[m * 4 + 1], meshes.data[m * 4 + 2], meshes.data[m * 4 + 3]};
+        DetailMeshMatch match = compare_detail_mesh(actual, detail.vertices.data, detail.triangles.data, wanted, vertices.data, triangles.data);
+        if (match == DETAIL_MESH_TIED) tied_meshes++;
+        if (match == DETAIL_MESH_DIFFERENT) different_meshes++;
     }
 
+    CHECK(different_meshes == 0);
     CHECK(tied_meshes <= detail.mesh_count / 50);
 
     poly_mesh_detail::release(detail);

@@ -7,45 +7,6 @@
 
 using namespace roam;
 
-static void check_nav_mesh(const char *prefix, const NavMesh &nav_mesh, const fixture::Fixture &expected) {
-    char name[256];
-    snprintf(name, sizeof(name), "%s.node_refs", prefix);
-    fixture::F64 node_refs = fixture::f64(expected, name);
-    snprintf(name, sizeof(name), "%s.node_allocated", prefix);
-    fixture::I32 node_allocated = fixture::i32(expected, name);
-    snprintf(name, sizeof(name), "%s.link_counts", prefix);
-    fixture::I32 link_counts = fixture::i32(expected, name);
-    snprintf(name, sizeof(name), "%s.link_to_refs", prefix);
-    fixture::F64 link_to_refs = fixture::f64(expected, name);
-    snprintf(name, sizeof(name), "%s.link_fields", prefix);
-    fixture::I32 link_fields = fixture::i32(expected, name);
-
-    REQUIRE(nav_mesh.nodes.length == node_refs.count);
-
-    uint32_t link_cursor = 0;
-    uint32_t mismatched_nodes = 0;
-    for (uint32_t i = 0; i < nav_mesh.nodes.length; i++) {
-        const NavMeshNode &node = nav_mesh.nodes[i];
-        bool same = node.allocated == (node_allocated.data[i] != 0) && (!node.allocated || node.ref == ref_from_f64(node_refs.data[i]));
-
-        int32_t count = 0;
-        for (int32_t link = node.first_link; link != NULL_LINK; link = nav_mesh.links[(uint32_t)link].next) {
-            const NavMeshLink &navmesh_link = nav_mesh.links[(uint32_t)link];
-            uint32_t at = link_cursor + (uint32_t)count;
-            if (count < link_counts.data[i]) {
-                same = same && navmesh_link.to_node_ref == ref_from_f64(link_to_refs.data[at]) && navmesh_link.edge == link_fields.data[at * 4] &&
-                       navmesh_link.side == link_fields.data[at * 4 + 1] && navmesh_link.bmin == link_fields.data[at * 4 + 2] &&
-                       navmesh_link.bmax == link_fields.data[at * 4 + 3];
-            }
-            count++;
-        }
-        same = same && count == link_counts.data[i];
-        link_cursor += (uint32_t)link_counts.data[i];
-        if (!same) mismatched_nodes++;
-    }
-    CHECK(mismatched_nodes == 0);
-}
-
 TEST(nav_mesh_matches_navcat_on_nav_test) {
     fixture::Fixture expected = fixture::load("nav_test_solo");
     REQUIRE(expected.loaded);

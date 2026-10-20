@@ -34,6 +34,7 @@ if (sourceChangedAt > distBuiltAt) {
 }
 
 const navcat = await import(join(navcatDir, 'dist/index.js'));
+const blocks = await import(join(navcatDir, 'dist/blocks.js'));
 
 const writeFixture = (name, entries) => {
     const chunks = [];
@@ -551,3 +552,128 @@ const dumpSoloGeneration = (name, positions, indices) => {
 
 const navTest = JSON.parse(readFileSync(join(navcatDir, 'bench/fixtures/nav-test.json'), 'utf8'));
 dumpSoloGeneration('nav_test_solo', new Float32Array(navTest.positions), new Uint32Array(navTest.indices));
+
+const navMeshTilesEntries = (prefix, navMesh) => {
+    const tiles = Object.values(navMesh.tiles);
+    const entries = [
+        i32(`${prefix}.tile_count`, tiles.length),
+        i32(`${prefix}.tile_positions`, tiles.flatMap((tile) => [tile.tileX, tile.tileY, tile.tileLayer])),
+        f64(`${prefix}.tile_bounds`, tiles.flatMap((tile) => tile.bounds)),
+        i32(`${prefix}.tile_vertex_counts`, tiles.map((tile) => tile.vertices.length)),
+        i32(`${prefix}.tile_poly_counts`, tiles.map((tile) => tile.polys.length)),
+        i32(`${prefix}.tile_detail_vertex_counts`, tiles.map((tile) => tile.detailVertices.length)),
+        i32(`${prefix}.tile_detail_triangle_counts`, tiles.map((tile) => tile.detailTriangles.length)),
+        f64(`${prefix}.vertices`, tiles.flatMap((tile) => Array.from(tile.vertices))),
+        i32(`${prefix}.poly_vertex_counts`, tiles.flatMap((tile) => tile.polys.map((poly) => poly.vertices.length))),
+        i32(`${prefix}.poly_vertices`, tiles.flatMap((tile) => tile.polys.flatMap((poly) => poly.vertices))),
+        i32(`${prefix}.poly_neis`, tiles.flatMap((tile) => tile.polys.flatMap((poly) => poly.neis))),
+        i32(`${prefix}.poly_flags`, tiles.flatMap((tile) => tile.polys.map((poly) => poly.flags))),
+        i32(`${prefix}.poly_areas`, tiles.flatMap((tile) => tile.polys.map((poly) => poly.area))),
+        i32(`${prefix}.detail_meshes`, tiles.flatMap((tile) => tile.detailMeshes.flatMap((mesh) => [mesh.verticesBase, mesh.verticesCount, mesh.trianglesBase, mesh.trianglesCount]))),
+        f64(`${prefix}.detail_vertices`, tiles.flatMap((tile) => Array.from(tile.detailVertices))),
+        i32(`${prefix}.detail_triangles`, tiles.flatMap((tile) => Array.from(tile.detailTriangles))),
+    ];
+    return [...entries, ...navMeshEntries(prefix, navMesh)];
+};
+
+const dumpBlocks = (name, positions, indices) => {
+    const entries = [];
+
+    const half = indices.length / 2 - ((indices.length / 2) % 3);
+    const [mergedPositions, mergedIndices] = blocks.mergePositionsAndIndices([
+        { positions, indices: indices.slice(0, half) },
+        { positions, indices: indices.slice(half) },
+        { positions, indices: indices.slice(0, 30) },
+    ]);
+    entries.push(i32('merge.split', half), f64('merge.positions', mergedPositions), i32('merge.indices', mergedIndices));
+
+    const chunky = blocks.chunkyTriMesh.create(positions, indices, 64);
+    entries.push(
+        f64('chunky.bounds', chunky.nodes.flatMap((node) => [...node.bounds[0], ...node.bounds[1]])),
+        i32('chunky.index', chunky.nodes.map((node) => node.index)),
+        i32('chunky.count', chunky.nodes.map((node) => node.count)),
+        i32('chunky.triangles', chunky.triangles),
+        i32('chunky.max_tris_per_chunk', chunky.maxTrisPerChunk),
+    );
+
+    const meshBounds = navcat.calculateMeshBounds([0, 0, 0, 0, 0, 0], positions, indices);
+    const random = lcg(4321);
+    const randomXZ = () => [meshBounds[0] + random() * (meshBounds[3] - meshBounds[0]), meshBounds[2] + random() * (meshBounds[5] - meshBounds[2])];
+    const rects = [];
+    const rectCounts = [];
+    const rectChunks = [];
+    const rectTriangleCounts = [];
+    const segments = [];
+    const segmentCounts = [];
+    const segmentChunks = [];
+    for (let i = 0; i < 40; i++) {
+        const a = randomXZ();
+        const b = randomXZ();
+        const min = [Math.min(a[0], b[0]), Math.min(a[1], b[1])];
+        const max = [Math.max(a[0], b[0]), Math.max(a[1], b[1])];
+        rects.push(...min, ...max);
+        const chunks = blocks.chunkyTriMesh.getChunksOverlappingRect(chunky, min, max);
+        rectCounts.push(chunks.length);
+        rectChunks.push(...chunks);
+        rectTriangleCounts.push(blocks.chunkyTriMesh.getTrianglesInRect(chunky, min, max).length);
+        segments.push(...a, ...b);
+        const segmentHits = blocks.chunkyTriMesh.getChunksOverlappingSegment(chunky, a, b);
+        segmentCounts.push(segmentHits.length);
+        segmentChunks.push(...segmentHits);
+    }
+    entries.push(
+        f64('chunky.rects', rects),
+        i32('chunky.rect_counts', rectCounts),
+        i32('chunky.rect_chunks', rectChunks),
+        i32('chunky.rect_triangle_counts', rectTriangleCounts),
+        f64('chunky.segments', segments),
+        i32('chunky.segment_counts', segmentCounts),
+        i32('chunky.segment_chunks', segmentChunks),
+    );
+
+    const generatorOptions = {
+        cellSize: options.cellSize,
+        cellHeight: options.cellHeight,
+        walkableRadiusVoxels: options.walkableRadiusVoxels,
+        walkableRadiusWorld: options.walkableRadiusWorld,
+        walkableClimbVoxels: options.walkableClimbVoxels,
+        walkableClimbWorld: options.walkableClimbWorld,
+        walkableHeightVoxels: options.walkableHeightVoxels,
+        walkableHeightWorld: options.walkableHeightWorld,
+        walkableSlopeAngleDegrees: options.walkableSlopeAngleDegrees,
+        borderSize: options.borderSize,
+        minRegionArea: options.minRegionArea,
+        mergeRegionArea: options.mergeRegionArea,
+        maxSimplificationError: options.maxSimplificationError,
+        maxEdgeLength: options.maxEdgeLength,
+        maxVerticesPerPoly: options.maxVerticesPerPoly,
+        detailSampleDistance: options.detailSampleDistanceWorld,
+        detailSampleMaxError: options.detailSampleMaxErrorWorld,
+    };
+
+    const solo = blocks.generateSoloNavMesh({ positions, indices }, generatorOptions);
+    entries.push(...navMeshTilesEntries('solo', solo.navMesh));
+
+    const tileSizeVoxels = 32;
+    const tiledOptions = {
+        ...generatorOptions,
+        tileSizeVoxels,
+        tileSizeWorld: tileSizeVoxels * options.cellSize,
+        borderSize: options.walkableRadiusVoxels + 3,
+    };
+    entries.push(i32('tiled.tile_size_voxels', tiledOptions.tileSizeVoxels), f64('tiled.tile_size_world', tiledOptions.tileSizeWorld), i32('tiled.border_size', tiledOptions.borderSize));
+    const tiled = blocks.generateTiledNavMesh({ positions, indices }, tiledOptions);
+    entries.push(...navMeshTilesEntries('tiled', tiled.navMesh));
+
+    const seeds = [];
+    for (const node of tiled.navMesh.nodes) {
+        if (node.allocated && seeds.length < 1) seeds.push(node.ref);
+    }
+    const flood = blocks.floodFillNavMesh(tiled.navMesh, seeds);
+    entries.push(f64('flood.seeds', seeds), f64('flood.reachable', flood.reachable), f64('flood.unreachable', flood.unreachable));
+
+    writeFixture(name, entries);
+    console.log(`wrote ${name}.bin (${entries.length} entries)`);
+};
+
+dumpBlocks('nav_test_blocks', new Float32Array(navTest.positions), new Uint32Array(navTest.indices));

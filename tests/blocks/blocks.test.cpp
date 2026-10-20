@@ -1,0 +1,188 @@
+#include "roam/blocks/generators/generate_solo_nav_mesh.h"
+#include "roam/blocks/generators/generate_tiled_nav_mesh.h"
+#include "roam/blocks/geometry/chunky_tri_mesh.h"
+#include "roam/blocks/geometry/merge_positions_and_indices.h"
+#include "roam/blocks/search/flood_fill_nav_mesh.h"
+#include "roam/query/find_path.h"
+#include "roam/query/node.h"
+#include "tests/harness/test.h"
+#include "tests/query/test_nav_meshes.h"
+
+using namespace roam;
+
+TEST(merge_positions_and_indices_shares_the_first_vertex) {
+    const float positions[] = {0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1};
+    const uint32_t first[] = {0, 1, 2};
+    const uint32_t second[] = {0, 2, 3};
+    const MeshView meshes[] = {{positions, first, 3}, {positions, second, 3}};
+
+    MergedMesh merged = merge_positions_and_indices::merge_positions_and_indices(meshes, 2);
+
+    CHECK(merged.positions.length == 12);
+    REQUIRE(merged.indices.length == 6);
+    const uint32_t expected[] = {0, 1, 2, 0, 2, 3};
+    for (uint32_t i = 0; i < 6; i++) CHECK(merged.indices[i] == expected[i]);
+
+    merge_positions_and_indices::release(merged);
+}
+
+TEST(merge_positions_and_indices_treats_negative_zero_as_zero) {
+    const float positions[] = {0, 0, 0, -0.0f, 0, -0.0f};
+    const uint32_t indices[] = {0, 1};
+    const MeshView mesh = {positions, indices, 2};
+
+    MergedMesh merged = merge_positions_and_indices::merge_positions_and_indices(&mesh, 1);
+
+    CHECK(merged.positions.length == 3);
+    REQUIRE(merged.indices.length == 2);
+    CHECK(merged.indices[1] == 0);
+
+    merge_positions_and_indices::release(merged);
+}
+
+TEST(chunky_tri_mesh_of_nothing_is_empty) {
+    ChunkyTriMesh mesh = chunky_tri_mesh::create(nullptr, nullptr, 0);
+    CHECK(mesh.nodes.length == 0);
+    CHECK(mesh.max_tris_per_chunk == 0);
+
+    Array<uint32_t> chunks = chunky_tri_mesh::get_chunks_overlapping_rect(mesh, {0, 0}, {1, 1});
+    CHECK(chunks.length == 0);
+
+    chunks.release();
+    chunky_tri_mesh::release(mesh);
+}
+
+TEST(chunky_tri_mesh_finds_every_triangle_in_a_covering_rect) {
+    Array<float> positions = {};
+    Array<uint32_t> indices = {};
+    for (int z = 0; z < 10; z++) {
+        for (int x = 0; x < 10; x++) {
+            uint32_t base = positions.length / 3;
+            const float corners[] = {(float)x, 0, (float)z, (float)x + 1, 0, (float)z, (float)x + 1, 0, (float)z + 1, (float)x, 0, (float)z + 1};
+            for (float value : corners) positions.push(value);
+            const uint32_t quad[] = {base, base + 1, base + 2, base, base + 2, base + 3};
+            for (uint32_t index : quad) indices.push(index);
+        }
+    }
+
+    ChunkyTriMesh mesh = chunky_tri_mesh::create(positions.data, indices.data, indices.length, 16);
+    CHECK(mesh.max_tris_per_chunk <= 16);
+    CHECK(mesh.triangles.length == indices.length);
+
+    Array<uint32_t> all = chunky_tri_mesh::get_triangles_in_rect(mesh, {-1, -1}, {11, 11});
+    CHECK(all.length == indices.length);
+
+    Array<uint32_t> corner = chunky_tri_mesh::get_triangles_in_rect(mesh, {0.1f, 0.1f}, {0.2f, 0.2f});
+    CHECK(corner.length > 0);
+    CHECK(corner.length < indices.length);
+
+    Array<uint32_t> missed = chunky_tri_mesh::get_chunks_overlapping_segment(mesh, {20, 20}, {30, 30});
+    CHECK(missed.length == 0);
+
+    missed.release();
+    corner.release();
+    all.release();
+    chunky_tri_mesh::release(mesh);
+    positions.release();
+    indices.release();
+}
+
+TEST(flood_fill_nav_mesh_splits_disconnected_islands) {
+    const float positions[] = {0, 0, 0, 2, 0, 0, 2, 0, 2, 0, 0, 2, 7, 0, 0, 9, 0, 0, 9, 0, 2, 7, 0, 2};
+    const uint32_t indices[] = {0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7};
+    NavMesh nav_mesh = create_nav_mesh_from_triangles(positions, 8, indices, 12);
+
+    NodeRef seed = INVALID_NODE_REF;
+    for (const NavMeshNode &node : nav_mesh.nodes) {
+        if (node.allocated) {
+            seed = node.ref;
+            break;
+        }
+    }
+
+    FloodFillNavMeshResult result = flood_fill_nav_mesh::flood_fill_nav_mesh(nav_mesh, &seed, 1);
+    CHECK(result.reachable.length == 2);
+    CHECK(result.unreachable.length == 2);
+    CHECK(result.reachable[0] == seed);
+
+    flood_fill_nav_mesh::release(result);
+    nav_mesh_api::release_nav_mesh(nav_mesh);
+}
+
+static const float PLANE_POSITIONS[] = {0, 0, 0, 10, 0, 0, 10, 0, 10, 0, 0, 10};
+static const uint32_t PLANE_INDICES[] = {0, 2, 1, 0, 3, 2};
+
+TEST(generate_solo_nav_mesh_covers_a_plane) {
+    SoloNavMeshOptions options = {
+        .cell_size = 0.2f,
+        .cell_height = 0.2f,
+        .walkable_radius_voxels = 2,
+        .walkable_radius_world = 0.4f,
+        .walkable_climb_voxels = 2,
+        .walkable_climb_world = 0.4f,
+        .walkable_height_voxels = 10,
+        .walkable_height_world = 2,
+        .walkable_slope_angle_degrees = 45,
+        .border_size = 0,
+        .min_region_area = 8,
+        .merge_region_area = 20,
+        .max_simplification_error = 1.3f,
+        .max_edge_length = 12,
+        .max_vertices_per_poly = 6,
+        .detail_sample_distance = 1.2f,
+        .detail_sample_max_error = 0.2f,
+    };
+
+    SoloNavMeshResult result = generate_solo_nav_mesh::generate_solo_nav_mesh({PLANE_POSITIONS, PLANE_INDICES, 6}, options);
+    CHECK(result.intermediates.poly_mesh.poly_count > 0);
+
+    FindPathResult path = find_path::find_path(result.nav_mesh, {1, 0, 1}, {9, 0, 9}, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
+    CHECK(path.success);
+
+    find_path::release(path);
+    generate_solo_nav_mesh::release(result.intermediates);
+    nav_mesh_api::release_nav_mesh(result.nav_mesh);
+}
+
+TEST(generate_tiled_nav_mesh_connects_tiles_across_a_plane) {
+    TiledNavMeshOptions options = {
+        .cell_size = 0.2f,
+        .cell_height = 0.2f,
+        .tile_size_voxels = 25,
+        .tile_size_world = 25 * 0.2f,
+        .walkable_radius_voxels = 2,
+        .walkable_radius_world = 0.4f,
+        .walkable_climb_voxels = 2,
+        .walkable_climb_world = 0.4f,
+        .walkable_height_voxels = 10,
+        .walkable_height_world = 2,
+        .walkable_slope_angle_degrees = 45,
+        .border_size = 5,
+        .min_region_area = 8,
+        .merge_region_area = 20,
+        .max_simplification_error = 1.3f,
+        .max_edge_length = 12,
+        .max_vertices_per_poly = 6,
+        .detail_sample_distance = 1.2f,
+        .detail_sample_max_error = 0.2f,
+    };
+
+    TiledNavMeshResult result = generate_tiled_nav_mesh::generate_tiled_nav_mesh({PLANE_POSITIONS, PLANE_INDICES, 6}, options);
+    CHECK(result.intermediates.poly_mesh.length == 4);
+
+    uint32_t tile_count = 0;
+    for (const NavMeshTile &tile : result.nav_mesh.tiles) tile_count += tile.allocated ? 1 : 0;
+    CHECK(tile_count == 4);
+
+    FindPathResult path = find_path::find_path(result.nav_mesh, {1, 0, 1}, {9, 0, 9}, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
+    CHECK(path.success);
+    REQUIRE(path.node_path.path.length > 0);
+    const NavMeshNode &first = nav_mesh_api::get_node_by_ref(result.nav_mesh, path.node_path.path[0]);
+    const NavMeshNode &last = nav_mesh_api::get_node_by_ref(result.nav_mesh, path.node_path.path.back());
+    CHECK(first.tile_id != last.tile_id);
+    CHECK((path.flags & FIND_PATH_RESULT_COMPLETE_PATH) != 0);
+
+    find_path::release(path);
+    generate_tiled_nav_mesh::release(result.intermediates);
+    nav_mesh_api::release_nav_mesh(result.nav_mesh);
+}
