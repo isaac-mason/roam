@@ -88,4 +88,4 @@ double number(const Fixture &fixture, const char *name) {
     return values.count == 1 ? values.data[0] : 0.0;
 }
 
-}  // namespace fixture
+}

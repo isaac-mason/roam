@@ -30,6 +30,6 @@ inline bool contains_point(Box3 box, Vec3 point) {
 
 inline Vec3 size(Box3 box) { return vec3::subtract(box.max, box.min); }
 
-}  // namespace box3
+}
 
-}  // namespace roam
+}

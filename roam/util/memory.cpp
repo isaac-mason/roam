@@ -32,6 +32,6 @@ void free(void *block, size_t size) {
     current.free(block, size, current.user_data);
 }
 
-}  // namespace memory
+}
 
-}  // namespace roam
+}

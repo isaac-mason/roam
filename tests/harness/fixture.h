@@ -40,4 +40,4 @@ F64 f64(const Fixture &fixture, const char *name);
 I32 i32(const Fixture &fixture, const char *name);
 double number(const Fixture &fixture, const char *name);
 
-}  // namespace fixture
+}

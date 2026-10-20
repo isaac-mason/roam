@@ -12,7 +12,7 @@ struct Registration {
 
 int run_all(const char *filter);
 
-}  // namespace test
+}
 
 #define TEST(name)                                                         \
     static void name();                                                    \

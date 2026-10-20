@@ -40,6 +40,6 @@ inline bool exactly_equals(Vec2 a, Vec2 b) { return a.x == b.x && a.y == b.y; }
 
 inline bool finite(Vec2 a) { return scalar::finite(a.x) && scalar::finite(a.y); }
 
-}  // namespace vec2
+}
 
-}  // namespace roam
+}

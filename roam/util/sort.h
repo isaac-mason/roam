@@ -59,6 +59,6 @@ void stable(T *items, uint32_t count, Less less) {
     memory::free_array(scratch, count);
 }
 
-}  // namespace sort
+}
 
-}  // namespace roam
+}

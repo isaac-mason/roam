@@ -61,6 +61,6 @@ inline bool exactly_equals(Vec3 a, Vec3 b) { return a.x == b.x && a.y == b.y && 
 
 inline bool finite(Vec3 a) { return scalar::finite(a.x) && scalar::finite(a.y) && scalar::finite(a.z); }
 
-}  // namespace vec3
+}
 
-}  // namespace roam
+}

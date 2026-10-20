@@ -29,6 +29,6 @@ void free_array(T *block, size_t count) {
     free(block, count * sizeof(T));
 }
 
-}  // namespace memory
+}
 
-}  // namespace roam
+}

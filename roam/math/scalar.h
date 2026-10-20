@@ -27,6 +27,6 @@ inline int max(int a, int b) { return a > b ? a : b; }
 inline int abs(int a) { return a < 0 ? -a : a; }
 inline int clamp(int value, int low, int high) { return value < low ? low : value > high ? high : value; }
 
-}  // namespace scalar
+}
 
-}  // namespace roam
+}

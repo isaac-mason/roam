@@ -25,6 +25,6 @@ inline void release(IndexPool &pool) {
     pool.counter = 0;
 }
 
-}  // namespace index_pool
+}
 
-}  // namespace roam
+}

@@ -57,4 +57,4 @@ int run_all(const char *filter) {
     return failed == 0 ? 0 : 1;
 }
 
-}  // namespace test
+}
