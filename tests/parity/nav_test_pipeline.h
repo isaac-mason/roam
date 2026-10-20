@@ -1,6 +1,8 @@
 #pragma once
 
 #include "roam/generate/common.h"
+#include "roam/generate/compact_heightfield.h"
+#include "roam/generate/compact_heightfield_regions.h"
 #include "roam/generate/heightfield.h"
 #include "roam/generate/input_triangle_mesh.h"
 #include "tests/parity/nav_test_input.h"
@@ -26,3 +28,77 @@ inline roam::Heightfield build_filtered_heightfield(roam::BuildContext &context,
     tri_area_ids.release();
     return heightfield;
 }
+
+struct NavTest {
+    fixture::Fixture fixture;
+    NavTestInput input;
+    NavTestOptions options;
+    roam::BuildContext context;
+    roam::Heightfield heightfield;
+};
+
+inline NavTest load_nav_test() {
+    NavTest nav_test = {};
+    nav_test.fixture = fixture::load("nav_test_solo");
+    if (!nav_test.fixture.loaded) return nav_test;
+    nav_test.input = load_nav_test_input(nav_test.fixture);
+    nav_test.options = load_nav_test_options(nav_test.fixture);
+    nav_test.heightfield = build_filtered_heightfield(nav_test.context, nav_test.input, nav_test.options);
+    return nav_test;
+}
+
+inline void release(NavTest &nav_test) {
+    roam::heightfield::release(nav_test.heightfield);
+    roam::build_context::release(nav_test.context);
+    release(nav_test.input);
+    fixture::release(nav_test.fixture);
+}
+
+inline roam::CompactHeightfield build_eroded_with_distances(NavTest &nav_test) {
+    using namespace roam;
+    CompactHeightfield compact_heightfield =
+        compact_heightfield::build(nav_test.context, nav_test.options.walkable_height, nav_test.options.walkable_climb, nav_test.heightfield);
+    compact_heightfield::erode_walkable_area(nav_test.options.walkable_radius, compact_heightfield);
+    compact_heightfield_regions::build_distance_field(compact_heightfield);
+    return compact_heightfield;
+}
+
+enum RegionMethod {
+    REGION_METHOD_WATERSHED,
+    REGION_METHOD_MONOTONE,
+    REGION_METHOD_LAYERS,
+};
+
+inline roam::CompactHeightfield build_with_regions(NavTest &nav_test, RegionMethod method) {
+    using namespace roam;
+    CompactHeightfield compact_heightfield = build_eroded_with_distances(nav_test);
+    const NavTestOptions &options = nav_test.options;
+    switch (method) {
+        case REGION_METHOD_WATERSHED:
+            compact_heightfield_regions::build_regions(nav_test.context, compact_heightfield, options.border_size, options.min_region_area,
+                                                       options.merge_region_area);
+            break;
+        case REGION_METHOD_MONOTONE:
+            compact_heightfield_regions::build_regions_monotone(nav_test.context, compact_heightfield, options.border_size, options.min_region_area,
+                                                                options.merge_region_area);
+            break;
+        case REGION_METHOD_LAYERS:
+            compact_heightfield_regions::build_layer_regions(nav_test.context, compact_heightfield, options.border_size, options.min_region_area);
+            break;
+    }
+    return compact_heightfield;
+}
+
+template <typename T, typename Field>
+inline roam::Array<int32_t> widen(const roam::Array<T> &values, Field field) {
+    roam::Array<int32_t> wide = {};
+    for (const T &value : values) wide.push((int32_t)field(value));
+    return wide;
+}
+
+inline void check_expected(const char *file, int line, const char *name, roam::Array<int32_t> actual, const fixture::Fixture &expected) {
+    fixture::check_i32(file, line, name, actual.data, actual.length, fixture::i32(expected, name));
+    actual.release();
+}
+
+#define CHECK_EXPECTED(name, actual, expected) check_expected(__FILE__, __LINE__, name, actual, expected)

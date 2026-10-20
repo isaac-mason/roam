@@ -105,6 +105,18 @@ const regionEntries = (prefix, chf) => [
     i32(`${prefix}.max_regions`, chf.maxRegions),
 ];
 
+const contourSetEntries = (prefix, contourSet) => [
+    f64(`${prefix}.bounds`, contourSet.bounds),
+    i32(`${prefix}.width`, contourSet.width),
+    i32(`${prefix}.height`, contourSet.height),
+    i32(`${prefix}.vertex_counts`, contourSet.contours.map((contour) => contour.nVertices)),
+    i32(`${prefix}.vertices`, contourSet.contours.flatMap((contour) => contour.vertices.slice(0, contour.nVertices * 4))),
+    i32(`${prefix}.raw_vertex_counts`, contourSet.contours.map((contour) => contour.nRawVertices)),
+    i32(`${prefix}.raw_vertices`, contourSet.contours.flatMap((contour) => contour.rawVertices.slice(0, contour.nRawVertices * 4))),
+    i32(`${prefix}.regions`, contourSet.contours.map((contour) => contour.reg)),
+    i32(`${prefix}.areas`, contourSet.contours.map((contour) => contour.area)),
+];
+
 const config = {
     cellSize: 0.15,
     cellHeight: 0.15,
@@ -115,6 +127,8 @@ const config = {
     borderSize: 0,
     minRegionArea: 8,
     mergeRegionArea: 20,
+    maxSimplificationError: 1.3,
+    maxEdgeLength: 12,
 };
 
 const options = {
@@ -137,6 +151,8 @@ const dumpSoloGeneration = (name, positions, indices) => {
         i32('options.border_size', options.borderSize),
         i32('options.min_region_area', options.minRegionArea),
         i32('options.merge_region_area', options.mergeRegionArea),
+        f64('options.max_simplification_error', options.maxSimplificationError),
+        i32('options.max_edge_length', options.maxEdgeLength),
     ];
 
     const ctx = navcat.BuildContext.create();
@@ -176,6 +192,9 @@ const dumpSoloGeneration = (name, positions, indices) => {
     navcat.buildRegions(ctx, chf, options.borderSize, options.minRegionArea, options.mergeRegionArea);
     entries.push(...regionEntries('regions.watershed', chf));
 
+    const contourSet = navcat.buildContours(ctx, chf, options.maxSimplificationError, options.maxEdgeLength, navcat.ContourBuildFlags.CONTOUR_TESS_WALL_EDGES);
+    entries.push(...contourSetEntries('contours.watershed', contourSet));
+
     const monotone = buildCompact();
     navcat.erodeWalkableArea(options.walkableRadiusVoxels, monotone);
     navcat.buildDistanceField(monotone);
@@ -187,6 +206,10 @@ const dumpSoloGeneration = (name, positions, indices) => {
     navcat.buildDistanceField(layers);
     navcat.buildLayerRegions(ctx, layers, options.borderSize, options.minRegionArea);
     entries.push(...regionEntries('regions.layers', layers));
+
+    const tessellateAll = navcat.ContourBuildFlags.CONTOUR_TESS_WALL_EDGES | navcat.ContourBuildFlags.CONTOUR_TESS_AREA_EDGES;
+    entries.push(...contourSetEntries('contours.monotone', navcat.buildContours(ctx, monotone, options.maxSimplificationError, options.maxEdgeLength, tessellateAll)));
+    entries.push(...contourSetEntries('contours.layers', navcat.buildContours(ctx, layers, options.maxSimplificationError, options.maxEdgeLength, tessellateAll)));
 
     writeFixture(name, entries);
     console.log(`wrote ${name}.bin (${entries.length} entries)`);
