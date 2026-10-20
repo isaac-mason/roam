@@ -4,6 +4,7 @@
 #include <float.h>
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "cgltf.h"
 #include "roam/blocks/geometry/merge_positions_and_indices.h"
@@ -13,7 +14,7 @@ using namespace roam;
 namespace model {
 
 static void append_primitive(Model &model, Array<MeshView> &views, Array<Array<float>> &owned_positions, Array<Array<uint32_t>> &owned_indices,
-                             const cgltf_primitive &primitive, const float *world) {
+                             const cgltf_primitive &primitive, const float *world, bool walkable) {
     if (primitive.type != cgltf_primitive_type_triangles) return;
 
     const cgltf_accessor *positions = nullptr;
@@ -61,22 +62,34 @@ static void append_primitive(Model &model, Array<MeshView> &views, Array<Array<f
 
     owned_positions.push(world_positions);
     owned_indices.push(indices);
-    views.push({world_positions.data, indices.data, index_count});
+    if (walkable) views.push({world_positions.data, indices.data, index_count});
+}
+
+static bool is_unwalkable(const cgltf_extras &extras) {
+    if (!extras.data) return false;
+    const char *key = strstr(extras.data, "\"walkable\"");
+    if (!key) return false;
+    const char *value = key + strlen("\"walkable\"");
+    while (*value == ' ' || *value == ':' || *value == '\t' || *value == '\n' || *value == '\r') value++;
+    return strncmp(value, "false", 5) == 0;
 }
 
 static void append_node(Model &model, Array<MeshView> &views, Array<Array<float>> &owned_positions, Array<Array<uint32_t>> &owned_indices,
-                        const cgltf_node &node) {
+                        const cgltf_node &node, bool skip_unwalkable_nodes) {
     if (node.mesh) {
         float world[16];
         cgltf_node_transform_world(&node, world);
+        bool walkable = !skip_unwalkable_nodes || !is_unwalkable(node.extras);
         for (cgltf_size i = 0; i < node.mesh->primitives_count; i++) {
-            append_primitive(model, views, owned_positions, owned_indices, node.mesh->primitives[i], world);
+            append_primitive(model, views, owned_positions, owned_indices, node.mesh->primitives[i], world, walkable);
         }
     }
-    for (cgltf_size i = 0; i < node.children_count; i++) append_node(model, views, owned_positions, owned_indices, *node.children[i]);
+    for (cgltf_size i = 0; i < node.children_count; i++) {
+        append_node(model, views, owned_positions, owned_indices, *node.children[i], skip_unwalkable_nodes);
+    }
 }
 
-Model load(const char *name) {
+Model load(const char *name, bool skip_unwalkable_nodes) {
     Model model = {};
     model.bounds = box3::empty();
 
@@ -105,7 +118,7 @@ Model load(const char *name) {
 
     const cgltf_scene *scene = data->scene ? data->scene : (data->scenes_count > 0 ? &data->scenes[0] : nullptr);
     if (scene) {
-        for (cgltf_size i = 0; i < scene->nodes_count; i++) append_node(model, views, owned_positions, owned_indices, *scene->nodes[i]);
+        for (cgltf_size i = 0; i < scene->nodes_count; i++) append_node(model, views, owned_positions, owned_indices, *scene->nodes[i], skip_unwalkable_nodes);
     }
 
     MergedMesh merged = merge_positions_and_indices::merge_positions_and_indices(views.data, views.length);

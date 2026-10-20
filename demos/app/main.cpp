@@ -42,9 +42,11 @@ static int frame_count = 0;
 
 namespace app {
 
-void load_level(App &app, const char *name) {
+void load_level(App &app, const char *name, bool skip_unwalkable_nodes) { set_level(app, model::load(name, skip_unwalkable_nodes)); }
+
+void set_level(App &app, Model level) {
     model::release(app.level);
-    app.level = model::load(name);
+    app.level = level;
     renderer::set_level(app.renderer, app.level);
     if (app.level.loaded) camera::frame_bounds(app.camera, app.level.bounds);
 }
@@ -178,7 +180,7 @@ static void cleanup() {
 static void click(float x, float y, sapp_mousebutton button, uint32_t modifiers) {
     Ray ray = camera::screen_ray(state.camera, x, y);
     RayHit hit = model::raycast(state.level, ray);
-    state.click = {true, hit.hit, hit.point, button != SAPP_MOUSEBUTTON_LEFT, (modifiers & SAPP_MODIFIER_SHIFT) != 0};
+    state.click = {true, hit.hit, hit.point, button != SAPP_MOUSEBUTTON_LEFT, (modifiers & SAPP_MODIFIER_SHIFT) != 0, ray};
 }
 
 static void event(const sapp_event *e) {

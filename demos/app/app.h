@@ -11,6 +11,7 @@ struct Click {
     roam::Vec3 point;
     bool secondary;
     bool shift;
+    Ray ray;
 };
 
 struct Hover {
@@ -40,7 +41,8 @@ struct Example {
 
 namespace app {
 
-void load_level(App &app, const char *name);
+void load_level(App &app, const char *name, bool skip_unwalkable_nodes = false);
+void set_level(App &app, Model level);
 void draw_static(App &app, const StaticDrawing &drawing);
 DrawList &frame(App &app);
 double now_milliseconds();

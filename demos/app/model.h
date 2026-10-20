@@ -24,7 +24,7 @@ struct RayHit {
 
 namespace model {
 
-Model load(const char *name);
+Model load(const char *name, bool skip_unwalkable_nodes = false);
 void release(Model &model);
 RayHit raycast(const Model &model, Ray ray);
 
