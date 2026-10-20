@@ -163,7 +163,7 @@ FindSmoothPathResult find_smooth_path(const NavMesh &nav_mesh, Vec3 start, Vec3 
 
         Vec3 delta = vec3::subtract(steer_target.steer_position, iteration_position);
         float length = vec3::length(delta);
-        length = fminf(options.step_size, length) / length;
+        length = length > 0 ? fminf(options.step_size, length) / length : 0;
 
         Vec3 move_target = vec3::scale_and_add(iteration_position, delta, length);
 
