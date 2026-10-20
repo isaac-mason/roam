@@ -41,7 +41,7 @@ static const char *LIT_VERTEX_SHADER = SHADER_HEADER
     "void main() {\n"
     "    gl_Position = mvp * vec4(position, 1.0);\n"
     "    float shade = 0.45 + 0.55 * abs(dot(normalize(normal), light.xyz));\n"
-    "    color = vec4(color0.rgb * shade, 1.0);\n"
+    "    color = vec4(pow(color0.rgb * shade, vec3(1.0 / 2.2)), 1.0);\n"
     "}\n";
 
 struct ColorUniforms {
@@ -169,22 +169,28 @@ static GpuBatch make_batch(const void *data, uint32_t vertex_size, uint32_t vert
     return batch;
 }
 
+static void push_level_triangle(Array<LitVertex> &vertices, const Model &model, uint32_t first_index) {
+    Vec3 corners[3];
+    uint32_t colors[3];
+    for (int k = 0; k < 3; k++) {
+        uint32_t index = model.indices[first_index + (uint32_t)k];
+        corners[k] = vec3::load(model.positions.data, index * 3);
+        Vec3 color = vec3::load(model.colors.data, index * 3);
+        colors[k] = pack({color.x, color.y, color.z, 1});
+    }
+    Vec3 normal = vec3::normalize(vec3::cross(vec3::subtract(corners[1], corners[0]), vec3::subtract(corners[2], corners[0])));
+    for (int k = 0; k < 3; k++) vertices.push({corners[k].x, corners[k].y, corners[k].z, normal.x, normal.y, normal.z, colors[k]});
+}
+
 void set_level(Renderer &renderer, const Model &model) {
     release(renderer.level);
 
     Array<LitVertex> vertices = {};
     vertices.reserve(model.indices.length);
-    for (uint32_t i = 0; i + 2 < model.indices.length; i += 3) {
-        Vec3 corners[3];
-        uint32_t colors[3];
-        for (int k = 0; k < 3; k++) {
-            uint32_t index = model.indices[i + (uint32_t)k];
-            corners[k] = vec3::load(model.positions.data, index * 3);
-            Vec3 color = vec3::load(model.colors.data, index * 3);
-            colors[k] = pack({color.x, color.y, color.z, 1});
-        }
-        Vec3 normal = vec3::normalize(vec3::cross(vec3::subtract(corners[1], corners[0]), vec3::subtract(corners[2], corners[0])));
-        for (int k = 0; k < 3; k++) vertices.push({corners[k].x, corners[k].y, corners[k].z, normal.x, normal.y, normal.z, colors[k]});
+    for (const ModelNode &node : model.nodes) {
+        if (node.hidden) continue;
+        uint32_t end = node.index_start + node.index_count;
+        for (uint32_t i = node.index_start; i + 2 < end; i += 3) push_level_triangle(vertices, model, i);
     }
 
     renderer.level = make_batch(vertices.data, sizeof(LitVertex), vertices.length, "roam level");

@@ -3,8 +3,13 @@
 #include "app/app.h"
 
 extern const Example EXAMPLE_CROWD_SIMULATION;
+extern const Example EXAMPLE_NAVMESH_CONSTRAINED_CHARACTER_CONTROLLER;
 extern const Example EXAMPLE_AREA_FILTERS;
 extern const Example EXAMPLE_AREA_COSTS;
+extern const Example EXAMPLE_DOORS_AND_KEYS;
+extern const Example EXAMPLE_MULTIPLE_AGENT_SIZES;
+extern const Example EXAMPLE_CROWD_SIMULATION_STRESS_TEST;
+extern const Example EXAMPLE_FLOW_FIELD_PATHFINDING;
 extern const Example EXAMPLE_FIND_PATH;
 extern const Example EXAMPLE_FIND_NODE_PATH;
 extern const Example EXAMPLE_FIND_STRAIGHT_PATH;

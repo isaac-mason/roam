@@ -4,6 +4,7 @@
 #include <float.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "cgltf.h"
@@ -31,6 +32,7 @@ static void append_primitive(Model &model, Array<MeshView> &views, Array<Array<f
 
     uint32_t vertex_count = (uint32_t)positions->count;
     uint32_t base = model.positions.length / 3;
+    ModelNode &model_node = model.nodes[model.nodes.length - 1];
     Array<float> world_positions = {};
     world_positions.resize(vertex_count * 3);
 
@@ -50,6 +52,7 @@ static void append_primitive(Model &model, Array<MeshView> &views, Array<Array<f
         model.colors.push(color.y);
         model.colors.push(color.z);
         model.bounds = box3::expand_by_point(model.bounds, p);
+        model_node.bounds = box3::expand_by_point(model_node.bounds, p);
     }
 
     uint32_t index_count = primitive.indices ? (uint32_t)primitive.indices->count : vertex_count;
@@ -59,6 +62,7 @@ static void append_primitive(Model &model, Array<MeshView> &views, Array<Array<f
         indices[i] = primitive.indices ? (uint32_t)cgltf_accessor_read_index(primitive.indices, i) : i;
         model.indices.push(base + indices[i]);
     }
+    model_node.index_count += index_count;
 
     owned_positions.push(world_positions);
     owned_indices.push(indices);
@@ -75,8 +79,18 @@ static bool is_unwalkable(const cgltf_extras &extras) {
 }
 
 static void append_node(Model &model, Array<MeshView> &views, Array<Array<float>> &owned_positions, Array<Array<uint32_t>> &owned_indices,
-                        const cgltf_node &node, const ModelLoadOptions &options, bool included) {
+                        const cgltf_node &node, const ModelLoadOptions &options, bool included, int32_t parent) {
     included = included || !options.node_name || (node.name && strcmp(node.name, options.node_name) == 0);
+
+    ModelNode model_node = {};
+    if (node.name) snprintf(model_node.name, sizeof(model_node.name), "%s", node.name);
+    if (node.extras.data) snprintf(model_node.extras, sizeof(model_node.extras), "%s", node.extras.data);
+    model_node.parent = parent;
+    model_node.index_start = model.indices.length;
+    model_node.bounds = box3::empty();
+    model.nodes.push(model_node);
+    int32_t node_index = (int32_t)model.nodes.length - 1;
+
     if (node.mesh && included) {
         float world[16];
         cgltf_node_transform_world(&node, world);
@@ -86,7 +100,7 @@ static void append_node(Model &model, Array<MeshView> &views, Array<Array<float>
         }
     }
     for (cgltf_size i = 0; i < node.children_count; i++) {
-        append_node(model, views, owned_positions, owned_indices, *node.children[i], options, included);
+        append_node(model, views, owned_positions, owned_indices, *node.children[i], options, included, node_index);
     }
 }
 
@@ -119,7 +133,7 @@ Model load(const char *name, ModelLoadOptions options) {
 
     const cgltf_scene *scene = data->scene ? data->scene : (data->scenes_count > 0 ? &data->scenes[0] : nullptr);
     if (scene) {
-        for (cgltf_size i = 0; i < scene->nodes_count; i++) append_node(model, views, owned_positions, owned_indices, *scene->nodes[i], options, false);
+        for (cgltf_size i = 0; i < scene->nodes_count; i++) append_node(model, views, owned_positions, owned_indices, *scene->nodes[i], options, false, -1);
     }
 
     MergedMesh merged = merge_positions_and_indices::merge_positions_and_indices(views.data, views.length);
@@ -137,6 +151,7 @@ Model load(const char *name, ModelLoadOptions options) {
 }
 
 void release(Model &model) {
+    model.nodes.release();
     model.positions.release();
     model.colors.release();
     model.indices.release();
@@ -147,34 +162,66 @@ void release(Model &model) {
 
 RayHit raycast(const Model &model, Ray ray) {
     RayHit result = {false, FLT_MAX, {0, 0, 0}};
-    for (uint32_t i = 0; i + 2 < model.indices.length; i += 3) {
-        Vec3 a = vec3::load(model.positions.data, model.indices[i] * 3);
-        Vec3 b = vec3::load(model.positions.data, model.indices[i + 1] * 3);
-        Vec3 c = vec3::load(model.positions.data, model.indices[i + 2] * 3);
+    for (const ModelNode &node : model.nodes) {
+        if (node.hidden) continue;
+        for (uint32_t i = node.index_start; i + 2 < node.index_start + node.index_count; i += 3) {
+            Vec3 a = vec3::load(model.positions.data, model.indices[i] * 3);
+            Vec3 b = vec3::load(model.positions.data, model.indices[i + 1] * 3);
+            Vec3 c = vec3::load(model.positions.data, model.indices[i + 2] * 3);
 
-        Vec3 ab = vec3::subtract(b, a);
-        Vec3 ac = vec3::subtract(c, a);
-        Vec3 p = vec3::cross(ray.direction, ac);
-        float determinant = vec3::dot(ab, p);
-        if (fabsf(determinant) < 1e-9f) continue;
+            Vec3 ab = vec3::subtract(b, a);
+            Vec3 ac = vec3::subtract(c, a);
+            Vec3 p = vec3::cross(ray.direction, ac);
+            float determinant = vec3::dot(ab, p);
+            if (fabsf(determinant) < 1e-9f) continue;
 
-        float inverse = 1.0f / determinant;
-        Vec3 s = vec3::subtract(ray.origin, a);
-        float u = vec3::dot(s, p) * inverse;
-        if (u < 0 || u > 1) continue;
+            float inverse = 1.0f / determinant;
+            Vec3 s = vec3::subtract(ray.origin, a);
+            float u = vec3::dot(s, p) * inverse;
+            if (u < 0 || u > 1) continue;
 
-        Vec3 q = vec3::cross(s, ab);
-        float v = vec3::dot(ray.direction, q) * inverse;
-        if (v < 0 || u + v > 1) continue;
+            Vec3 q = vec3::cross(s, ab);
+            float v = vec3::dot(ray.direction, q) * inverse;
+            if (v < 0 || u + v > 1) continue;
 
-        float t = vec3::dot(ac, q) * inverse;
-        if (t > 0 && t < result.t) {
-            result.hit = true;
-            result.t = t;
+            float t = vec3::dot(ac, q) * inverse;
+            if (t > 0 && t < result.t) {
+                result.hit = true;
+                result.t = t;
+            }
         }
     }
     if (result.hit) result.point = vec3::scale_and_add(ray.origin, ray.direction, result.t);
     return result;
+}
+
+bool is_descendant(const Model &model, int32_t node, int32_t ancestor) {
+    while (node >= 0) {
+        if (node == ancestor) return true;
+        node = model.nodes[(uint32_t)node].parent;
+    }
+    return false;
+}
+
+int32_t find_node(const Model &model, const char *name) {
+    for (uint32_t i = 0; i < model.nodes.length; i++) {
+        if (strcmp(model.nodes[i].name, name) == 0) return (int32_t)i;
+    }
+    return -1;
+}
+
+bool extras_number(const ModelNode &node, const char *key, float &out_value) {
+    char quoted[64];
+    snprintf(quoted, sizeof(quoted), "\"%s\"", key);
+    const char *found = strstr(node.extras, quoted);
+    if (!found) return false;
+    const char *colon = strchr(found + strlen(quoted), ':');
+    if (!colon) return false;
+    char *end = nullptr;
+    float value = strtof(colon + 1, &end);
+    if (end == colon + 1) return false;
+    out_value = value;
+    return true;
 }
 
 }
