@@ -28,6 +28,7 @@ struct FindStraightPathExample {
     uint32_t straight_flags;
     uint32_t point_count;
     double straight_milliseconds;
+    SearchWorkspace workspace;
 };
 
 static FindStraightPathExample find_straight_path_example;
@@ -54,16 +55,16 @@ static void update_path() {
     if (start.success && end.success) {
         double begin = app::now_milliseconds();
         FindNodePathResult path = nav_mesh_search::find_node_path(nav_mesh, start.node_ref, end.node_ref, start.position, end.position,
-                                                                  nav_mesh_api::DEFAULT_QUERY_FILTER);
+                                                                  nav_mesh_api::DEFAULT_QUERY_FILTER, {}, &state.workspace);
         state.query_milliseconds = app::now_milliseconds() - begin;
         state.searched = true;
         state.success = path.success;
         state.flags = path.flags;
         state.node_count = path.path.length;
-        state.search_node_count = path.nodes.nodes.length;
+        state.search_node_count = state.workspace.nodes.nodes.length;
 
         if (path.success) {
-            DebugPrimitives nodes = debug::create_search_nodes_helper(path.nodes);
+            DebugPrimitives nodes = debug::create_search_nodes_helper(state.workspace.nodes);
             renderer::add_primitives(list, nodes);
             debug::release(nodes);
 
@@ -166,6 +167,7 @@ static void shutdown(App &) {
     FindStraightPathExample &state = find_straight_path_example;
     renderer::release(state.nav_mesh_drawing);
     renderer::release(state.path_drawing);
+    nav_mesh_search::release(state.workspace);
     if (state.generated) {
         generate_tiled_nav_mesh::release(state.result.intermediates);
         nav_mesh_api::release_nav_mesh(state.result.nav_mesh);

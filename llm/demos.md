@@ -21,6 +21,7 @@ Each navcat example in `~/Development/navcat/examples/src/example-<name>.ts` bec
 ## roam
 
 - The library is `roam/` (core) and `roam/blocks/` (generators, agents, chunky tri mesh, flood fill, merge positions). Headers sit next to sources. navcat names map to snake_case: `findNearestPoly` is `nav_mesh_api::find_nearest_poly`, `createNavMeshHelper` is `debug::create_nav_mesh_helper`, `crowd.addAgent` is `crowd::add_agent`.
+- Searches take an optional `SearchWorkspace *` last argument (`nav_mesh_search::create_search_workspace`, `release`). To draw search nodes with `debug::create_search_nodes_helper`, keep a `SearchWorkspace` in the example state, pass it to the query and draw `workspace.nodes`.
 - Results own `Array`s: release them (`find_path::release`, `nav_mesh_search::release`, `debug::release`, ...).
 - If a navcat API the example needs is missing from roam, port it into the library following navcat exactly (and the code style below), add a unit test in `tests/`, and say so in your report.
 
