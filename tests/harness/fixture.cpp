@@ -88,4 +88,45 @@ double number(const Fixture &fixture, const char *name) {
     return values.count == 1 ? values.data[0] : 0.0;
 }
 
+void check_i32(const char *file, int line, const char *label, const int32_t *actual, uint32_t actual_count, I32 expected) {
+    char message[512];
+    if (actual_count != expected.count) {
+        snprintf(message, sizeof(message), "%s: %u values, expected %u", label, actual_count, expected.count);
+        test::fail(file, line, message);
+        return;
+    }
+    uint32_t mismatches = 0;
+    uint32_t first = 0;
+    for (uint32_t i = 0; i < actual_count; i++) {
+        if (actual[i] == expected.data[i]) continue;
+        if (mismatches == 0) first = i;
+        mismatches++;
+    }
+    if (mismatches == 0) return;
+    snprintf(message, sizeof(message), "%s: %u of %u differ, first at %u is %d, expected %d", label, mismatches, actual_count, first,
+             actual[first], expected.data[first]);
+    test::fail(file, line, message);
+}
+
+void check_f64(const char *file, int line, const char *label, const float *actual, uint32_t actual_count, F64 expected, double tolerance) {
+    char message[512];
+    if (actual_count != expected.count) {
+        snprintf(message, sizeof(message), "%s: %u values, expected %u", label, actual_count, expected.count);
+        test::fail(file, line, message);
+        return;
+    }
+    uint32_t mismatches = 0;
+    uint32_t first = 0;
+    for (uint32_t i = 0; i < actual_count; i++) {
+        double difference = (double)actual[i] - expected.data[i];
+        if (difference <= tolerance && -difference <= tolerance) continue;
+        if (mismatches == 0) first = i;
+        mismatches++;
+    }
+    if (mismatches == 0) return;
+    snprintf(message, sizeof(message), "%s: %u of %u differ beyond %g, first at %u is %.9g, expected %.9g", label, mismatches, actual_count,
+             tolerance, first, (double)actual[first], expected.data[first]);
+    test::fail(file, line, message);
+}
+
 }
