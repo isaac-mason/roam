@@ -53,19 +53,18 @@ TEST(tile_polys_match_navcat_on_nav_test) {
     PolyMesh poly_mesh = build_watershed_poly_mesh(nav_test, compact_heightfield);
     NavMeshTilePolys tile_polys = nav_mesh_tile::poly_mesh_to_tile_polys(poly_mesh);
 
-    Array<int32_t> poly_vertices = {};
-    Array<int32_t> poly_neis = {};
-    for (const NavMeshPoly &poly : tile_polys.polys) {
-        for (uint32_t vertex : poly.vertices) poly_vertices.push((int32_t)vertex);
-        for (int nei : poly.neis) poly_neis.push(nei);
-    }
 
     CHECK_F64_ARRAY("tile.watershed.vertices", tile_polys.vertices.data, tile_polys.vertices.length, fixture::f64(expected, "tile.watershed.vertices"),
                     1e-4);
-    CHECK_EXPECTED("tile.watershed.poly_vertex_counts", widen(tile_polys.polys, [](const NavMeshPoly &poly) { return poly.vertices.length; }),
+    CHECK_EXPECTED("tile.watershed.poly_vertex_counts", widen(tile_polys.polys, [](const NavMeshPoly &poly) { return poly.vertex_count; }),
                    expected);
-    CHECK_EXPECTED("tile.watershed.poly_vertices", poly_vertices, expected);
-    CHECK_EXPECTED("tile.watershed.poly_neis", poly_neis, expected);
+    CHECK_EXPECTED("tile.watershed.poly_vertices", widen(tile_polys.poly_vertices, [](uint32_t value) { return value; }), expected);
+    CHECK_EXPECTED("tile.watershed.poly_neis", widen(tile_polys.poly_neis, [](int value) { return value; }), expected);
+    uint32_t expected_base = 0;
+    for (const NavMeshPoly &poly : tile_polys.polys) {
+        CHECK(poly.vertex_base == expected_base);
+        expected_base += poly.vertex_count;
+    }
     CHECK_EXPECTED("tile.watershed.poly_flags", widen(tile_polys.polys, [](const NavMeshPoly &poly) { return poly.flags; }), expected);
     CHECK_EXPECTED("tile.watershed.poly_areas", widen(tile_polys.polys, [](const NavMeshPoly &poly) { return poly.area; }), expected);
 

@@ -12,6 +12,8 @@ namespace roam {
 struct NavMeshTilePolys {
     Array<float> vertices;
     Array<NavMeshPoly> polys;
+    Array<uint32_t> poly_vertices;
+    Array<int> poly_neis;
 };
 
 struct NavMeshTileDetailMesh {

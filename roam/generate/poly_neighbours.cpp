@@ -6,18 +6,16 @@ namespace roam {
 
 namespace poly_neighbours {
 
-void build_poly_neighbours(Array<NavMeshPoly> &polys, const float *vertices, uint32_t vertex_count, int border_size, float min_x, float min_z,
-                           float max_x, float max_z) {
-    for (NavMeshPoly &poly : polys) {
-        poly.neis.clear();
-        poly.neis.resize(poly.vertices.length, MESH_NULL_IDX);
-    }
+void build_poly_neighbours(const Array<NavMeshPoly> &polys, const Array<uint32_t> &poly_vertices, Array<int> &poly_neis, const float *vertices,
+                           uint32_t vertex_count, int border_size, float min_x, float min_z, float max_x, float max_z) {
+    poly_neis.clear();
+    poly_neis.resize(poly_vertices.length, MESH_NULL_IDX);
 
-    build_mesh_adjacency(polys, vertex_count);
+    build_mesh_adjacency(polys, poly_vertices, poly_neis, vertex_count);
 
-    if (border_size > 0) find_portal_edges(polys, vertices, min_x, min_z, max_x, max_z);
+    if (border_size > 0) find_portal_edges(polys, poly_vertices, poly_neis, vertices, min_x, min_z, max_x, max_z);
 
-    finalize_poly_neighbours(polys);
+    finalize_poly_neighbours(poly_neis);
 }
 
 struct Edge {
@@ -26,21 +24,18 @@ struct Edge {
     uint32_t poly[2];
 };
 
-void build_mesh_adjacency(Array<NavMeshPoly> &polys, uint32_t vertex_count) {
-    uint32_t max_edge_count = 0;
-    for (const NavMeshPoly &poly : polys) max_edge_count += poly.vertices.length;
-
+void build_mesh_adjacency(const Array<NavMeshPoly> &polys, const Array<uint32_t> &poly_vertices, Array<int> &poly_neis, uint32_t vertex_count) {
     Array<int> first_edge = {};
     Array<int> next_edge = {};
     Array<Edge> edges = {};
     first_edge.resize(vertex_count, MESH_NULL_IDX);
-    next_edge.resize(max_edge_count, MESH_NULL_IDX);
+    next_edge.resize(poly_vertices.length, MESH_NULL_IDX);
 
     for (uint32_t i = 0; i < polys.length; i++) {
         const NavMeshPoly &poly = polys[i];
-        for (uint32_t j = 0; j < poly.vertices.length; j++) {
-            uint32_t v0 = poly.vertices[j];
-            uint32_t v1 = poly.vertices[(j + 1) % poly.vertices.length];
+        for (uint32_t j = 0; j < poly.vertex_count; j++) {
+            uint32_t v0 = poly_vertices[poly.vertex_base + j];
+            uint32_t v1 = poly_vertices[poly.vertex_base + (j + 1) % poly.vertex_count];
             if (v0 >= v1) continue;
 
             next_edge[edges.length] = first_edge[v0];
@@ -51,9 +46,9 @@ void build_mesh_adjacency(Array<NavMeshPoly> &polys, uint32_t vertex_count) {
 
     for (uint32_t i = 0; i < polys.length; i++) {
         const NavMeshPoly &poly = polys[i];
-        for (uint32_t j = 0; j < poly.vertices.length; j++) {
-            uint32_t v0 = poly.vertices[j];
-            uint32_t v1 = poly.vertices[(j + 1) % poly.vertices.length];
+        for (uint32_t j = 0; j < poly.vertex_count; j++) {
+            uint32_t v0 = poly_vertices[poly.vertex_base + j];
+            uint32_t v1 = poly_vertices[poly.vertex_base + (j + 1) % poly.vertex_count];
             if (v0 <= v1) continue;
 
             for (int e = first_edge[v1]; e != MESH_NULL_IDX; e = next_edge[(uint32_t)e]) {
@@ -69,8 +64,8 @@ void build_mesh_adjacency(Array<NavMeshPoly> &polys, uint32_t vertex_count) {
 
     for (const Edge &edge : edges) {
         if (edge.poly[0] == edge.poly[1]) continue;
-        polys[edge.poly[0]].neis[edge.poly_edge[0]] = (int)edge.poly[1];
-        polys[edge.poly[1]].neis[edge.poly_edge[1]] = (int)edge.poly[0];
+        poly_neis[polys[edge.poly[0]].vertex_base + edge.poly_edge[0]] = (int)edge.poly[1];
+        poly_neis[polys[edge.poly[1]].vertex_base + edge.poly_edge[1]] = (int)edge.poly[0];
     }
 
     first_edge.release();
@@ -78,48 +73,48 @@ void build_mesh_adjacency(Array<NavMeshPoly> &polys, uint32_t vertex_count) {
     edges.release();
 }
 
-void find_portal_edges(Array<NavMeshPoly> &polys, const float *vertices, float min_x, float min_z, float max_x, float max_z) {
-    for (NavMeshPoly &poly : polys) {
-        for (uint32_t j = 0; j < poly.vertices.length; j++) {
-            if (poly.neis[j] != MESH_NULL_IDX) continue;
+void find_portal_edges(const Array<NavMeshPoly> &polys, const Array<uint32_t> &poly_vertices, Array<int> &poly_neis, const float *vertices,
+                       float min_x, float min_z, float max_x, float max_z) {
+    for (const NavMeshPoly &poly : polys) {
+        for (uint32_t j = 0; j < poly.vertex_count; j++) {
+            int &nei = poly_neis[poly.vertex_base + j];
+            if (nei != MESH_NULL_IDX) continue;
 
-            uint32_t nj = (j + 1) % poly.vertices.length;
-            const float *va = &vertices[poly.vertices[j] * 3];
-            const float *vb = &vertices[poly.vertices[nj] * 3];
+            uint32_t nj = (j + 1) % poly.vertex_count;
+            const float *va = &vertices[poly_vertices[poly.vertex_base + j] * 3];
+            const float *vb = &vertices[poly_vertices[poly.vertex_base + nj] * 3];
 
             if (va[0] == min_x && vb[0] == min_x) {
-                poly.neis[j] = POLY_NEIS_FLAG_EXT_LINK | 0;
+                nei = POLY_NEIS_FLAG_EXT_LINK | 0;
             } else if (va[2] == max_z && vb[2] == max_z) {
-                poly.neis[j] = POLY_NEIS_FLAG_EXT_LINK | 1;
+                nei = POLY_NEIS_FLAG_EXT_LINK | 1;
             } else if (va[0] == max_x && vb[0] == max_x) {
-                poly.neis[j] = POLY_NEIS_FLAG_EXT_LINK | 2;
+                nei = POLY_NEIS_FLAG_EXT_LINK | 2;
             } else if (va[2] == min_z && vb[2] == min_z) {
-                poly.neis[j] = POLY_NEIS_FLAG_EXT_LINK | 3;
+                nei = POLY_NEIS_FLAG_EXT_LINK | 3;
             }
         }
     }
 }
 
-void finalize_poly_neighbours(Array<NavMeshPoly> &polys) {
-    for (NavMeshPoly &poly : polys) {
-        for (int &nei : poly.neis) {
-            if (!(nei & POLY_NEIS_FLAG_EXT_LINK)) {
-                nei = nei + 1;
-                continue;
-            }
+void finalize_poly_neighbours(Array<int> &poly_neis) {
+    for (int &nei : poly_neis) {
+        if (!(nei & POLY_NEIS_FLAG_EXT_LINK)) {
+            nei = nei + 1;
+            continue;
+        }
 
-            int direction = nei & 0xf;
-            if (direction == 0) {
-                nei = POLY_NEIS_FLAG_EXT_LINK | 4;
-            } else if (direction == 1) {
-                nei = POLY_NEIS_FLAG_EXT_LINK | 2;
-            } else if (direction == 2) {
-                nei = POLY_NEIS_FLAG_EXT_LINK | 0;
-            } else if (direction == 3) {
-                nei = POLY_NEIS_FLAG_EXT_LINK | 6;
-            } else {
-                nei = 0;
-            }
+        int direction = nei & 0xf;
+        if (direction == 0) {
+            nei = POLY_NEIS_FLAG_EXT_LINK | 4;
+        } else if (direction == 1) {
+            nei = POLY_NEIS_FLAG_EXT_LINK | 2;
+        } else if (direction == 2) {
+            nei = POLY_NEIS_FLAG_EXT_LINK | 0;
+        } else if (direction == 3) {
+            nei = POLY_NEIS_FLAG_EXT_LINK | 6;
+        } else {
+            nei = 0;
         }
     }
 }

@@ -53,7 +53,7 @@ From JS to C++:
 - `Record<string, X>` keyed by pool ids becomes an `Array<X>` of slots indexed by an `IndexPool` id, each with an `allocated` flag.
 - The tile position maps become a `Map<uint64_t, …>` keyed by packed (x, y, layer).
 - Result objects become result structs that own `Array`s.
-- Variable-length arrays on per-item structs stay per-item `Array`s, as in navcat: `NavMeshPoly.vertices` and `.neis`, `NavMeshNode.links`. Decision (2026-10-20): start navcat-aligned and revisit after parity. See the follow-up under After parity.
+- Per-item variable-length data is flat (decided 2026-10-20). navcat gives each poly its own `vertices`/`neis` arrays; roam stores them in tile-wide `poly_vertices` and `poly_neis` arrays, and each `NavMeshPoly` keeps `vertex_base` and `vertex_count` (`neis` share the same base). This is the same pattern navcat already uses for detail meshes, and tiles are immutable once built. Node links follow the same idea: links stay in the world-level pool, and each node keeps a chain (`first_link`, `last_link`, `link.next`) that appends at the tail, so links are visited in navcat's order. Recast's alternative, fixed inline `verts[6]`/`neis[6]`, was rejected because it caps vertices per poly, which navcat deliberately doesn't.
 - `BuildContext` keeps only logs. roam never reads a clock: in wasm that means a call out to JS. Callers time stages themselves; the shape rasterizers take no context.
 
 ## Parity testing
@@ -92,10 +92,5 @@ From JS to C++:
 ## After parity
 
 - Performance: a reusable, generation-stamped search pool.
-- Per-item array layout (follow-up from 2026-10-20). Today each poly owns small `vertices`/`neis` arrays and each node owns a `links` list, which means many small allocations and `release` loops. Options:
-  1. Keep navcat's per-item `Array`s (current).
-  2. Recast's layout: fixed inline arrays (`verts[6]`, `neis[6]`, `vertCount`) on `dtPoly`. Simplest C and no allocation, but it caps vertices per poly at a compile-time constant, which navcat deliberately doesn't (`maxVerticesPerPoly` is a parameter, and external polygons can be any size).
-  3. Flat tile-wide arrays (`tile.poly_vertices`, `tile.poly_neis`) with `vertex_base`/`vertex_count` on each poly. No cap and no allocation per poly. navcat already uses this pattern for detail meshes. Tiles are immutable once built, so nothing needs to grow a slice.
-  - Links: recast keeps a per-tile link pool with `firstLink` + `link.next` and inserts at the head, so iteration runs newest first. navcat keeps a world-level pool and appends to `node.links`. A flat chain must append at the tail (`first_link` + `last_link` + `next`) to keep navcat's link order, because link order can decide ties between equal-cost paths in A*.
 - Large worlds: tile-local vertex storage.
 - A handoff from roam to navcat: roam writes a tile blob that navcat can import.

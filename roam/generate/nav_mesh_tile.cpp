@@ -15,19 +15,21 @@ NavMeshTilePolys poly_mesh_to_tile_polys(const PolyMesh &poly_mesh) {
 
     for (int i = 0; i < poly_mesh.poly_count; i++) {
         NavMeshPoly poly = {};
+        poly.vertex_base = tile_polys.poly_vertices.length;
         poly.flags = poly_mesh.flags[(uint32_t)i];
         poly.area = poly_mesh.areas[(uint32_t)i];
 
         for (int j = 0; j < nvp; j++) {
             int vertex_index = poly_mesh.polys[(uint32_t)(i * nvp + j)];
             if (vertex_index == MESH_NULL_IDX) break;
-            poly.vertices.push((uint32_t)vertex_index);
+            tile_polys.poly_vertices.push((uint32_t)vertex_index);
+            poly.vertex_count++;
         }
 
         tile_polys.polys.push(poly);
     }
 
-    poly_neighbours::build_poly_neighbours(tile_polys.polys, tile_polys.vertices.data, tile_polys.vertices.length / 3, poly_mesh.border_size, 0, 0,
+    poly_neighbours::build_poly_neighbours(tile_polys.polys, tile_polys.poly_vertices, tile_polys.poly_neis, tile_polys.vertices.data, tile_polys.vertices.length / 3, poly_mesh.border_size, 0, 0,
                                            (float)poly_mesh.local_width, (float)poly_mesh.local_height);
 
     for (uint32_t i = 0; i < tile_polys.vertices.length; i += 3) {
@@ -45,14 +47,11 @@ NavMeshTilePolys polygons_to_nav_mesh_tile_polys(const ExternalPolygon *polygons
     for (uint32_t i = 0; i < vertex_count * 3; i++) tile_polys.vertices.push(vertices[i]);
 
     for (uint32_t i = 0; i < polygon_count; i++) {
-        NavMeshPoly poly = {};
-        poly.flags = polygons[i].flags;
-        poly.area = polygons[i].area;
-        for (uint32_t j = 0; j < polygons[i].vertex_count; j++) poly.vertices.push(polygons[i].vertices[j]);
-        tile_polys.polys.push(poly);
+        tile_polys.polys.push({tile_polys.poly_vertices.length, polygons[i].vertex_count, polygons[i].flags, polygons[i].area});
+        for (uint32_t j = 0; j < polygons[i].vertex_count; j++) tile_polys.poly_vertices.push(polygons[i].vertices[j]);
     }
 
-    poly_neighbours::build_poly_neighbours(tile_polys.polys, tile_polys.vertices.data, vertex_count, border_size, bounds.min.x, bounds.min.z,
+    poly_neighbours::build_poly_neighbours(tile_polys.polys, tile_polys.poly_vertices, tile_polys.poly_neis, tile_polys.vertices.data, vertex_count, border_size, bounds.min.x, bounds.min.z,
                                            bounds.max.x, bounds.max.z);
 
     return tile_polys;
@@ -64,7 +63,7 @@ NavMeshTileDetailMesh polys_to_tile_detail_mesh(const Array<NavMeshPoly> &polys)
     uint32_t triangles_base = 0;
 
     for (const NavMeshPoly &poly : polys) {
-        uint32_t vertex_count = poly.vertices.length;
+        uint32_t vertex_count = poly.vertex_count;
 
         detail_mesh.detail_meshes.push({0, triangles_base, 0, vertex_count - 2});
 
@@ -91,7 +90,7 @@ NavMeshTileDetailMesh poly_mesh_detail_to_tile_detail_mesh(const Array<NavMeshPo
     uint32_t vertices_base = 0;
 
     for (uint32_t i = 0; i < polys.length; i++) {
-        int poly_vertex_count = (int)polys[i].vertices.length;
+        int poly_vertex_count = (int)polys[i].vertex_count;
 
         int vb = poly_mesh_detail.meshes[i * 4];
         int detail_vertex_count = poly_mesh_detail.meshes[i * 4 + 1];
@@ -121,7 +120,9 @@ NavMeshTileDetailMesh poly_mesh_detail_to_tile_detail_mesh(const Array<NavMeshPo
 
 void release(NavMeshTilePolys &tile_polys) {
     tile_polys.vertices.release();
-    nav_mesh::release(tile_polys.polys);
+    tile_polys.polys.release();
+    tile_polys.poly_vertices.release();
+    tile_polys.poly_neis.release();
 }
 
 void release(NavMeshTileDetailMesh &detail_mesh) {
