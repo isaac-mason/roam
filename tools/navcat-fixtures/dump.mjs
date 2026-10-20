@@ -152,6 +152,39 @@ const tileDetailEntries = (prefix, tileDetail) => [
     i32(`${prefix}.detail_triangles`, tileDetail.detailTriangles),
 ];
 
+const navMeshEntries = (prefix, navMesh) => {
+    const nodeRefs = [];
+    const nodeAllocated = [];
+    const linkCounts = [];
+    const linkToRefs = [];
+    const linkFields = [];
+    for (const node of navMesh.nodes) {
+        nodeRefs.push(node.ref);
+        nodeAllocated.push(node.allocated ? 1 : 0);
+        linkCounts.push(node.links.length);
+        for (const linkIndex of node.links) {
+            const link = navMesh.links[linkIndex];
+            linkToRefs.push(link.toNodeRef);
+            linkFields.push(link.edge, link.side, link.bmin, link.bmax);
+        }
+    }
+    return [
+        f64(`${prefix}.node_refs`, nodeRefs),
+        i32(`${prefix}.node_allocated`, nodeAllocated),
+        i32(`${prefix}.link_counts`, linkCounts),
+        f64(`${prefix}.link_to_refs`, linkToRefs),
+        i32(`${prefix}.link_fields`, linkFields),
+    ];
+};
+
+const lcg = (seed) => {
+    let state = seed >>> 0;
+    return () => {
+        state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+        return state / 4294967296;
+    };
+};
+
 const config = {
     cellSize: 0.15,
     cellHeight: 0.15,
@@ -177,6 +210,9 @@ const options = {
     detailSampleDistanceWorld: config.detailSampleDistance < 0.9 ? 0 : config.cellSize * config.detailSampleDistance,
     detailSampleMaxErrorWorld: config.cellHeight * config.detailSampleMaxError,
 };
+options.walkableRadiusWorld = config.walkableRadiusWorld;
+options.walkableClimbWorld = config.walkableClimbWorld;
+options.walkableHeightWorld = config.walkableHeightWorld;
 
 const dumpSoloGeneration = (name, positions, indices) => {
     const entries = [
@@ -248,6 +284,99 @@ const dumpSoloGeneration = (name, positions, indices) => {
     entries.push(...tilePolysEntries('tile.watershed', tilePolys));
     entries.push(...tileDetailEntries('tile.watershed', navcat.polyMeshDetailToTileDetailMesh(tilePolys.polys, detail)));
     entries.push(...tileDetailEntries('tile.watershed.fan', navcat.polysToTileDetailMesh(tilePolys.polys)));
+
+    for (const poly of tilePolys.polys) {
+        if (poly.area === navcat.WALKABLE_AREA) poly.area = 0;
+        if (poly.area === 0) poly.flags = 1;
+    }
+    const tileDetail = navcat.polyMeshDetailToTileDetailMesh(tilePolys.polys, detail);
+    const tile = navcat.buildTile({
+        bounds: polyMesh.bounds,
+        vertices: tilePolys.vertices,
+        polys: tilePolys.polys,
+        detailMeshes: tileDetail.detailMeshes,
+        detailVertices: tileDetail.detailVertices,
+        detailTriangles: tileDetail.detailTriangles,
+        tileX: 0,
+        tileY: 0,
+        tileLayer: 0,
+        cellSize: options.cellSize,
+        cellHeight: options.cellHeight,
+        walkableHeight: options.walkableHeightWorld,
+        walkableRadius: options.walkableRadiusWorld,
+        walkableClimb: options.walkableClimbWorld,
+    });
+    const navMesh = navcat.createNavMesh();
+    navMesh.tileWidth = polyMesh.bounds[3] - polyMesh.bounds[0];
+    navMesh.tileHeight = polyMesh.bounds[5] - polyMesh.bounds[2];
+    navMesh.origin = [polyMesh.bounds[0], polyMesh.bounds[1], polyMesh.bounds[2]];
+    navcat.addTile(navMesh, tile);
+
+    entries.push(
+        f64('nav_mesh.walkable', [options.walkableHeightWorld, options.walkableRadiusWorld, options.walkableClimbWorld]),
+        i32('nav_mesh.bv_bounds', tile.bvTree.nodes.flatMap((node) => node.bounds)),
+        i32('nav_mesh.bv_i', tile.bvTree.nodes.map((node) => node.i)),
+        f64('nav_mesh.bv_quant_factor', tile.bvTree.quantFactor),
+    );
+    entries.push(...navMeshEntries('nav_mesh.built', navMesh));
+
+    const random = lcg(1234);
+    const meshBounds = polyMesh.bounds;
+    const queryPoints = [];
+    const nearestSuccess = [];
+    const nearestRefs = [];
+    const nearestPositions = [];
+    const queryCounts = [];
+    const queryRefs = [];
+    const halfExtents = [1, 2, 1];
+    for (let i = 0; i < 200; i++) {
+        const point = [
+            meshBounds[0] + random() * (meshBounds[3] - meshBounds[0]),
+            meshBounds[1] + random() * (meshBounds[4] - meshBounds[1]),
+            meshBounds[2] + random() * (meshBounds[5] - meshBounds[2]),
+        ];
+        queryPoints.push(...point);
+        const nearest = navcat.findNearestPoly(navcat.createFindNearestPolyResult(), navMesh, point, halfExtents, navcat.DEFAULT_QUERY_FILTER);
+        nearestSuccess.push(nearest.success ? 1 : 0);
+        nearestRefs.push(nearest.success ? nearest.nodeRef : -1);
+        nearestPositions.push(...nearest.position);
+        const box = [point[0] - halfExtents[0], point[1] - halfExtents[1], point[2] - halfExtents[2], point[0] + halfExtents[0], point[1] + halfExtents[1], point[2] + halfExtents[2]];
+        const refs = navcat.queryPolygons(navMesh, box, navcat.DEFAULT_QUERY_FILTER);
+        queryCounts.push(refs.length);
+        queryRefs.push(...refs);
+    }
+    entries.push(
+        f64('queries.points', queryPoints),
+        f64('queries.half_extents', halfExtents),
+        i32('queries.nearest_success', nearestSuccess),
+        f64('queries.nearest_refs', nearestRefs),
+        f64('queries.nearest_positions', nearestPositions),
+        i32('queries.polygon_counts', queryCounts),
+        f64('queries.polygon_refs', queryRefs),
+    );
+
+    const successes = [];
+    for (let i = 0; i < nearestSuccess.length; i++) if (nearestSuccess[i]) successes.push(i);
+    const startIndex = successes[0];
+    const endIndex = successes[successes.length - 1];
+    const offMeshStart = nearestPositions.slice(startIndex * 3, startIndex * 3 + 3);
+    const offMeshEnd = nearestPositions.slice(endIndex * 3, endIndex * 3 + 3);
+    const offMeshId = navcat.addOffMeshConnection(navMesh, {
+        start: offMeshStart,
+        end: offMeshEnd,
+        radius: 0.5,
+        direction: navcat.OffMeshConnectionDirection.BIDIRECTIONAL,
+        flags: 1,
+        area: 0,
+    });
+    const attachment = navMesh.offMeshConnectionAttachments[offMeshId];
+    entries.push(
+        f64('off_mesh.start', offMeshStart),
+        f64('off_mesh.end', offMeshEnd),
+        i32('off_mesh.connected', navcat.isOffMeshConnectionConnected(navMesh, offMeshId) ? 1 : 0),
+        f64('off_mesh.attachment', [attachment.offMeshNode, attachment.startPolyNode, attachment.endPolyNode]),
+    );
+    entries.push(...navMeshEntries('nav_mesh.with_off_mesh', navMesh));
 
     const monotone = buildCompact();
     navcat.erodeWalkableArea(options.walkableRadiusVoxels, monotone);

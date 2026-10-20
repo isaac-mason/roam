@@ -1,0 +1,110 @@
+#include "roam/query/nav_mesh_api.h"
+#include "tests/harness/test.h"
+
+using namespace roam;
+
+static NavMeshTile mock_tile(int tile_x, int tile_y, int tile_layer) {
+    NavMeshTile tile = {};
+    tile.tile_x = tile_x;
+    tile.tile_y = tile_y;
+    tile.tile_layer = tile_layer;
+    tile.bounds = {{0, 0, 0}, {10, 10, 10}};
+    tile.cell_size = 0.3f;
+    tile.cell_height = 0.2f;
+    tile.walkable_height = 2;
+    tile.walkable_radius = 0.6f;
+    tile.walkable_climb = 0.9f;
+    return tile;
+}
+
+TEST(get_tile_at_returns_tile_at_position) {
+    NavMesh nav_mesh = nav_mesh_api::create_nav_mesh();
+    nav_mesh_api::add_tile(nav_mesh, mock_tile(0, 0, 0));
+
+    const NavMeshTile *tile = nav_mesh_api::get_tile_at(nav_mesh, 0, 0, 0);
+    REQUIRE(tile != nullptr);
+    CHECK(tile->tile_x == 0 && tile->tile_y == 0 && tile->tile_layer == 0);
+
+    nav_mesh_api::release_nav_mesh(nav_mesh);
+}
+
+TEST(get_tile_at_returns_null_for_missing_position) {
+    NavMesh nav_mesh = nav_mesh_api::create_nav_mesh();
+    CHECK(nav_mesh_api::get_tile_at(nav_mesh, 5, 5, 0) == nullptr);
+    nav_mesh_api::release_nav_mesh(nav_mesh);
+}
+
+TEST(get_tile_at_differentiates_layers) {
+    NavMesh nav_mesh = nav_mesh_api::create_nav_mesh();
+    nav_mesh_api::add_tile(nav_mesh, mock_tile(1, 1, 0));
+    nav_mesh_api::add_tile(nav_mesh, mock_tile(1, 1, 1));
+
+    const NavMeshTile *layer_0 = nav_mesh_api::get_tile_at(nav_mesh, 1, 1, 0);
+    const NavMeshTile *layer_1 = nav_mesh_api::get_tile_at(nav_mesh, 1, 1, 1);
+    REQUIRE(layer_0 != nullptr && layer_1 != nullptr);
+    CHECK(layer_0->tile_layer == 0);
+    CHECK(layer_1->tile_layer == 1);
+    CHECK(layer_0->id != layer_1->id);
+
+    nav_mesh_api::release_nav_mesh(nav_mesh);
+}
+
+TEST(get_tile_at_handles_negative_coordinates) {
+    NavMesh nav_mesh = nav_mesh_api::create_nav_mesh();
+    nav_mesh_api::add_tile(nav_mesh, mock_tile(-5, -3, 0));
+
+    const NavMeshTile *tile = nav_mesh_api::get_tile_at(nav_mesh, -5, -3, 0);
+    REQUIRE(tile != nullptr);
+    CHECK(tile->tile_x == -5 && tile->tile_y == -3);
+
+    nav_mesh_api::release_nav_mesh(nav_mesh);
+}
+
+TEST(get_tiles_at_returns_all_layers) {
+    NavMesh nav_mesh = nav_mesh_api::create_nav_mesh();
+    for (int layer = 0; layer < 3; layer++) nav_mesh_api::add_tile(nav_mesh, mock_tile(2, 3, layer));
+
+    Array<const NavMeshTile *> tiles = nav_mesh_api::get_tiles_at(nav_mesh, 2, 3);
+    REQUIRE(tiles.length == 3);
+    int layer_mask = 0;
+    for (const NavMeshTile *tile : tiles) layer_mask |= 1 << tile->tile_layer;
+    CHECK(layer_mask == 0x7);
+
+    tiles.release();
+    nav_mesh_api::release_nav_mesh(nav_mesh);
+}
+
+TEST(get_tiles_at_returns_empty_for_missing_position) {
+    NavMesh nav_mesh = nav_mesh_api::create_nav_mesh();
+    Array<const NavMeshTile *> tiles = nav_mesh_api::get_tiles_at(nav_mesh, 10, 10);
+    CHECK(tiles.length == 0);
+    tiles.release();
+    nav_mesh_api::release_nav_mesh(nav_mesh);
+}
+
+TEST(get_tiles_at_handles_negative_coordinates_and_ignores_other_columns) {
+    NavMesh nav_mesh = nav_mesh_api::create_nav_mesh();
+    nav_mesh_api::add_tile(nav_mesh, mock_tile(-10, -5, 0));
+    nav_mesh_api::add_tile(nav_mesh, mock_tile(-9, -5, 0));
+
+    Array<const NavMeshTile *> tiles = nav_mesh_api::get_tiles_at(nav_mesh, -10, -5);
+    REQUIRE(tiles.length == 1);
+    CHECK(tiles[0]->tile_x == -10 && tiles[0]->tile_y == -5);
+
+    tiles.release();
+    nav_mesh_api::release_nav_mesh(nav_mesh);
+}
+
+TEST(add_tile_replaces_tile_at_same_position) {
+    NavMesh nav_mesh = nav_mesh_api::create_nav_mesh();
+    nav_mesh_api::add_tile(nav_mesh, mock_tile(0, 0, 0));
+    uint32_t first_sequence = nav_mesh_api::get_tile_at(nav_mesh, 0, 0, 0)->sequence;
+    nav_mesh_api::add_tile(nav_mesh, mock_tile(0, 0, 0));
+
+    Array<const NavMeshTile *> tiles = nav_mesh_api::get_tiles_at(nav_mesh, 0, 0);
+    CHECK(tiles.length == 1);
+    CHECK(nav_mesh_api::get_tile_at(nav_mesh, 0, 0, 0)->sequence == first_sequence + 1);
+
+    tiles.release();
+    nav_mesh_api::release_nav_mesh(nav_mesh);
+}

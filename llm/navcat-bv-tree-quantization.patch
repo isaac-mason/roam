@@ -1,0 +1,43 @@
+--- a/src/query/bv-tree.ts	2026-10-20 23:26:03
++++ b/src/query/bv-tree.ts	2026-10-20 23:26:03
+@@ -44,6 +44,20 @@
+     return bounds;
+ };
+ 
++const SNAP_EPSILON = 1e-3;
++
++/**
++ * Quantizes a coordinate relative to the tile origin, recast style: truncate to an integer, clamped to 0..0xffff.
++ * Values within SNAP_EPSILON of an integer are snapped to it first, so grid aligned vertices land on the same integer
++ * regardless of floating point precision (e.g. 23.9999 and 24.0000001 both become 24).
++ */
++const quantize = (value: number, origin: number, quantFactor: number): number => {
++    let quantized = (value - origin) * quantFactor;
++    const nearest = Math.round(quantized);
++    if (Math.abs(quantized - nearest) < SNAP_EPSILON) quantized = nearest;
++    return Math.min(Math.max(Math.trunc(quantized), 0), 0xffff);
++};
++
+ const longestAxis = (x: number, y: number, z: number): number => {
+     let axis = 0;
+     let maxVal = x;
+@@ -216,13 +230,13 @@
+             }
+ 
+             // bv tree uses cellSize for all dimensions, quantize relative to tile bounds
+-            item.bounds[0] = (item.bounds[0] - params.bounds[0]) * quantFactor;
+-            item.bounds[1] = (item.bounds[1] - params.bounds[1]) * quantFactor;
+-            item.bounds[2] = (item.bounds[2] - params.bounds[2]) * quantFactor;
++            item.bounds[0] = quantize(item.bounds[0], params.bounds[0], quantFactor);
++            item.bounds[1] = quantize(item.bounds[1], params.bounds[1], quantFactor);
++            item.bounds[2] = quantize(item.bounds[2], params.bounds[2], quantFactor);
+ 
+-            item.bounds[3] = (item.bounds[3] - params.bounds[0]) * quantFactor;
+-            item.bounds[4] = (item.bounds[4] - params.bounds[1]) * quantFactor;
+-            item.bounds[5] = (item.bounds[5] - params.bounds[2]) * quantFactor;
++            item.bounds[3] = quantize(item.bounds[3], params.bounds[0], quantFactor);
++            item.bounds[4] = quantize(item.bounds[4], params.bounds[1], quantFactor);
++            item.bounds[5] = quantize(item.bounds[5], params.bounds[2], quantFactor);
+         }
+ 
+         items[i] = item;
