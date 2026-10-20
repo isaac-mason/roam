@@ -121,6 +121,7 @@ struct Crowd {
     int max_iterations_per_agent;
     int quick_search_iterations;
 
+    SearchWorkspace workspace;
     Array<uint32_t> scratch_agents;
     Array<uint32_t> scratch_cells;
     Array<uint32_t> scratch_cell_starts;

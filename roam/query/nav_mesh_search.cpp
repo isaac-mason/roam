@@ -11,35 +11,71 @@ namespace nav_mesh_search {
 
 static const float HEURISTIC_SCALE = 0.999f;
 
+static const uint32_t MIN_SEARCH_BUCKETS = 64;
+static const uint32_t SEARCH_NODES_PER_BUCKET = 2;
+
+SearchWorkspace create_search_workspace() { return {}; }
+
+void release(SearchWorkspace &workspace) {
+    release(workspace.nodes);
+    release(workspace.open_list);
+    release(workspace.local_nodes);
+    workspace.local_queue.release();
+    workspace.vertices.release();
+    workspace.other_vertices.release();
+    workspace.raycast_vertices.release();
+    workspace.neighbours.release();
+}
+
+static uint32_t search_bucket(const SearchNodePool &pool, NodeRef node_ref) { return (uint32_t)hash_key(node_ref) & (pool.buckets.length - 1); }
+
 int32_t get_search_node(const SearchNodePool &pool, NodeRef node_ref, int state) {
-    const int32_t *first = pool.first_by_ref.get(node_ref);
-    if (!first) return NULL_SEARCH_NODE;
-    for (int32_t index = *first; index != NULL_SEARCH_NODE; index = pool.nodes[(uint32_t)index].next_with_same_ref) {
-        if (pool.nodes[(uint32_t)index].state == state) return index;
+    if (pool.buckets.length == 0) return NULL_SEARCH_NODE;
+    for (int32_t index = pool.buckets[search_bucket(pool, node_ref)]; index != NULL_SEARCH_NODE; index = pool.nodes[(uint32_t)index].next_in_bucket) {
+        const SearchNode &node = pool.nodes[(uint32_t)index];
+        if (node.node_ref == node_ref && node.state == state) return index;
     }
     return NULL_SEARCH_NODE;
 }
 
+int32_t get_first_search_node(const SearchNodePool &pool, NodeRef node_ref) {
+    if (pool.buckets.length == 0) return NULL_SEARCH_NODE;
+    int32_t first = NULL_SEARCH_NODE;
+    for (int32_t index = pool.buckets[search_bucket(pool, node_ref)]; index != NULL_SEARCH_NODE; index = pool.nodes[(uint32_t)index].next_in_bucket) {
+        if (pool.nodes[(uint32_t)index].node_ref == node_ref) first = index;
+    }
+    return first;
+}
+
+static void link_search_node(SearchNodePool &pool, uint32_t index) {
+    uint32_t bucket = search_bucket(pool, pool.nodes[index].node_ref);
+    pool.nodes[index].next_in_bucket = pool.buckets[bucket];
+    pool.buckets[bucket] = (int32_t)index;
+}
+
+static void grow_search_buckets(SearchNodePool &pool) {
+    uint32_t bucket_count = pool.buckets.length > 0 ? pool.buckets.length * 2 : MIN_SEARCH_BUCKETS;
+    pool.buckets.clear();
+    pool.buckets.resize(bucket_count, NULL_SEARCH_NODE);
+    for (uint32_t index = 0; index < pool.nodes.length; index++) link_search_node(pool, index);
+}
+
 uint32_t add_search_node(SearchNodePool &pool, const SearchNode &node) {
+    if (pool.nodes.length + 1 > pool.buckets.length * SEARCH_NODES_PER_BUCKET) grow_search_buckets(pool);
     uint32_t index = pool.nodes.length;
     pool.nodes.push(node);
-    pool.nodes[index].next_with_same_ref = NULL_SEARCH_NODE;
-
-    int32_t *first = pool.first_by_ref.get(node.node_ref);
-    if (!first) {
-        pool.first_by_ref.set(node.node_ref, (int32_t)index);
-        return index;
-    }
-
-    int32_t last = *first;
-    while (pool.nodes[(uint32_t)last].next_with_same_ref != NULL_SEARCH_NODE) last = pool.nodes[(uint32_t)last].next_with_same_ref;
-    pool.nodes[(uint32_t)last].next_with_same_ref = (int32_t)index;
+    link_search_node(pool, index);
     return index;
+}
+
+void clear(SearchNodePool &pool) {
+    pool.nodes.clear();
+    for (int32_t &head : pool.buckets) head = NULL_SEARCH_NODE;
 }
 
 void release(SearchNodePool &pool) {
     pool.nodes.release();
-    pool.first_by_ref.release();
+    pool.buckets.release();
 }
 
 static SearchNode make_search_node(NodeRef node_ref, int state, uint32_t flags, Vec3 position) {
@@ -50,7 +86,7 @@ static SearchNode make_search_node(NodeRef node_ref, int state, uint32_t flags, 
     node.state = state;
     node.flags = flags;
     node.node_ref = node_ref;
-    node.next_with_same_ref = NULL_SEARCH_NODE;
+    node.next_in_bucket = NULL_SEARCH_NODE;
     return node;
 }
 
@@ -205,7 +241,7 @@ static Array<NodeRef> collect_path(const SearchNodePool &pool, int32_t last_node
 }
 
 static RaycastResult raycast_base(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter,
-                                  bool calculate_costs, NodeRef previous_ref);
+                                  bool calculate_costs, NodeRef previous_ref, bool collect_path, Array<float> &vertices);
 
 static int link_state(const NavMeshLink &link) { return link.side != 0xff ? link.side >> 1 : 0; }
 
@@ -218,12 +254,14 @@ static uint32_t get_or_add_neighbour(const NavMesh &nav_mesh, SearchNodePool &po
     return add_search_node(pool, node);
 }
 
-FindNodePathResult find_node_path(const NavMesh &nav_mesh, NodeRef start_node_ref, NodeRef end_node_ref, Vec3 start_position, Vec3 end_position,
-                                  const QueryFilter &filter, FindNodePathOptions options) {
+static FindNodePathResult find_node_path_in(const NavMesh &nav_mesh, NodeRef start_node_ref, NodeRef end_node_ref, Vec3 start_position,
+                                            Vec3 end_position, const QueryFilter &filter, FindNodePathOptions options, SearchWorkspace &workspace) {
     FindNodePathResult result = {};
     float raycast_distance = options.raycast_distance;
-    SearchNodePool &nodes = result.nodes;
-    SearchNodeQueue &open_list = result.open_list;
+    SearchNodePool &nodes = workspace.nodes;
+    SearchNodeQueue &open_list = workspace.open_list;
+    clear(nodes);
+    open_list.items.clear();
 
     if (!nav_mesh_api::is_valid_node_ref(nav_mesh, start_node_ref) || !nav_mesh_api::is_valid_node_ref(nav_mesh, end_node_ref) ||
         !vec3::finite(start_position) || !vec3::finite(end_position)) {
@@ -285,7 +323,7 @@ FindNodePathResult find_node_path(const NavMesh &nav_mesh, NodeRef start_node_re
                     float ray_length = vec3::distance(grandparent.position, neighbour_position);
                     if (ray_length < raycast_distance) {
                         RaycastResult ray = raycast_base(nav_mesh, grandparent.node_ref, grandparent.position, neighbour_position, filter, true,
-                                                         grandparent.parent_node_ref);
+                                                         grandparent.parent_node_ref, false, workspace.raycast_vertices);
                         if (ray.t >= 1.0f) {
                             found_shortcut = true;
                             cost = grandparent.cost + ray.path_cost;
@@ -353,11 +391,16 @@ FindNodePathResult find_node_path(const NavMesh &nav_mesh, NodeRef start_node_re
     return result;
 }
 
-void release(FindNodePathResult &result) {
-    result.path.release();
-    release(result.nodes);
-    release(result.open_list);
+FindNodePathResult find_node_path(const NavMesh &nav_mesh, NodeRef start_node_ref, NodeRef end_node_ref, Vec3 start_position, Vec3 end_position,
+                                  const QueryFilter &filter, FindNodePathOptions options, SearchWorkspace *workspace) {
+    if (workspace) return find_node_path_in(nav_mesh, start_node_ref, end_node_ref, start_position, end_position, filter, options, *workspace);
+    SearchWorkspace temporary = {};
+    FindNodePathResult result = find_node_path_in(nav_mesh, start_node_ref, end_node_ref, start_position, end_position, filter, options, temporary);
+    release(temporary);
+    return result;
 }
+
+void release(FindNodePathResult &result) { result.path.release(); }
 
 SlicedNodePathQuery create_sliced_node_path_query() {
     SlicedNodePathQuery query = {};
@@ -379,8 +422,7 @@ uint32_t init_sliced_find_node_path(const NavMesh &nav_mesh, SlicedNodePathQuery
     query.filter = filter;
 
     query.status = SLICED_FIND_NODE_PATH_FAILURE;
-    query.nodes.nodes.clear();
-    query.nodes.first_by_ref.clear();
+    clear(query.nodes);
     query.open_list.items.clear();
     query.last_best_node = NULL_SEARCH_NODE;
     query.last_best_node_cost = INFINITY;
@@ -471,7 +513,7 @@ int update_sliced_find_node_path(const NavMesh &nav_mesh, SlicedNodePathQuery &q
                     float ray_length = vec3::distance(grandparent.position, neighbour_position);
                     if (ray_length < sqrtf(query.raycast_limit_sqr)) {
                         RaycastResult ray = raycast_base(nav_mesh, grandparent.node_ref, grandparent.position, neighbour_position, filter, true,
-                                                         grandparent.parent_node_ref);
+                                                         grandparent.parent_node_ref, false, query.raycast_vertices);
                         if (ray.t >= 1.0f) {
                             found_shortcut = true;
                             cost = grandparent.cost + ray.path_cost;
@@ -609,9 +651,9 @@ SlicedFindNodePathResult finalize_sliced_find_node_path_partial(const NavMesh &n
     int32_t furthest_node = NULL_SEARCH_NODE;
 
     for (uint32_t i = existing_path_count; i-- > 0;) {
-        const int32_t *first = query.nodes.first_by_ref.get(existing_path[i]);
-        if (first) {
-            furthest_node = *first;
+        int32_t first = get_first_search_node(query.nodes, existing_path[i]);
+        if (first != NULL_SEARCH_NODE) {
+            furthest_node = first;
             break;
         }
     }
@@ -647,6 +689,7 @@ SlicedFindNodePathResult finalize_sliced_find_node_path_partial(const NavMesh &n
 void release(SlicedNodePathQuery &query) {
     release(query.nodes);
     release(query.open_list);
+    query.raycast_vertices.release();
 }
 
 void release(SlicedFindNodePathResult &result) { result.path.release(); }
@@ -657,15 +700,16 @@ static uint32_t gather_poly_vertices(const NavMeshTile &tile, const NavMeshPoly 
     return poly.vertex_count;
 }
 
-MoveAlongSurfaceResult move_along_surface(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position,
-                                          const QueryFilter &filter) {
+static MoveAlongSurfaceResult move_along_surface_in(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position,
+                                                   const QueryFilter &filter, SearchWorkspace &workspace) {
     MoveAlongSurfaceResult result = {false, start_position, start_node_ref, {}};
 
     if (!nav_mesh_api::is_valid_node_ref(nav_mesh, start_node_ref) || !vec3::finite(start_position) || !vec3::finite(end_position)) return result;
 
     result.success = true;
 
-    SearchNodePool nodes = {};
+    SearchNodePool &nodes = workspace.local_nodes;
+    clear(nodes);
     uint32_t start_index = add_search_node(nodes, make_search_node(start_node_ref, 0, NODE_FLAG_CLOSED, start_position));
 
     Vec3 best_position = start_position;
@@ -676,10 +720,11 @@ MoveAlongSurfaceResult move_along_surface(const NavMesh &nav_mesh, NodeRef start
     float search_radius = vec3::distance(start_position, end_position) / 2.0f + 0.001f;
     float search_radius_sqr = search_radius * search_radius;
 
-    Array<uint32_t> queue = {};
+    Array<uint32_t> &queue = workspace.local_queue;
+    queue.clear();
     queue.push(start_index);
-    Array<float> vertices = {};
-    Array<NodeRef> neighbours = {};
+    Array<float> &vertices = workspace.vertices;
+    Array<NodeRef> &neighbours = workspace.neighbours;
 
     for (uint32_t head = 0; head < queue.length; head++) {
         uint32_t current_index = queue[head];
@@ -766,17 +811,22 @@ MoveAlongSurfaceResult move_along_surface(const NavMesh &nav_mesh, NodeRef start
         if (height.success) result.position.y = height.height;
     }
 
-    neighbours.release();
-    vertices.release();
-    queue.release();
-    release(nodes);
+    return result;
+}
+
+MoveAlongSurfaceResult move_along_surface(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position,
+                                          const QueryFilter &filter, SearchWorkspace *workspace) {
+    if (workspace) return move_along_surface_in(nav_mesh, start_node_ref, start_position, end_position, filter, *workspace);
+    SearchWorkspace temporary = {};
+    MoveAlongSurfaceResult result = move_along_surface_in(nav_mesh, start_node_ref, start_position, end_position, filter, temporary);
+    release(temporary);
     return result;
 }
 
 void release(MoveAlongSurfaceResult &result) { result.visited.release(); }
 
 static RaycastResult raycast_base(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter,
-                                  bool calculate_costs, NodeRef previous_ref) {
+                                  bool calculate_costs, NodeRef previous_ref, bool collect_path, Array<float> &vertices) {
     RaycastResult result = {0, {0, 0, 0}, -1, {}, 0};
 
     if (!nav_mesh_api::is_valid_node_ref(nav_mesh, start_node_ref) || !vec3::finite(start_position) || !vec3::finite(end_position)) return result;
@@ -790,8 +840,6 @@ static RaycastResult raycast_base(const NavMesh &nav_mesh, NodeRef start_node_re
         direction = vec3::subtract(end_position, start_position);
         current_position = start_position;
     }
-
-    Array<float> vertices = {};
 
     while (current_ref != INVALID_NODE_REF) {
         TileAndPoly tile_and_poly = nav_mesh_api::get_tile_and_poly_by_ref(current_ref, nav_mesh);
@@ -809,7 +857,7 @@ static RaycastResult raycast_base(const NavMesh &nav_mesh, NodeRef start_node_re
 
         if (intersection.tmax > result.t) result.t = intersection.tmax;
 
-        result.path.push(current_ref);
+        if (collect_path) result.path.push(current_ref);
 
         if (intersection.seg_max == -1) {
             result.t = FLT_MAX;
@@ -915,17 +963,30 @@ static RaycastResult raycast_base(const NavMesh &nav_mesh, NodeRef start_node_re
         current_ref = next_ref;
     }
 
+    return result;
+}
+
+static RaycastResult raycast_with_workspace(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position,
+                                            const QueryFilter &filter, bool calculate_costs, NodeRef previous_ref, SearchWorkspace *workspace) {
+    if (workspace) {
+        return raycast_base(nav_mesh, start_node_ref, start_position, end_position, filter, calculate_costs, previous_ref, true,
+                            workspace->raycast_vertices);
+    }
+    Array<float> vertices = {};
+    RaycastResult result =
+        raycast_base(nav_mesh, start_node_ref, start_position, end_position, filter, calculate_costs, previous_ref, true, vertices);
     vertices.release();
     return result;
 }
 
-RaycastResult raycast(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter) {
-    return raycast_base(nav_mesh, start_node_ref, start_position, end_position, filter, false, INVALID_NODE_REF);
+RaycastResult raycast(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter,
+                      SearchWorkspace *workspace) {
+    return raycast_with_workspace(nav_mesh, start_node_ref, start_position, end_position, filter, false, INVALID_NODE_REF, workspace);
 }
 
 RaycastResult raycast_with_costs(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter,
-                                 NodeRef previous_ref) {
-    return raycast_base(nav_mesh, start_node_ref, start_position, end_position, filter, true, previous_ref);
+                                 NodeRef previous_ref, SearchWorkspace *workspace) {
+    return raycast_with_workspace(nav_mesh, start_node_ref, start_position, end_position, filter, true, previous_ref, workspace);
 }
 
 void release(RaycastResult &result) { result.path.release(); }
@@ -997,8 +1058,9 @@ FindRandomPointResult find_random_point(const NavMesh &nav_mesh, const QueryFilt
     return random_point_in_poly(nav_mesh, *selected_tile, *selected_poly, selected_poly_ref, random, random_user_data);
 }
 
-FindRandomPointResult find_random_point_around_circle(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 position, float max_radius,
-                                                      const QueryFilter &filter, RandomFunction random, void *random_user_data) {
+static FindRandomPointResult find_random_point_around_circle_in(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 position, float max_radius,
+                                                                const QueryFilter &filter, RandomFunction random, void *random_user_data,
+                                                                SearchWorkspace &workspace) {
     FindRandomPointResult result = {false, INVALID_NODE_REF, {0, 0, 0}};
 
     if (!nav_mesh_api::is_valid_node_ref(nav_mesh, start_node_ref) || !vec3::finite(position) || max_radius < 0 || !isfinite(max_radius)) {
@@ -1008,8 +1070,10 @@ FindRandomPointResult find_random_point_around_circle(const NavMesh &nav_mesh, N
     if (!nav_mesh_api::get_tile_and_poly_by_ref(start_node_ref, nav_mesh).success) return result;
     if (!filter.pass_filter(filter, start_node_ref, nav_mesh)) return result;
 
-    SearchNodePool nodes = {};
-    SearchNodeQueue open_list = {};
+    SearchNodePool &nodes = workspace.nodes;
+    SearchNodeQueue &open_list = workspace.open_list;
+    clear(nodes);
+    open_list.items.clear();
 
     uint32_t start_index = add_search_node(nodes, make_search_node(start_node_ref, 0, NODE_FLAG_OPEN, position));
     push_node_to_queue(open_list, nodes, start_index);
@@ -1082,12 +1146,22 @@ FindRandomPointResult find_random_point_around_circle(const NavMesh &nav_mesh, N
         }
     }
 
-    release(nodes);
-    release(open_list);
-
     if (!random_poly || !random_tile || random_poly_ref == INVALID_NODE_REF) return result;
 
     return random_point_in_poly(nav_mesh, *random_tile, *random_poly, random_poly_ref, random, random_user_data);
+}
+
+FindRandomPointResult find_random_point_around_circle(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 position, float max_radius,
+                                                      const QueryFilter &filter, RandomFunction random, void *random_user_data,
+                                                      SearchWorkspace *workspace) {
+    if (workspace) {
+        return find_random_point_around_circle_in(nav_mesh, start_node_ref, position, max_radius, filter, random, random_user_data, *workspace);
+    }
+    SearchWorkspace temporary = {};
+    FindRandomPointResult result =
+        find_random_point_around_circle_in(nav_mesh, start_node_ref, position, max_radius, filter, random, random_user_data, temporary);
+    release(temporary);
+    return result;
 }
 
 }

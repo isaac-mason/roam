@@ -36,10 +36,11 @@ static bool links_to(const NavMesh &nav_mesh, const NavMeshNode &node, NodeRef r
     return false;
 }
 
-FindLocalNeighbourhoodResult find_local_neighbourhood(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 position, float radius,
-                                                      const QueryFilter &filter) {
+static FindLocalNeighbourhoodResult find_local_neighbourhood_in(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 position, float radius,
+                                                                const QueryFilter &filter, SearchWorkspace &workspace) {
     FindLocalNeighbourhoodResult result = {};
-    SearchNodePool &nodes = result.search_nodes;
+    SearchNodePool &nodes = workspace.local_nodes;
+    nav_mesh_search::clear(nodes);
 
     if (!nav_mesh_api::is_valid_node_ref(nav_mesh, start_node_ref) || !vec3::finite(position) || radius < 0 || !isfinite(radius)) return result;
 
@@ -51,15 +52,16 @@ FindLocalNeighbourhoodResult find_local_neighbourhood(const NavMesh &nav_mesh, N
     start.flags = NODE_FLAG_CLOSED;
     uint32_t start_index = nav_mesh_search::add_search_node(nodes, start);
 
-    Array<uint32_t> queue = {};
+    Array<uint32_t> &queue = workspace.local_queue;
+    queue.clear();
     queue.push(start_index);
 
     float radius_sqr = radius * radius;
 
     result.node_refs.push(start_node_ref);
 
-    Array<float> vertices_a = {};
-    Array<float> vertices_b = {};
+    Array<float> &vertices_a = workspace.vertices;
+    Array<float> &vertices_b = workspace.other_vertices;
 
     for (uint32_t head = 0; head < queue.length; head++) {
         NodeRef current_ref = nodes.nodes[queue[head]].node_ref;
@@ -121,18 +123,20 @@ FindLocalNeighbourhoodResult find_local_neighbourhood(const NavMesh &nav_mesh, N
         }
     }
 
-    vertices_a.release();
-    vertices_b.release();
-    queue.release();
-
     result.success = true;
     return result;
 }
 
-void release(FindLocalNeighbourhoodResult &result) {
-    result.node_refs.release();
-    nav_mesh_search::release(result.search_nodes);
+FindLocalNeighbourhoodResult find_local_neighbourhood(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 position, float radius,
+                                                      const QueryFilter &filter, SearchWorkspace *workspace) {
+    if (workspace) return find_local_neighbourhood_in(nav_mesh, start_node_ref, position, radius, filter, *workspace);
+    SearchWorkspace temporary = {};
+    FindLocalNeighbourhoodResult result = find_local_neighbourhood_in(nav_mesh, start_node_ref, position, radius, filter, temporary);
+    nav_mesh_search::release(temporary);
+    return result;
 }
+
+void release(FindLocalNeighbourhoodResult &result) { result.node_refs.release(); }
 
 static void push_segment(PolyWallSegmentsResult &result, Vec3 start, Vec3 end, NodeRef ref) {
     result.segment_vertices.push(start.x);

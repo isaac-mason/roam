@@ -61,7 +61,7 @@ static void add_segment_to_boundary(LocalBoundary &boundary, float distance_sqr,
 }
 
 void update_local_boundary(LocalBoundary &boundary, NodeRef node_ref, Vec3 position, float collision_query_range, const NavMesh &nav_mesh,
-                           const QueryFilter &filter) {
+                           const QueryFilter &filter, SearchWorkspace *workspace) {
     if (!nav_mesh_api::is_valid_node_ref(nav_mesh, node_ref)) {
         reset_local_boundary(boundary);
         return;
@@ -69,7 +69,7 @@ void update_local_boundary(LocalBoundary &boundary, NodeRef node_ref, Vec3 posit
 
     boundary.center = position;
 
-    FindLocalNeighbourhoodResult neighbourhood = local_neighbourhood::find_local_neighbourhood(nav_mesh, node_ref, position, collision_query_range, filter);
+    FindLocalNeighbourhoodResult neighbourhood = local_neighbourhood::find_local_neighbourhood(nav_mesh, node_ref, position, collision_query_range, filter, workspace);
 
     boundary.segment_count = 0;
     boundary.poly_count = 0;

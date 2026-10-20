@@ -78,11 +78,13 @@ TEST(debug_helpers_draw_a_generated_nav_mesh) {
 
     FindNearestPolyResult far = nav_mesh_api::find_nearest_poly(nav_mesh, {9, 0, 1}, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
     REQUIRE(far.success);
-    FindNodePathResult node_path =
-        nav_mesh_search::find_node_path(nav_mesh, nearest.node_ref, far.node_ref, {1, 0, 1}, {9, 0, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
+    SearchWorkspace workspace = nav_mesh_search::create_search_workspace();
+    FindNodePathResult node_path = nav_mesh_search::find_node_path(nav_mesh, nearest.node_ref, far.node_ref, {1, 0, 1}, {9, 0, 1},
+                                                                   nav_mesh_api::DEFAULT_QUERY_FILTER, {}, &workspace);
     REQUIRE(node_path.success);
-    check_helper(debug::create_search_nodes_helper(node_path.nodes), "search nodes");
+    check_helper(debug::create_search_nodes_helper(workspace.nodes), "search nodes");
     nav_mesh_search::release(node_path);
+    nav_mesh_search::release(workspace);
 
     generate_solo_nav_mesh::release(result.intermediates);
     nav_mesh_api::release_nav_mesh(nav_mesh);

@@ -4,7 +4,8 @@ namespace roam {
 
 namespace find_path {
 
-FindPathResult find_path(const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 half_extents, const QueryFilter &filter, FindPathOptions options) {
+FindPathResult find_path(const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 half_extents, const QueryFilter &filter, FindPathOptions options,
+                         SearchWorkspace *workspace) {
     FindPathResult result = {};
     result.flags = FIND_PATH_RESULT_NONE | FIND_PATH_RESULT_INVALID_INPUT;
     result.node_path_flags = FIND_NODE_PATH_RESULT_NONE;
@@ -23,7 +24,7 @@ FindPathResult find_path(const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 hal
     result.end_node_ref = end_nearest.node_ref;
 
     result.node_path = nav_mesh_search::find_node_path(nav_mesh, result.start_node_ref, result.end_node_ref, result.start_position,
-                                                       result.end_position, filter, {options.raycast_distance});
+                                                       result.end_position, filter, {options.raycast_distance}, workspace);
     result.node_path_flags = result.node_path.flags;
 
     if (!result.node_path.success) {

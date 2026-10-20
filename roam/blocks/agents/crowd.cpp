@@ -38,6 +38,7 @@ void release(Crowd &crowd) {
     }
     crowd.agents.release();
     index_pool::release(crowd.agent_ids);
+    nav_mesh_search::release(crowd.workspace);
     crowd.scratch_agents.release();
     crowd.scratch_cells.release();
     crowd.scratch_cell_starts.release();
@@ -472,7 +473,7 @@ static void update_local_boundaries(Crowd &crowd, const NavMesh &nav_mesh) {
 
         if (moved_distance > update_threshold || !local_boundary::is_local_boundary_valid(agent.boundary, nav_mesh, agent.query_filter)) {
             local_boundary::update_local_boundary(agent.boundary, agent.corridor.path[0], agent.position, agent.collision_query_range, nav_mesh,
-                                                  agent.query_filter);
+                                                  agent.query_filter, &crowd.workspace);
         }
     }
 }
@@ -499,7 +500,7 @@ static void update_corners(Crowd &crowd, const NavMesh &nav_mesh) {
         if ((agent.update_flags & CROWD_UPDATE_OPTIMIZE_VIS) != 0 && agent.corners.length > 0) {
             uint32_t target_index = agent.corners.length > 1 ? 1 : 0;
             path_corridor::optimize_path_visibility(agent.corridor, agent.corners[target_index].position, agent.path_optimization_range, nav_mesh,
-                                                    agent.query_filter);
+                                                    agent.query_filter, &crowd.workspace);
         }
     }
 }
@@ -768,7 +769,7 @@ static void update_corridors(Crowd &crowd, const NavMesh &nav_mesh) {
     for (Agent &agent : crowd.agents) {
         if (!agent.allocated || agent.state != AGENT_STATE_WALKING) continue;
 
-        path_corridor::move_position(agent.corridor, agent.position, nav_mesh, agent.query_filter);
+        path_corridor::move_position(agent.corridor, agent.position, nav_mesh, agent.query_filter, &crowd.workspace);
         agent.position = agent.corridor.position;
 
         if (agent.target_state == AGENT_TARGET_STATE_NONE || agent.target_state == AGENT_TARGET_STATE_VELOCITY) {

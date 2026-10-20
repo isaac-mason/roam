@@ -41,7 +41,7 @@ struct FindSmoothPathOptions {
 namespace find_smooth_path {
 
 FindSmoothPathResult find_smooth_path(const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 half_extents, const QueryFilter &filter,
-                                      const FindSmoothPathOptions &options);
+                                      const FindSmoothPathOptions &options, SearchWorkspace *workspace = nullptr);
 
 void release(FindSmoothPathResult &result);
 

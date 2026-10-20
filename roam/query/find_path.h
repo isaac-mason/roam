@@ -38,7 +38,8 @@ struct FindPathOptions {
 
 namespace find_path {
 
-FindPathResult find_path(const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 half_extents, const QueryFilter &filter, FindPathOptions options = {});
+FindPathResult find_path(const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 half_extents, const QueryFilter &filter, FindPathOptions options = {},
+                         SearchWorkspace *workspace = nullptr);
 
 void release(FindPathResult &result);
 

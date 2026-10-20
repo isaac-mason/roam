@@ -25,16 +25,27 @@ struct SearchNode {
     int state;
     uint32_t flags;
     NodeRef node_ref;
-    int32_t next_with_same_ref;
+    int32_t next_in_bucket;
 };
 
 struct SearchNodePool {
     Array<SearchNode> nodes;
-    Map<NodeRef, int32_t> first_by_ref;
+    Array<int32_t> buckets;
 };
 
 struct SearchNodeQueue {
     Array<uint32_t> items;
+};
+
+struct SearchWorkspace {
+    SearchNodePool nodes;
+    SearchNodeQueue open_list;
+    SearchNodePool local_nodes;
+    Array<uint32_t> local_queue;
+    Array<float> vertices;
+    Array<float> other_vertices;
+    Array<float> raycast_vertices;
+    Array<NodeRef> neighbours;
 };
 
 enum FindNodePathResultFlags : uint32_t {
@@ -49,8 +60,6 @@ struct FindNodePathResult {
     bool success;
     uint32_t flags;
     Array<NodeRef> path;
-    SearchNodePool nodes;
-    SearchNodeQueue open_list;
 };
 
 struct FindNodePathOptions {
@@ -83,6 +92,7 @@ struct SlicedNodePathQuery {
     float last_best_node_cost;
     bool has_raycast_limit;
     float raycast_limit_sqr;
+    Array<float> raycast_vertices;
 };
 
 struct SlicedFindNodePathResult {
@@ -115,8 +125,13 @@ using RandomFunction = float (*)(void *user_data);
 
 namespace nav_mesh_search {
 
+SearchWorkspace create_search_workspace();
+void release(SearchWorkspace &workspace);
+
 int32_t get_search_node(const SearchNodePool &pool, NodeRef node_ref, int state);
+int32_t get_first_search_node(const SearchNodePool &pool, NodeRef node_ref);
 uint32_t add_search_node(SearchNodePool &pool, const SearchNode &node);
+void clear(SearchNodePool &pool);
 void release(SearchNodePool &pool);
 
 void push_node_to_queue(SearchNodeQueue &queue, const SearchNodePool &pool, uint32_t node);
@@ -128,7 +143,7 @@ bool get_portal_points(const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef t
 bool get_edge_mid_point(const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref, Vec3 &out_mid_point);
 
 FindNodePathResult find_node_path(const NavMesh &nav_mesh, NodeRef start_node_ref, NodeRef end_node_ref, Vec3 start_position, Vec3 end_position,
-                                  const QueryFilter &filter, FindNodePathOptions options = {});
+                                  const QueryFilter &filter, FindNodePathOptions options = {}, SearchWorkspace *workspace = nullptr);
 void release(FindNodePathResult &result);
 
 SlicedNodePathQuery create_sliced_node_path_query();
@@ -142,17 +157,19 @@ void release(SlicedNodePathQuery &query);
 void release(SlicedFindNodePathResult &result);
 
 MoveAlongSurfaceResult move_along_surface(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position,
-                                          const QueryFilter &filter);
+                                          const QueryFilter &filter, SearchWorkspace *workspace = nullptr);
 void release(MoveAlongSurfaceResult &result);
 
-RaycastResult raycast(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter);
+RaycastResult raycast(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter,
+                      SearchWorkspace *workspace = nullptr);
 RaycastResult raycast_with_costs(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter,
-                                 NodeRef previous_ref);
+                                 NodeRef previous_ref, SearchWorkspace *workspace = nullptr);
 void release(RaycastResult &result);
 
 FindRandomPointResult find_random_point(const NavMesh &nav_mesh, const QueryFilter &filter, RandomFunction random, void *random_user_data);
 FindRandomPointResult find_random_point_around_circle(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 position, float max_radius,
-                                                      const QueryFilter &filter, RandomFunction random, void *random_user_data);
+                                                      const QueryFilter &filter, RandomFunction random, void *random_user_data,
+                                                      SearchWorkspace *workspace = nullptr);
 
 }
 

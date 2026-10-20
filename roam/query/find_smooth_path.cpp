@@ -121,8 +121,8 @@ static void remove_front(Array<NodeRef> &values, uint32_t count) {
     values.resize(values.length - count);
 }
 
-FindSmoothPathResult find_smooth_path(const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 half_extents, const QueryFilter &filter,
-                                      const FindSmoothPathOptions &options) {
+static FindSmoothPathResult find_smooth_path_in(const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 half_extents, const QueryFilter &filter,
+                                                const FindSmoothPathOptions &options, SearchWorkspace &workspace) {
     FindSmoothPathResult result = {};
     result.flags = FIND_SMOOTH_PATH_RESULT_NONE | FIND_SMOOTH_PATH_RESULT_INVALID_INPUT;
     result.start_node_ref = INVALID_NODE_REF;
@@ -139,7 +139,7 @@ FindSmoothPathResult find_smooth_path(const NavMesh &nav_mesh, Vec3 start, Vec3 
     result.end_node_ref = end_nearest.node_ref;
 
     result.node_path = nav_mesh_search::find_node_path(nav_mesh, result.start_node_ref, result.end_node_ref, result.start_position,
-                                                       result.end_position, filter, {options.raycast_distance});
+                                                       result.end_position, filter, {options.raycast_distance}, &workspace);
 
     if (!result.node_path.success || result.node_path.path.length == 0) {
         result.flags = FIND_SMOOTH_PATH_RESULT_FIND_NODE_PATH_FAILED;
@@ -167,7 +167,7 @@ FindSmoothPathResult find_smooth_path(const NavMesh &nav_mesh, Vec3 start, Vec3 
 
         Vec3 move_target = vec3::scale_and_add(iteration_position, delta, length);
 
-        MoveAlongSurfaceResult moved = nav_mesh_search::move_along_surface(nav_mesh, polys[0], iteration_position, move_target, filter);
+        MoveAlongSurfaceResult moved = nav_mesh_search::move_along_surface(nav_mesh, polys[0], iteration_position, move_target, filter, &workspace);
         if (!moved.success) {
             nav_mesh_search::release(moved);
             break;
@@ -242,6 +242,15 @@ FindSmoothPathResult find_smooth_path(const NavMesh &nav_mesh, Vec3 start, Vec3 
 
     result.success = true;
     result.flags = flags;
+    return result;
+}
+
+FindSmoothPathResult find_smooth_path(const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 half_extents, const QueryFilter &filter,
+                                      const FindSmoothPathOptions &options, SearchWorkspace *workspace) {
+    if (workspace) return find_smooth_path_in(nav_mesh, start, end, half_extents, filter, options, *workspace);
+    SearchWorkspace temporary = {};
+    FindSmoothPathResult result = find_smooth_path_in(nav_mesh, start, end, half_extents, filter, options, temporary);
+    nav_mesh_search::release(temporary);
     return result;
 }
 

@@ -5,6 +5,7 @@
 #include "roam/math/vec3.h"
 #include "roam/query/find_straight_path.h"
 #include "roam/query/nav_mesh_api.h"
+#include "roam/query/nav_mesh_search.h"
 #include "roam/util/array.h"
 
 namespace roam {
@@ -40,7 +41,8 @@ void set_path(PathCorridor &corridor, Vec3 target, const NodeRef *path, uint32_t
 void merge_start_moved(Array<NodeRef> &current_path, const Array<NodeRef> &visited);
 void merge_start_shortcut(Array<NodeRef> &current_path, const Array<NodeRef> &visited);
 
-bool move_position(PathCorridor &corridor, Vec3 new_position, const NavMesh &nav_mesh, const QueryFilter &filter);
+bool move_position(PathCorridor &corridor, Vec3 new_position, const NavMesh &nav_mesh, const QueryFilter &filter,
+                   SearchWorkspace *workspace = nullptr);
 
 FindCornersResult find_corners(const PathCorridor &corridor, const NavMesh &nav_mesh, int max_corners);
 void release(FindCornersResult &result);
@@ -53,7 +55,8 @@ MoveOverOffMeshConnectionResult move_over_off_mesh_connection(PathCorridor &corr
 
 bool optimize_path_topology(PathCorridor &corridor, const NavMesh &nav_mesh, const QueryFilter &filter);
 
-void optimize_path_visibility(PathCorridor &corridor, Vec3 next, float path_optimization_range, const NavMesh &nav_mesh, const QueryFilter &filter);
+void optimize_path_visibility(PathCorridor &corridor, Vec3 next, float path_optimization_range, const NavMesh &nav_mesh, const QueryFilter &filter,
+                              SearchWorkspace *workspace = nullptr);
 
 }
 

@@ -75,10 +75,10 @@ void merge_start_shortcut(Array<NodeRef> &current_path, const Array<NodeRef> &vi
     replace(current_path, merged);
 }
 
-bool move_position(PathCorridor &corridor, Vec3 new_position, const NavMesh &nav_mesh, const QueryFilter &filter) {
+bool move_position(PathCorridor &corridor, Vec3 new_position, const NavMesh &nav_mesh, const QueryFilter &filter, SearchWorkspace *workspace) {
     if (corridor.path.length == 0) return false;
 
-    MoveAlongSurfaceResult result = nav_mesh_search::move_along_surface(nav_mesh, corridor.path[0], corridor.position, new_position, filter);
+    MoveAlongSurfaceResult result = nav_mesh_search::move_along_surface(nav_mesh, corridor.path[0], corridor.position, new_position, filter, workspace);
     bool moved = result.success;
     if (moved) {
         merge_start_moved(corridor.path, result.visited);
@@ -215,7 +215,8 @@ bool optimize_path_topology(PathCorridor &corridor, const NavMesh &nav_mesh, con
     return optimized;
 }
 
-void optimize_path_visibility(PathCorridor &corridor, Vec3 next, float path_optimization_range, const NavMesh &nav_mesh, const QueryFilter &filter) {
+void optimize_path_visibility(PathCorridor &corridor, Vec3 next, float path_optimization_range, const NavMesh &nav_mesh, const QueryFilter &filter,
+                              SearchWorkspace *workspace) {
     if (corridor.path.length == 0) return;
 
     float dx = next.x - corridor.position.x;
@@ -228,7 +229,7 @@ void optimize_path_visibility(PathCorridor &corridor, Vec3 next, float path_opti
     Vec3 delta = vec3::subtract(next, corridor.position);
     Vec3 goal = vec3::scale_and_add(corridor.position, delta, path_optimization_range / distance);
 
-    RaycastResult result = nav_mesh_search::raycast(nav_mesh, corridor.path[0], corridor.position, goal, filter);
+    RaycastResult result = nav_mesh_search::raycast(nav_mesh, corridor.path[0], corridor.position, goal, filter, workspace);
     if (result.path.length > 1 && result.t > 0.99f) merge_start_shortcut(corridor.path, result.path);
     nav_mesh_search::release(result);
 }

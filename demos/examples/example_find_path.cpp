@@ -12,6 +12,7 @@ struct FindPathExample {
     TiledNavMeshResult result;
     StaticDrawing nav_mesh_drawing;
     StaticDrawing path_drawing;
+    SearchWorkspace workspace;
     Vec3 start;
     Vec3 end;
     bool any_angle;
@@ -38,7 +39,7 @@ static void update_path() {
     const NavMesh &nav_mesh = state.result.nav_mesh;
     double start = app::now_milliseconds();
     FindPathResult path = find_path::find_path(nav_mesh, state.start, state.end, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER,
-                                               {state.any_angle ? 10.0f : 0.0f});
+                                               {state.any_angle ? 10.0f : 0.0f}, &state.workspace);
     state.query_milliseconds = app::now_milliseconds() - start;
     state.success = path.success;
     state.flags = path.flags;
@@ -48,7 +49,7 @@ static void update_path() {
     DrawList list = {};
 
     if (state.show_search_nodes) {
-        DebugPrimitives nodes = debug::create_search_nodes_helper(path.node_path.nodes);
+        DebugPrimitives nodes = debug::create_search_nodes_helper(state.workspace.nodes);
         renderer::add_primitives(list, nodes);
         debug::release(nodes);
     }
@@ -128,6 +129,7 @@ static void shutdown(App &) {
     FindPathExample &state = find_path_example;
     renderer::release(state.nav_mesh_drawing);
     renderer::release(state.path_drawing);
+    nav_mesh_search::release(state.workspace);
     if (state.generated) {
         generate_tiled_nav_mesh::release(state.result.intermediates);
         nav_mesh_api::release_nav_mesh(state.result.nav_mesh);
