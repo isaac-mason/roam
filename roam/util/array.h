@@ -36,6 +36,11 @@ struct Array {
         return data[length - 1];
     }
 
+    const T &back() const {
+        ROAM_ASSERT(length > 0);
+        return data[length - 1];
+    }
+
     void reserve(uint32_t wanted) {
         if (wanted <= capacity) return;
         T *grown = memory::allocate_array<T>(wanted);
