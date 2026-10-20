@@ -672,8 +672,191 @@ const dumpBlocks = (name, positions, indices) => {
     const flood = blocks.floodFillNavMesh(tiled.navMesh, seeds);
     entries.push(f64('flood.seeds', seeds), f64('flood.reachable', flood.reachable), f64('flood.unreachable', flood.unreachable));
 
+    const agentRandom = lcg(2024);
+    const agentPoints = [];
+    for (let i = 0; i < 24; i++) {
+        const point = navcat.findRandomPoint(tiled.navMesh, navcat.DEFAULT_QUERY_FILTER, agentRandom);
+        if (point.success) agentPoints.push({ ref: point.nodeRef, position: [...point.position] });
+    }
+    entries.push(f64('agents.points', agentPoints.flatMap((point) => [point.ref, ...point.position])));
+
+    const boundaryCounts = [];
+    const boundarySegments = [];
+    const boundaryPolyCounts = [];
+    const boundaryPolys = [];
+    for (const point of agentPoints) {
+        const boundary = blocks.localBoundary.create();
+        blocks.localBoundary.updateLocalBoundary(boundary, point.ref, point.position, 1.5, tiled.navMesh, navcat.DEFAULT_QUERY_FILTER);
+        boundaryCounts.push(boundary.segments.length);
+        for (const segment of boundary.segments) boundarySegments.push(...segment.s, segment.d);
+        boundaryPolyCounts.push(boundary.polys.length);
+        boundaryPolys.push(...boundary.polys);
+    }
+    entries.push(
+        i32('boundary.segment_counts', boundaryCounts),
+        f64('boundary.segments', boundarySegments),
+        i32('boundary.poly_counts', boundaryPolyCounts),
+        f64('boundary.polys', boundaryPolys),
+    );
+
+    const avoidanceRandom = lcg(77);
+    const avoidanceInputs = [];
+    const avoidanceOutputs = [];
+    const params = blocks.crowd.DEFAULT_OBSTACLE_AVOIDANCE_PARAMS;
+    for (let i = 0; i < 20; i++) {
+        const r = () => avoidanceRandom() * 4 - 2;
+        const query = blocks.obstacleAvoidance.createObstacleAvoidanceQuery(8, 8);
+        const position = [r(), 0, r()];
+        const velocity = [r() * 0.5, 0, r() * 0.5];
+        const desired = [r(), 0, r()];
+        const input = [...position, ...velocity, ...desired];
+        for (let c = 0; c < 3; c++) {
+            const circle = [r(), 0, r(), 0.3 + avoidanceRandom() * 0.3, r() * 0.5, 0, r() * 0.5, r() * 0.5, 0, r() * 0.5];
+            input.push(...circle);
+            blocks.obstacleAvoidance.addCircleObstacle(query, circle.slice(0, 3), circle[3], circle.slice(4, 7), circle.slice(7, 10));
+        }
+        for (let c = 0; c < 2; c++) {
+            const segment = [r(), 0, r(), r(), 0, r()];
+            input.push(...segment);
+            blocks.obstacleAvoidance.addSegmentObstacle(query, segment.slice(0, 3), segment.slice(3, 6));
+        }
+        avoidanceInputs.push(...input);
+        const adaptive = [0, 0, 0];
+        const adaptiveSamples = blocks.obstacleAvoidance.sampleVelocityAdaptive(query, position, 0.4, 2, velocity, desired, params, adaptive);
+        const grid = blocks.obstacleAvoidance.sampleVelocityGrid(query, position, 0.4, 2, velocity, desired, { ...params, gridSize: 9 });
+        avoidanceOutputs.push(...adaptive, adaptiveSamples, ...grid.nvel, grid.samples);
+    }
+    entries.push(f64('avoidance.inputs', avoidanceInputs), f64('avoidance.outputs', avoidanceOutputs));
+
+    const crowd = blocks.crowd.create(0.6);
+    const agentIds = [];
+    const agentCount = Math.min(12, agentPoints.length / 2);
+    for (let i = 0; i < agentCount; i++) {
+        const id = blocks.crowd.addAgent(crowd, tiled.navMesh, [...agentPoints[i].position], {
+            radius: 0.3,
+            height: 1,
+            maxAcceleration: 8,
+            maxSpeed: 2,
+            collisionQueryRange: 1.8,
+            separationWeight: 0.5,
+            updateFlags:
+                blocks.crowd.CrowdUpdateFlags.ANTICIPATE_TURNS |
+                blocks.crowd.CrowdUpdateFlags.OBSTACLE_AVOIDANCE |
+                blocks.crowd.CrowdUpdateFlags.SEPARATION |
+                blocks.crowd.CrowdUpdateFlags.OPTIMIZE_VIS |
+                blocks.crowd.CrowdUpdateFlags.OPTIMIZE_TOPO,
+            queryFilter: navcat.DEFAULT_QUERY_FILTER,
+        });
+        agentIds.push(id);
+        const target = agentPoints[agentPoints.length - 1 - i];
+        blocks.crowd.requestMoveTarget(crowd, id, target.ref, target.position);
+    }
+    const crowdFrames = [];
+    const crowdStates = [];
+    for (let frame = 1; frame <= 120; frame++) {
+        blocks.crowd.update(crowd, tiled.navMesh, 1 / 60);
+        {
+            for (const id of agentIds) {
+                const agent = crowd.agents[id];
+                crowdFrames.push(...agent.position, ...agent.velocity);
+                crowdStates.push(agent.state, agent.targetState, agent.corridor.path.length);
+            }
+        }
+    }
+    entries.push(i32('crowd.agent_count', agentIds.length), f64('crowd.frames', crowdFrames), i32('crowd.states', crowdStates));
+
+    entries.push(...flatCrowdEntries(generatorOptions));
+
     writeFixture(name, entries);
     console.log(`wrote ${name}.bin (${entries.length} entries)`);
+};
+
+const boxMesh = (positions, indices, min, max) => {
+    const base = positions.length / 3;
+    for (const y of [min[1], max[1]]) {
+        positions.push(min[0], y, min[2], max[0], y, min[2], max[0], y, max[2], min[0], y, max[2]);
+    }
+    const faces = [
+        [4, 6, 5], [4, 7, 6],
+        [0, 1, 5], [0, 5, 4],
+        [1, 2, 6], [1, 6, 5],
+        [2, 3, 7], [2, 7, 6],
+        [3, 0, 4], [3, 4, 7],
+    ];
+    for (const face of faces) indices.push(base + face[0], base + face[1], base + face[2]);
+};
+
+const flatCrowdEntries = (generatorOptions) => {
+    const positions = [-8, 0, -8, 8, 0, -8, 8, 0, 8, -8, 0, 8];
+    const indices = [0, 2, 1, 0, 3, 2];
+    boxMesh(positions, indices, [-3, 0, -1], [-1, 2, 1]);
+    boxMesh(positions, indices, [1, 0, 2], [4, 2, 3]);
+    boxMesh(positions, indices, [2, 0, -5], [3, 2, -2]);
+
+    const tileSizeVoxels = 32;
+    const options = {
+        ...generatorOptions,
+        cellSize: 0.2,
+        cellHeight: 0.2,
+        walkableRadiusVoxels: 2,
+        walkableRadiusWorld: 0.4,
+        walkableClimbVoxels: 2,
+        walkableHeightVoxels: 10,
+        walkableHeightWorld: 2,
+        tileSizeVoxels,
+        tileSizeWorld: tileSizeVoxels * 0.2,
+        borderSize: 5,
+        detailSampleDistance: 1.2,
+        detailSampleMaxError: 0.2,
+    };
+    const tiled = blocks.generateTiledNavMesh({ positions: new Float32Array(positions), indices: new Uint32Array(indices) }, options);
+
+    const crowd = blocks.crowd.create(0.6);
+    const agentIds = [];
+    const agentCount = 16;
+    const halfExtents = [1, 1, 1];
+    for (let i = 0; i < agentCount; i++) {
+        const angle = (i / agentCount) * Math.PI * 2;
+        const start = [Math.cos(angle) * 6.5, 0, Math.sin(angle) * 6.5];
+        const end = [-start[0], 0, -start[2]];
+        const id = blocks.crowd.addAgent(crowd, tiled.navMesh, start, {
+            radius: 0.4,
+            height: 2,
+            maxAcceleration: 8,
+            maxSpeed: 3,
+            collisionQueryRange: 2.4,
+            separationWeight: 1,
+            updateFlags:
+                blocks.crowd.CrowdUpdateFlags.ANTICIPATE_TURNS |
+                blocks.crowd.CrowdUpdateFlags.OBSTACLE_AVOIDANCE |
+                blocks.crowd.CrowdUpdateFlags.SEPARATION |
+                blocks.crowd.CrowdUpdateFlags.OPTIMIZE_VIS |
+                blocks.crowd.CrowdUpdateFlags.OPTIMIZE_TOPO,
+            queryFilter: navcat.DEFAULT_QUERY_FILTER,
+        });
+        agentIds.push(id);
+        const target = navcat.findNearestPoly(navcat.createFindNearestPolyResult(), tiled.navMesh, end, halfExtents, navcat.DEFAULT_QUERY_FILTER);
+        blocks.crowd.requestMoveTarget(crowd, id, target.nodeRef, target.position);
+    }
+
+    const frames = [];
+    const states = [];
+    for (let frame = 1; frame <= 240; frame++) {
+        blocks.crowd.update(crowd, tiled.navMesh, 1 / 60);
+        for (const id of agentIds) {
+            const agent = crowd.agents[id];
+            frames.push(...agent.position, ...agent.velocity);
+            states.push(agent.state, agent.targetState, agent.corridor.path.length);
+        }
+    }
+
+    return [
+        f64('flat.positions', positions),
+        i32('flat.indices', indices),
+        i32('flat.agent_count', agentCount),
+        f64('flat.frames', frames),
+        i32('flat.states', states),
+    ];
 };
 
 dumpBlocks('nav_test_blocks', new Float32Array(navTest.positions), new Uint32Array(navTest.indices));

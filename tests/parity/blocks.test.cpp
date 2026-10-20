@@ -1,5 +1,8 @@
 #include <stdio.h>
 
+#include <math.h>
+
+#include "roam/blocks/agents/crowd.h"
 #include "roam/blocks/generators/generate_solo_nav_mesh.h"
 #include "roam/blocks/generators/generate_tiled_nav_mesh.h"
 #include "roam/blocks/geometry/chunky_tri_mesh.h"
@@ -281,11 +284,8 @@ TEST(generate_solo_nav_mesh_matches_navcat_on_nav_test) {
     release(test);
 }
 
-TEST(generate_tiled_nav_mesh_and_flood_fill_match_navcat_on_nav_test) {
-    BlocksTest test = load_blocks_test();
-    REQUIRE(test.expected.loaded);
+static TiledNavMeshResult generate_tiled(const BlocksTest &test) {
     const fixture::Fixture &expected = test.expected;
-
     SoloNavMeshOptions solo = solo_options(test);
     TiledNavMeshOptions options = {
         .cell_size = solo.cell_size,
@@ -309,8 +309,15 @@ TEST(generate_tiled_nav_mesh_and_flood_fill_match_navcat_on_nav_test) {
         .detail_sample_max_error = solo.detail_sample_max_error,
     };
 
-    TiledNavMeshResult result =
-        generate_tiled_nav_mesh::generate_tiled_nav_mesh({test.input.positions.data, test.input.indices.data, test.input.indices.length}, options);
+    return generate_tiled_nav_mesh::generate_tiled_nav_mesh({test.input.positions.data, test.input.indices.data, test.input.indices.length}, options);
+}
+
+TEST(generate_tiled_nav_mesh_and_flood_fill_match_navcat_on_nav_test) {
+    BlocksTest test = load_blocks_test();
+    REQUIRE(test.expected.loaded);
+    const fixture::Fixture &expected = test.expected;
+
+    TiledNavMeshResult result = generate_tiled(test);
     CHECK((int32_t)result.intermediates.poly_mesh.length == fixture::i32(expected, "tiled.tile_count").data[0]);
     check_tiles("tiled", result.nav_mesh, expected);
 
@@ -325,5 +332,256 @@ TEST(generate_tiled_nav_mesh_and_flood_fill_match_navcat_on_nav_test) {
     seed_refs.release();
     generate_tiled_nav_mesh::release(result.intermediates);
     nav_mesh_api::release_nav_mesh(result.nav_mesh);
+    release(test);
+}
+
+struct AgentPoint {
+    NodeRef ref;
+    Vec3 position;
+};
+
+static Array<AgentPoint> load_agent_points(const fixture::Fixture &expected) {
+    fixture::F64 points = fixture::f64(expected, "agents.points");
+    Array<AgentPoint> loaded = {};
+    for (uint32_t i = 0; i + 3 < points.count; i += 4) {
+        loaded.push({ref_from_f64(points.data[i]), {(float)points.data[i + 1], (float)points.data[i + 2], (float)points.data[i + 3]}});
+    }
+    return loaded;
+}
+
+static Vec3 vec3_at(const double *values) { return {(float)values[0], (float)values[1], (float)values[2]}; }
+
+TEST(local_boundary_matches_navcat_on_nav_test) {
+    BlocksTest test = load_blocks_test();
+    REQUIRE(test.expected.loaded);
+    const fixture::Fixture &expected = test.expected;
+
+    TiledNavMeshResult tiled = generate_tiled(test);
+    Array<AgentPoint> points = load_agent_points(expected);
+
+    fixture::I32 segment_counts = fixture::i32(expected, "boundary.segment_counts");
+    fixture::F64 segments = fixture::f64(expected, "boundary.segments");
+    fixture::I32 poly_counts = fixture::i32(expected, "boundary.poly_counts");
+    fixture::F64 polys = fixture::f64(expected, "boundary.polys");
+    REQUIRE(segment_counts.count == points.length);
+
+    uint32_t segment_cursor = 0;
+    uint32_t poly_cursor = 0;
+    uint32_t mismatches = 0;
+    for (uint32_t i = 0; i < points.length; i++) {
+        LocalBoundary boundary = local_boundary::create();
+        local_boundary::update_local_boundary(boundary, points[i].ref, points[i].position, 1.5f, tiled.nav_mesh, nav_mesh_api::DEFAULT_QUERY_FILTER);
+
+        bool same = boundary.segment_count == (uint32_t)segment_counts.data[i] && boundary.poly_count == (uint32_t)poly_counts.data[i];
+        for (uint32_t k = 0; same && k < boundary.segment_count; k++) {
+            const double *segment = &segments.data[(segment_cursor + k) * 7];
+            const LocalBoundarySegment &actual = boundary.segments[k];
+            same = vec3::distance(actual.start, vec3_at(segment)) < 1e-4f && vec3::distance(actual.end, vec3_at(segment + 3)) < 1e-4f &&
+                   fabs((double)actual.distance_sqr - segment[6]) < 1e-4;
+        }
+        for (uint32_t k = 0; same && k < boundary.poly_count; k++) same = boundary.polys[k] == ref_from_f64(polys.data[poly_cursor + k]);
+        segment_cursor += (uint32_t)segment_counts.data[i];
+        poly_cursor += (uint32_t)poly_counts.data[i];
+        if (!same) mismatches++;
+    }
+    CHECK(mismatches == 0);
+
+    points.release();
+    generate_tiled_nav_mesh::release(tiled.intermediates);
+    nav_mesh_api::release_nav_mesh(tiled.nav_mesh);
+    release(test);
+}
+
+TEST(obstacle_avoidance_matches_navcat) {
+    BlocksTest test = load_blocks_test();
+    REQUIRE(test.expected.loaded);
+
+    fixture::F64 inputs = fixture::f64(test.expected, "avoidance.inputs");
+    fixture::F64 outputs = fixture::f64(test.expected, "avoidance.outputs");
+
+    const uint32_t input_stride = 9 + 3 * 10 + 2 * 6;
+    const uint32_t output_stride = 8;
+    REQUIRE(inputs.count % input_stride == 0);
+
+    ObstacleAvoidanceParams grid_params = DEFAULT_OBSTACLE_AVOIDANCE_PARAMS;
+    grid_params.grid_size = 9;
+
+    uint32_t mismatches = 0;
+    for (uint32_t i = 0; i < inputs.count / input_stride; i++) {
+        const double *input = &inputs.data[i * input_stride];
+        const double *output = &outputs.data[i * output_stride];
+
+        ObstacleAvoidanceQuery query = obstacle_avoidance::create_obstacle_avoidance_query(8, 8);
+        for (uint32_t c = 0; c < 3; c++) {
+            const double *circle = input + 9 + c * 10;
+            obstacle_avoidance::add_circle_obstacle(query, vec3_at(circle), (float)circle[3], vec3_at(circle + 4), vec3_at(circle + 7));
+        }
+        for (uint32_t c = 0; c < 2; c++) {
+            const double *segment = input + 39 + c * 6;
+            obstacle_avoidance::add_segment_obstacle(query, vec3_at(segment), vec3_at(segment + 3));
+        }
+
+        Vec3 position = vec3_at(input);
+        Vec3 velocity = vec3_at(input + 3);
+        Vec3 desired = vec3_at(input + 6);
+
+        SampleVelocityResult adaptive =
+            obstacle_avoidance::sample_velocity_adaptive(query, position, 0.4f, 2, velocity, desired, DEFAULT_OBSTACLE_AVOIDANCE_PARAMS);
+        SampleVelocityResult grid = obstacle_avoidance::sample_velocity_grid(query, position, 0.4f, 2, velocity, desired, grid_params);
+
+        bool same = vec3::distance(adaptive.velocity, vec3_at(output)) < 1e-3f && adaptive.samples == (int)output[3] &&
+                    vec3::distance(grid.velocity, vec3_at(output + 4)) < 1e-3f && grid.samples == (int)output[7];
+        if (!same) mismatches++;
+
+        obstacle_avoidance::release(query);
+    }
+    CHECK(mismatches == 0);
+
+    release(test);
+}
+
+struct CrowdComparison {
+    uint32_t first_divergent_frame;
+    float max_xz_error;
+    float max_height_error;
+    uint32_t final_state_mismatches;
+};
+
+static CrowdComparison run_crowd(Crowd &crowd, const NavMesh &nav_mesh, const Array<uint32_t> &agent_ids, uint32_t frame_count,
+                                 const fixture::F64 &frames, const fixture::I32 &states) {
+    CrowdComparison comparison = {};
+    uint32_t sample = 0;
+    for (uint32_t frame = 1; frame <= frame_count; frame++) {
+        crowd::update(crowd, nav_mesh, 1.0f / 60.0f);
+
+        for (uint32_t id : agent_ids) {
+            const Agent &agent = crowd.agents[id];
+            Vec3 wanted = vec3_at(&frames.data[sample * 6]);
+            const int32_t *wanted_state = &states.data[sample * 3];
+            sample++;
+
+            float xz_error = vec2::distance({agent.position.x, agent.position.z}, {wanted.x, wanted.z});
+            comparison.max_xz_error = fmaxf(comparison.max_xz_error, xz_error);
+            comparison.max_height_error = fmaxf(comparison.max_height_error, fabsf(agent.position.y - wanted.y));
+
+            bool same_state = agent.state == wanted_state[0] && agent.target_state == wanted_state[1] &&
+                              (int32_t)agent.corridor.path.length == wanted_state[2];
+            if (comparison.first_divergent_frame == 0 && (xz_error > 1e-3f || !same_state)) comparison.first_divergent_frame = frame;
+            if (frame == frame_count && (agent.state != wanted_state[0] || agent.target_state != wanted_state[1])) comparison.final_state_mismatches++;
+        }
+    }
+    return comparison;
+}
+
+static AgentParams crowd_agent_params(float radius, float max_speed, float collision_query_range, float separation_weight) {
+    return {
+        .radius = radius,
+        .height = 1,
+        .max_acceleration = 8,
+        .max_speed = max_speed,
+        .collision_query_range = collision_query_range,
+        .separation_weight = separation_weight,
+        .update_flags = CROWD_UPDATE_ANTICIPATE_TURNS | CROWD_UPDATE_OBSTACLE_AVOIDANCE | CROWD_UPDATE_SEPARATION | CROWD_UPDATE_OPTIMIZE_VIS |
+                        CROWD_UPDATE_OPTIMIZE_TOPO,
+    };
+}
+
+TEST(crowd_matches_navcat_on_a_flat_scene) {
+    BlocksTest test = load_blocks_test();
+    REQUIRE(test.expected.loaded);
+    const fixture::Fixture &expected = test.expected;
+
+    fixture::F64 positions_values = fixture::f64(expected, "flat.positions");
+    fixture::I32 indices_values = fixture::i32(expected, "flat.indices");
+    Array<float> positions = {};
+    Array<uint32_t> indices = {};
+    for (uint32_t i = 0; i < positions_values.count; i++) positions.push((float)positions_values.data[i]);
+    for (uint32_t i = 0; i < indices_values.count; i++) indices.push((uint32_t)indices_values.data[i]);
+
+    TiledNavMeshOptions options = {
+        .cell_size = 0.2f,
+        .cell_height = 0.2f,
+        .tile_size_voxels = 32,
+        .tile_size_world = 32 * 0.2f,
+        .walkable_radius_voxels = 2,
+        .walkable_radius_world = 0.4f,
+        .walkable_climb_voxels = 2,
+        .walkable_climb_world = (float)fixture::f64(test.solo_fixture, "nav_mesh.walkable").data[2],
+        .walkable_height_voxels = 10,
+        .walkable_height_world = 2,
+        .walkable_slope_angle_degrees = test.options.walkable_slope_angle,
+        .border_size = 5,
+        .min_region_area = test.options.min_region_area,
+        .merge_region_area = test.options.merge_region_area,
+        .max_simplification_error = test.options.max_simplification_error,
+        .max_edge_length = test.options.max_edge_length,
+        .max_vertices_per_poly = test.options.max_vertices_per_poly,
+        .detail_sample_distance = 1.2f,
+        .detail_sample_max_error = 0.2f,
+    };
+    TiledNavMeshResult tiled = generate_tiled_nav_mesh::generate_tiled_nav_mesh({positions.data, indices.data, indices.length}, options);
+
+    uint32_t agent_count = (uint32_t)fixture::i32(expected, "flat.agent_count").data[0];
+    Crowd crowd = crowd::create(0.6f);
+    Array<uint32_t> agent_ids = {};
+    for (uint32_t i = 0; i < agent_count; i++) {
+        double angle = ((double)i / agent_count) * 3.14159265358979323846 * 2;
+        Vec3 start = {(float)(cos(angle) * 6.5), 0, (float)(sin(angle) * 6.5)};
+        Vec3 end = {-start.x, 0, -start.z};
+        AgentParams params = crowd_agent_params(0.4f, 3, 2.4f, 1);
+        params.height = 2;
+        uint32_t id = crowd::add_agent(crowd, tiled.nav_mesh, start, params);
+        agent_ids.push(id);
+        FindNearestPolyResult target = nav_mesh_api::find_nearest_poly(tiled.nav_mesh, end, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
+        crowd::request_move_target(crowd, id, target.node_ref, target.position);
+    }
+
+    CrowdComparison comparison =
+        run_crowd(crowd, tiled.nav_mesh, agent_ids, 240, fixture::f64(expected, "flat.frames"), fixture::i32(expected, "flat.states"));
+    printf("flat crowd: first divergent frame %u, max xz error %f, max height error %f, final state mismatches %u\n", comparison.first_divergent_frame,
+           comparison.max_xz_error, comparison.max_height_error, comparison.final_state_mismatches);
+    CHECK(comparison.first_divergent_frame == 0);
+    CHECK(comparison.final_state_mismatches == 0);
+
+    agent_ids.release();
+    crowd::release(crowd);
+    generate_tiled_nav_mesh::release(tiled.intermediates);
+    nav_mesh_api::release_nav_mesh(tiled.nav_mesh);
+    positions.release();
+    indices.release();
+    release(test);
+}
+
+TEST(crowd_matches_navcat_on_nav_test) {
+    BlocksTest test = load_blocks_test();
+    REQUIRE(test.expected.loaded);
+    const fixture::Fixture &expected = test.expected;
+
+    TiledNavMeshResult tiled = generate_tiled(test);
+    Array<AgentPoint> points = load_agent_points(expected);
+
+    uint32_t agent_count = (uint32_t)fixture::i32(expected, "crowd.agent_count").data[0];
+    Crowd crowd = crowd::create(0.6f);
+    Array<uint32_t> agent_ids = {};
+    for (uint32_t i = 0; i < agent_count; i++) {
+        uint32_t id = crowd::add_agent(crowd, tiled.nav_mesh, points[i].position, crowd_agent_params(0.3f, 2, 1.8f, 0.5f));
+        agent_ids.push(id);
+        const AgentPoint &target = points[points.length - 1 - i];
+        crowd::request_move_target(crowd, id, target.ref, target.position);
+    }
+
+    CrowdComparison comparison =
+        run_crowd(crowd, tiled.nav_mesh, agent_ids, 120, fixture::f64(expected, "crowd.frames"), fixture::i32(expected, "crowd.states"));
+    printf("nav-test crowd: first divergent frame %u, max xz error %f, max height error %f, final state mismatches %u\n",
+           comparison.first_divergent_frame, comparison.max_xz_error, comparison.max_height_error, comparison.final_state_mismatches);
+    CHECK(comparison.first_divergent_frame == 0 || comparison.first_divergent_frame > 30);
+    CHECK(comparison.max_xz_error < 0.5f);
+    CHECK(comparison.final_state_mismatches == 0);
+
+    agent_ids.release();
+    crowd::release(crowd);
+    points.release();
+    generate_tiled_nav_mesh::release(tiled.intermediates);
+    nav_mesh_api::release_nav_mesh(tiled.nav_mesh);
     release(test);
 }
