@@ -13,13 +13,18 @@ extern const Example EXAMPLE_FIND_SHORTEST_PATHS;
 extern const Example EXAMPLE_FIND_DIVERSE_PATHS;
 extern const Example EXAMPLE_RAYCAST;
 extern const Example EXAMPLE_OFF_MESH_CONNECTIONS;
+extern const Example EXAMPLE_CUSTOM_GLTF_NAV_MESH;
 extern const Example EXAMPLE_SOLO_NAV_MESH;
 extern const Example EXAMPLE_TILED_NAV_MESH;
 extern const Example EXAMPLE_FLOOD_FILL_PRUNING;
 extern const Example EXAMPLE_FIND_NEAREST_POLY;
 extern const Example EXAMPLE_FIND_RANDOM_POINT;
 extern const Example EXAMPLE_FIND_RANDOM_POINT_AROUND_CIRCLE;
+extern const Example EXAMPLE_MARK_COMPACT_HEIGHTFIELD_AREAS;
+extern const Example EXAMPLE_CUSTOM_NAV_MESH_GENERATION;
 extern const Example EXAMPLE_MOVE_ALONG_SURFACE;
+extern const Example EXAMPLE_CHUNKY_TRI_MESH;
+extern const Example EXAMPLE_RASTERIZE_FILLED_VOLUME;
 
 extern const Example *const EXAMPLES[];
 extern const int EXAMPLE_COUNT;

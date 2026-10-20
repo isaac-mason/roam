@@ -42,7 +42,7 @@ static int frame_count = 0;
 
 namespace app {
 
-void load_level(App &app, const char *name, bool skip_unwalkable_nodes) { set_level(app, model::load(name, skip_unwalkable_nodes)); }
+void load_level(App &app, const char *name, ModelLoadOptions options) { set_level(app, model::load(name, options)); }
 
 void set_level(App &app, Model level) {
     model::release(app.level);
@@ -131,8 +131,9 @@ static void frame() {
 
     state.hover = {};
     if (state.want_hover && !ImGui::GetIO().WantCaptureMouse) {
-        RayHit hit = model::raycast(state.level, camera::screen_ray(state.camera, input.x, input.y));
-        state.hover = {hit.hit, hit.point};
+        Ray ray = camera::screen_ray(state.camera, input.x, input.y);
+        RayHit hit = model::raycast(state.level, ray);
+        state.hover = {hit.hit, hit.point, ray};
     }
 
     const Example &example = *EXAMPLES[current_example];

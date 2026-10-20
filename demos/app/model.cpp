@@ -75,21 +75,22 @@ static bool is_unwalkable(const cgltf_extras &extras) {
 }
 
 static void append_node(Model &model, Array<MeshView> &views, Array<Array<float>> &owned_positions, Array<Array<uint32_t>> &owned_indices,
-                        const cgltf_node &node, bool skip_unwalkable_nodes) {
-    if (node.mesh) {
+                        const cgltf_node &node, const ModelLoadOptions &options, bool included) {
+    included = included || !options.node_name || (node.name && strcmp(node.name, options.node_name) == 0);
+    if (node.mesh && included) {
         float world[16];
         cgltf_node_transform_world(&node, world);
-        bool walkable = !skip_unwalkable_nodes || !is_unwalkable(node.extras);
+        bool walkable = !options.skip_unwalkable_nodes || !is_unwalkable(node.extras);
         for (cgltf_size i = 0; i < node.mesh->primitives_count; i++) {
             append_primitive(model, views, owned_positions, owned_indices, node.mesh->primitives[i], world, walkable);
         }
     }
     for (cgltf_size i = 0; i < node.children_count; i++) {
-        append_node(model, views, owned_positions, owned_indices, *node.children[i], skip_unwalkable_nodes);
+        append_node(model, views, owned_positions, owned_indices, *node.children[i], options, included);
     }
 }
 
-Model load(const char *name, bool skip_unwalkable_nodes) {
+Model load(const char *name, ModelLoadOptions options) {
     Model model = {};
     model.bounds = box3::empty();
 
@@ -100,13 +101,13 @@ Model load(const char *name, bool skip_unwalkable_nodes) {
     snprintf(path, sizeof(path), "/assets/%s", name);
 #endif
 
-    cgltf_options options = {};
+    cgltf_options gltf_options = {};
     cgltf_data *data = nullptr;
-    if (cgltf_parse_file(&options, path, &data) != cgltf_result_success) {
+    if (cgltf_parse_file(&gltf_options, path, &data) != cgltf_result_success) {
         fprintf(stderr, "roam demos: could not parse %s\n", path);
         return model;
     }
-    if (cgltf_load_buffers(&options, data, path) != cgltf_result_success) {
+    if (cgltf_load_buffers(&gltf_options, data, path) != cgltf_result_success) {
         fprintf(stderr, "roam demos: could not load buffers for %s\n", path);
         cgltf_free(data);
         return model;
@@ -118,7 +119,7 @@ Model load(const char *name, bool skip_unwalkable_nodes) {
 
     const cgltf_scene *scene = data->scene ? data->scene : (data->scenes_count > 0 ? &data->scenes[0] : nullptr);
     if (scene) {
-        for (cgltf_size i = 0; i < scene->nodes_count; i++) append_node(model, views, owned_positions, owned_indices, *scene->nodes[i], skip_unwalkable_nodes);
+        for (cgltf_size i = 0; i < scene->nodes_count; i++) append_node(model, views, owned_positions, owned_indices, *scene->nodes[i], options, false);
     }
 
     MergedMesh merged = merge_positions_and_indices::merge_positions_and_indices(views.data, views.length);

@@ -30,6 +30,14 @@ void look_from(Camera &camera, Vec3 eye, Vec3 target, float fov_y) {
     camera.distance = vec3::length(offset) * tanf(fov_y * 0.5f) / tanf(camera.fov_y * 0.5f);
 }
 
+void look_at(Camera &camera, Vec3 eye, Vec3 target) {
+    Vec3 offset = vec3::subtract(eye, target);
+    camera.target = target;
+    camera.distance = vec3::length(offset);
+    camera.pitch = scalar::clamp(asinf(offset.y / fmaxf(camera.distance, 1e-6f)), -1.5f, 1.5f);
+    camera.yaw = atan2f(offset.x, offset.z);
+}
+
 void update(Camera &camera, float width, float height) {
     camera.width = width;
     camera.height = height;

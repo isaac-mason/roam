@@ -242,7 +242,7 @@ static void init(App &app) {
     state.start = {-8, 1.5f, -2.3f};
     state.end = {8, 1, -0.5f};
 
-    app::load_level(app, "bridges.glb", true);
+    app::load_level(app, "bridges.glb", {.skip_unwalkable_nodes = true});
 
     const Model &level = app.level;
     state.result = generate_nav_mesh(level.walkable_positions.data, level.walkable_indices.data, level.walkable_indices.length);

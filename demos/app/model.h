@@ -16,6 +16,11 @@ struct Model {
     roam::Box3 bounds;
 };
 
+struct ModelLoadOptions {
+    const char *node_name = nullptr;
+    bool skip_unwalkable_nodes = false;
+};
+
 struct RayHit {
     bool hit;
     float t;
@@ -24,7 +29,7 @@ struct RayHit {
 
 namespace model {
 
-Model load(const char *name, bool skip_unwalkable_nodes = false);
+Model load(const char *name, ModelLoadOptions options = {});
 void release(Model &model);
 RayHit raycast(const Model &model, Ray ray);
 
