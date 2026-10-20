@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include "app/camera.h"
@@ -41,6 +42,8 @@ struct RayHit {
 namespace model {
 
 Model load(const char *name, ModelLoadOptions options = {});
+Model load_file(const char *path, ModelLoadOptions options = {});
+Model load_from_memory(const uint8_t *bytes, size_t size, const char *path, ModelLoadOptions options = {});
 void release(Model &model);
 RayHit raycast(const Model &model, Ray ray);
 bool is_descendant(const Model &model, int32_t node, int32_t ancestor);

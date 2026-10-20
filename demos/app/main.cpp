@@ -38,6 +38,7 @@ static Input input;
 static int current_example = -1;
 static int initial_example = 0;
 static const char *screenshot_path = nullptr;
+static const char *drop_path = nullptr;
 static int frame_count = 0;
 
 namespace app {
@@ -113,6 +114,8 @@ static void save_screenshot() {
     sapp_request_quit();
 }
 
+static void read_dropped_file(const char *path);
+
 static void frame() {
     float width = sapp_widthf();
     float height = sapp_heightf();
@@ -136,9 +139,16 @@ static void frame() {
         state.hover = {hit.hit, hit.point, ray};
     }
 
+    if (drop_path && frame_count == 1) read_dropped_file(drop_path);
+
     const Example &example = *EXAMPLES[current_example];
     if (example.update) example.update(state, delta_time);
     state.click = {};
+    if (state.dropped.ready || state.dropped.failed) {
+        state.dropped.ready = false;
+        state.dropped.failed = false;
+        state.dropped.data.clear();
+    }
 
     ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(340, 0), ImGuiCond_FirstUseEver);
@@ -172,10 +182,64 @@ static void frame() {
 static void cleanup() {
     if (current_example >= 0 && EXAMPLES[current_example]->shutdown) EXAMPLES[current_example]->shutdown(state);
     model::release(state.level);
+    state.dropped.data.release();
     state.statics.release();
     renderer::destroy(state.renderer);
     simgui_shutdown();
     sg_shutdown();
+}
+
+#if defined(__EMSCRIPTEN__)
+static void dropped_file_fetched(const sapp_html5_fetch_response *response) {
+    state.dropped.pending = false;
+    if (response->succeeded) {
+        state.dropped.data.resize((uint32_t)response->data.size);
+        state.dropped.ready = true;
+    } else {
+        state.dropped.failed = true;
+    }
+}
+#endif
+
+static void read_dropped_file(const char *path) {
+    DroppedFile &dropped = state.dropped;
+    snprintf(dropped.path, sizeof(dropped.path), "%s", path);
+    FILE *file = fopen(dropped.path, "rb");
+    if (!file) {
+        dropped.failed = true;
+        return;
+    }
+    fseek(file, 0, SEEK_END);
+    long size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+    dropped.data.clear();
+    dropped.data.resize((uint32_t)size);
+    size_t read = fread(dropped.data.data, 1, (size_t)size, file);
+    fclose(file);
+    dropped.data.resize((uint32_t)read);
+    dropped.ready = true;
+}
+
+static void receive_dropped_file() {
+    DroppedFile &dropped = state.dropped;
+    dropped.ready = false;
+    dropped.failed = false;
+    if (sapp_get_num_dropped_files() < 1) return;
+    snprintf(dropped.path, sizeof(dropped.path), "%s", sapp_get_dropped_file_path(0));
+
+#if defined(__EMSCRIPTEN__)
+    uint32_t size = sapp_html5_get_dropped_file_size(0);
+    dropped.data.clear();
+    dropped.data.resize(size);
+    sapp_html5_fetch_request request = {};
+    request.dropped_file_index = 0;
+    request.callback = dropped_file_fetched;
+    request.buffer = {dropped.data.data, size};
+    dropped.pending = true;
+    sapp_html5_fetch_dropped_file(&request);
+#else
+    read_dropped_file(sapp_get_dropped_file_path(0));
+#endif
 }
 
 static void click(float x, float y, sapp_mousebutton button, uint32_t modifiers) {
@@ -221,6 +285,9 @@ static void event(const sapp_event *e) {
         case SAPP_EVENTTYPE_KEY_UP:
             if (e->key_code >= 0 && e->key_code < 512) state.keys[e->key_code] = false;
             break;
+        case SAPP_EVENTTYPE_FILES_DROPPED:
+            receive_dropped_file();
+            break;
         case SAPP_EVENTTYPE_MOUSE_SCROLL:
             camera::zoom(state.camera, e->scroll_y);
             break;
@@ -233,6 +300,10 @@ sapp_desc sokol_main(int argc, char **argv) {
     for (int arg = 1; arg < argc; arg++) {
         if (strcmp(argv[arg], "--screenshot") == 0 && arg + 1 < argc) {
             screenshot_path = argv[++arg];
+            continue;
+        }
+        if (strcmp(argv[arg], "--drop") == 0 && arg + 1 < argc) {
+            drop_path = argv[++arg];
             continue;
         }
         for (int i = 0; i < EXAMPLE_COUNT; i++) {
@@ -250,6 +321,8 @@ sapp_desc sokol_main(int argc, char **argv) {
     desc.sample_count = 4;
     desc.high_dpi = true;
     desc.window_title = "roam";
+    desc.enable_dragndrop = true;
+    desc.max_dropped_file_path_length = 4096;
     desc.logger.func = slog_func;
     return desc;
 }

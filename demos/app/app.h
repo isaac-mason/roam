@@ -20,6 +20,14 @@ struct Hover {
     Ray ray;
 };
 
+struct DroppedFile {
+    bool pending;
+    bool ready;
+    bool failed;
+    char path[1024];
+    roam::Array<uint8_t> data;
+};
+
 struct App {
     Renderer renderer;
     Camera camera;
@@ -29,6 +37,7 @@ struct App {
     bool want_hover;
     Hover hover;
     bool keys[512];
+    DroppedFile dropped;
     roam::Array<StaticDrawing> statics;
 };
 

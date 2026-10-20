@@ -37,6 +37,6 @@ Each navcat example in `~/Development/navcat/examples/src/example-<name>.ts` bec
 - Don't take screenshots of the desktop, only of the app's framebuffer this way.
 - Models: copy what the example needs from `navcat/examples/public/models/` into `demos/assets/`, along with its `.md` credit file when one exists. Never copy `.blend` files.
 
-## Not ported yet
+## Not ported
 
-- `dynamic-navmesh`, `dynamic-obstacles`, `fps-dynamic-navmesh` use Rapier physics, and `upload-model` needs a file picker. Leave them.
+- `dynamic-navmesh`, `dynamic-obstacles`, `fps-dynamic-navmesh` use Rapier physics. Skipped for now (decided 2026-10-21).

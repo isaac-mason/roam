@@ -18,6 +18,7 @@ extern const Example EXAMPLE_FIND_SHORTEST_PATHS;
 extern const Example EXAMPLE_FIND_DIVERSE_PATHS;
 extern const Example EXAMPLE_RAYCAST;
 extern const Example EXAMPLE_OFF_MESH_CONNECTIONS;
+extern const Example EXAMPLE_UPLOAD_MODEL;
 extern const Example EXAMPLE_CUSTOM_GLTF_NAV_MESH;
 extern const Example EXAMPLE_SOLO_NAV_MESH;
 extern const Example EXAMPLE_TILED_NAV_MESH;

@@ -104,28 +104,9 @@ static void append_node(Model &model, Array<MeshView> &views, Array<Array<float>
     }
 }
 
-Model load(const char *name, ModelLoadOptions options) {
+static Model build(cgltf_data *data, const ModelLoadOptions &options) {
     Model model = {};
     model.bounds = box3::empty();
-
-    char path[512];
-#if defined(ROAM_DEMOS_ASSETS_DIR)
-    snprintf(path, sizeof(path), "%s/%s", ROAM_DEMOS_ASSETS_DIR, name);
-#else
-    snprintf(path, sizeof(path), "/assets/%s", name);
-#endif
-
-    cgltf_options gltf_options = {};
-    cgltf_data *data = nullptr;
-    if (cgltf_parse_file(&gltf_options, path, &data) != cgltf_result_success) {
-        fprintf(stderr, "roam demos: could not parse %s\n", path);
-        return model;
-    }
-    if (cgltf_load_buffers(&gltf_options, data, path) != cgltf_result_success) {
-        fprintf(stderr, "roam demos: could not load buffers for %s\n", path);
-        cgltf_free(data);
-        return model;
-    }
 
     Array<MeshView> views = {};
     Array<Array<float>> owned_positions = {};
@@ -146,8 +127,51 @@ Model load(const char *name, ModelLoadOptions options) {
     views.release();
     owned_positions.release();
     owned_indices.release();
+    return model;
+}
+
+Model load_file(const char *path, ModelLoadOptions options) {
+    cgltf_options gltf_options = {};
+    cgltf_data *data = nullptr;
+    if (cgltf_parse_file(&gltf_options, path, &data) != cgltf_result_success) {
+        fprintf(stderr, "roam demos: could not parse %s\n", path);
+        return {};
+    }
+    if (cgltf_load_buffers(&gltf_options, data, path) != cgltf_result_success) {
+        fprintf(stderr, "roam demos: could not load buffers for %s\n", path);
+        cgltf_free(data);
+        return {};
+    }
+    Model model = build(data, options);
     cgltf_free(data);
     return model;
+}
+
+Model load_from_memory(const uint8_t *bytes, size_t size, const char *path, ModelLoadOptions options) {
+    cgltf_options gltf_options = {};
+    cgltf_data *data = nullptr;
+    if (cgltf_parse(&gltf_options, bytes, size, &data) != cgltf_result_success) {
+        fprintf(stderr, "roam demos: could not parse %s\n", path);
+        return {};
+    }
+    if (cgltf_load_buffers(&gltf_options, data, path) != cgltf_result_success) {
+        fprintf(stderr, "roam demos: could not load buffers for %s\n", path);
+        cgltf_free(data);
+        return {};
+    }
+    Model model = build(data, options);
+    cgltf_free(data);
+    return model;
+}
+
+Model load(const char *name, ModelLoadOptions options) {
+    char path[512];
+#if defined(ROAM_DEMOS_ASSETS_DIR)
+    snprintf(path, sizeof(path), "%s/%s", ROAM_DEMOS_ASSETS_DIR, name);
+#else
+    snprintf(path, sizeof(path), "/assets/%s", name);
+#endif
+    return load_file(path, options);
 }
 
 void release(Model &model) {

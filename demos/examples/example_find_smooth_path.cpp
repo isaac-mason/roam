@@ -88,7 +88,7 @@ static void update_path() {
 
     double begin = app::now_milliseconds();
     FindSmoothPathResult path = find_smooth_path::find_smooth_path(nav_mesh, state.start, state.end, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER,
-                                                                   {.step_size = state.step_size, .slop = state.slop, .max_points = 1024}, &state.workspace);
+                                                                   {.step_size = state.step_size, .slop = state.slop, .max_points = 1024, .raycast_distance = 0}, &state.workspace);
     state.query_milliseconds = app::now_milliseconds() - begin;
     state.success = path.success;
     state.flags = path.flags;
