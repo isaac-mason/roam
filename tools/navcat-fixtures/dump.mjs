@@ -134,6 +134,24 @@ const polyMeshDetailEntries = (prefix, detail) => [
     i32(`${prefix}.triangles`, detail.triangles),
 ];
 
+const tilePolysEntries = (prefix, tilePolys) => [
+    f64(`${prefix}.vertices`, tilePolys.vertices),
+    i32(`${prefix}.poly_vertex_counts`, tilePolys.polys.map((poly) => poly.vertices.length)),
+    i32(`${prefix}.poly_vertices`, tilePolys.polys.flatMap((poly) => poly.vertices)),
+    i32(`${prefix}.poly_neis`, tilePolys.polys.flatMap((poly) => poly.neis)),
+    i32(`${prefix}.poly_flags`, tilePolys.polys.map((poly) => poly.flags)),
+    i32(`${prefix}.poly_areas`, tilePolys.polys.map((poly) => poly.area)),
+];
+
+const tileDetailEntries = (prefix, tileDetail) => [
+    i32(
+        `${prefix}.detail_meshes`,
+        tileDetail.detailMeshes.flatMap((mesh) => [mesh.verticesBase, mesh.trianglesBase, mesh.verticesCount, mesh.trianglesCount]),
+    ),
+    f64(`${prefix}.detail_vertices`, tileDetail.detailVertices),
+    i32(`${prefix}.detail_triangles`, tileDetail.detailTriangles),
+];
+
 const config = {
     cellSize: 0.15,
     cellHeight: 0.15,
@@ -225,6 +243,11 @@ const dumpSoloGeneration = (name, positions, indices) => {
 
     const detail = navcat.buildPolyMeshDetail(ctx, polyMesh, chf, options.detailSampleDistanceWorld, options.detailSampleMaxErrorWorld);
     entries.push(...polyMeshDetailEntries('poly_mesh_detail.watershed', detail));
+
+    const tilePolys = navcat.polyMeshToTilePolys(polyMesh);
+    entries.push(...tilePolysEntries('tile.watershed', tilePolys));
+    entries.push(...tileDetailEntries('tile.watershed', navcat.polyMeshDetailToTileDetailMesh(tilePolys.polys, detail)));
+    entries.push(...tileDetailEntries('tile.watershed.fan', navcat.polysToTileDetailMesh(tilePolys.polys)));
 
     const monotone = buildCompact();
     navcat.erodeWalkableArea(options.walkableRadiusVoxels, monotone);

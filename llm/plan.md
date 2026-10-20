@@ -53,6 +53,7 @@ From JS to C++:
 - `Record<string, X>` keyed by pool ids becomes an `Array<X>` of slots indexed by an `IndexPool` id, each with an `allocated` flag.
 - The tile position maps become a `Map<uint64_t, …>` keyed by packed (x, y, layer).
 - Result objects become result structs that own `Array`s.
+- Variable-length arrays on per-item structs stay per-item `Array`s for the 1:1 port: `NavMeshPoly.vertices` and `.neis`, `NavMeshNode.links`. This is a lot of small allocations and manual `release` chains. **Deferred (2026-10-20):** flatten them into tile-wide or mesh-wide arrays with a base and count per item, after parity (see After parity).
 - `BuildContext` keeps only logs. roam never reads a clock: in wasm that means a call out to JS. Callers time stages themselves; the shape rasterizers take no context.
 
 ## Parity testing
@@ -90,6 +91,6 @@ From JS to C++:
 
 ## After parity
 
-- Performance: flatten per-node link arrays and add a reusable, generation-stamped search pool.
+- Performance: flatten the per-item arrays (`NavMeshPoly.vertices`/`.neis`, `NavMeshNode.links`) into shared arrays with a base and count per item, and add a reusable, generation-stamped search pool.
 - Large worlds: tile-local vertex storage.
 - A handoff from roam to navcat: roam writes a tile blob that navcat can import.
