@@ -89,6 +89,22 @@ const heightfieldEntries = (prefix, heightfield) => {
     ];
 };
 
+const compactHeightfieldEntries = (prefix, chf) => [
+    i32(`${prefix}.span_count`, chf.spanCount),
+    f64(`${prefix}.bounds`, chf.bounds),
+    i32(`${prefix}.cell_index`, chf.cells.map((cell) => cell.index)),
+    i32(`${prefix}.cell_count`, chf.cells.map((cell) => cell.count)),
+    i32(`${prefix}.span_y`, chf.spans.map((span) => span.y)),
+    i32(`${prefix}.span_h`, chf.spans.map((span) => span.h)),
+    i32(`${prefix}.span_con`, chf.spans.map((span) => span.con)),
+    i32(`${prefix}.areas`, chf.areas),
+];
+
+const regionEntries = (prefix, chf) => [
+    i32(`${prefix}.span_region`, chf.spans.map((span) => span.region)),
+    i32(`${prefix}.max_regions`, chf.maxRegions),
+];
+
 const config = {
     cellSize: 0.15,
     cellHeight: 0.15,
@@ -96,6 +112,9 @@ const config = {
     walkableClimbWorld: 0.5,
     walkableHeightWorld: 0.25,
     walkableSlopeAngleDegrees: 45,
+    borderSize: 0,
+    minRegionArea: 8,
+    mergeRegionArea: 20,
 };
 
 const options = {
@@ -115,6 +134,9 @@ const dumpSoloGeneration = (name, positions, indices) => {
         i32('options.walkable_radius_voxels', options.walkableRadiusVoxels),
         i32('options.walkable_climb_voxels', options.walkableClimbVoxels),
         i32('options.walkable_height_voxels', options.walkableHeightVoxels),
+        i32('options.border_size', options.borderSize),
+        i32('options.min_region_area', options.minRegionArea),
+        i32('options.merge_region_area', options.mergeRegionArea),
     ];
 
     const ctx = navcat.BuildContext.create();
@@ -139,6 +161,32 @@ const dumpSoloGeneration = (name, positions, indices) => {
 
     navcat.filterWalkableLowHeightSpans(heightfield, options.walkableHeightVoxels);
     entries.push(...heightfieldEntries('heightfield.filtered_low_height', heightfield));
+
+    const buildCompact = () => navcat.buildCompactHeightfield(ctx, options.walkableHeightVoxels, options.walkableClimbVoxels, heightfield);
+
+    const chf = buildCompact();
+    entries.push(...compactHeightfieldEntries('compact_heightfield.built', chf));
+
+    navcat.erodeWalkableArea(options.walkableRadiusVoxels, chf);
+    entries.push(i32('compact_heightfield.eroded.areas', chf.areas));
+
+    navcat.buildDistanceField(chf);
+    entries.push(i32('compact_heightfield.distances', chf.distances), i32('compact_heightfield.max_distance', chf.maxDistance));
+
+    navcat.buildRegions(ctx, chf, options.borderSize, options.minRegionArea, options.mergeRegionArea);
+    entries.push(...regionEntries('regions.watershed', chf));
+
+    const monotone = buildCompact();
+    navcat.erodeWalkableArea(options.walkableRadiusVoxels, monotone);
+    navcat.buildDistanceField(monotone);
+    navcat.buildRegionsMonotone(ctx, monotone, options.borderSize, options.minRegionArea, options.mergeRegionArea);
+    entries.push(...regionEntries('regions.monotone', monotone));
+
+    const layers = buildCompact();
+    navcat.erodeWalkableArea(options.walkableRadiusVoxels, layers);
+    navcat.buildDistanceField(layers);
+    navcat.buildLayerRegions(ctx, layers, options.borderSize, options.minRegionArea);
+    entries.push(...regionEntries('regions.layers', layers));
 
     writeFixture(name, entries);
     console.log(`wrote ${name}.bin (${entries.length} entries)`);
