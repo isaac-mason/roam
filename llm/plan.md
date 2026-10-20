@@ -82,8 +82,9 @@ Dated decisions and the reasoning behind them are in `llm/worklog.md`.
 
 ## Demos
 
-- One app with an example picker. Each example is a file `demos/examples/example_<name>.cpp` that exposes `{ name, init, update, draw, ui }`.
-- Proposed stack: sokol (app, gfx, gl), Dear ImGui through sokol_imgui, and cgltf for navcat's `.glb` models.
+- One app with an example picker. Each example is a file `demos/examples/example_<name>.cpp` that exposes an `Example` of `{ name, init, update, ui, shutdown }`.
+- Done: solo nav mesh, tiled nav mesh, find path, crowd simulation. The other 28 navcat examples remain.
+- Stack: sokol (app, gfx, glue, time), Dear ImGui through sokol_imgui, and cgltf for navcat's `.glb` models, all fetched and pinned by CMake.
 - Builds natively and with emscripten into a static site.
 
 ## Phases
