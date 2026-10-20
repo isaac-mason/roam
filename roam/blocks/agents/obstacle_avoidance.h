@@ -17,12 +17,18 @@ struct ObstacleCircle {
     float radius;
     Vec3 side_direction;
     Vec3 side_normal;
+    float sweep_x;
+    float sweep_z;
+    float sweep_c;
 };
 
 struct ObstacleSegment {
     Vec3 p;
     Vec3 q;
     bool touch;
+    Vec3 direction;
+    Vec3 to_agent;
+    float direction_perp_to_agent;
 };
 
 struct ObstacleAvoidanceParams {

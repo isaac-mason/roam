@@ -25,6 +25,8 @@ void release(SearchWorkspace &workspace) {
     workspace.other_vertices.release();
     workspace.raycast_vertices.release();
     workspace.neighbours.release();
+    release(workspace.move_result);
+    release(workspace.raycast_result);
 }
 
 static uint32_t search_bucket(const SearchNodePool &pool, NodeRef node_ref) { return (uint32_t)hash_key(node_ref) & (pool.buckets.length - 1); }
@@ -241,7 +243,7 @@ static Array<NodeRef> collect_path(const SearchNodePool &pool, int32_t last_node
 }
 
 static RaycastResult raycast_base(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter,
-                                  bool calculate_costs, NodeRef previous_ref, bool collect_path, Array<float> &vertices);
+                                  bool calculate_costs, NodeRef previous_ref, bool collect_path, Array<float> &vertices, Array<NodeRef> path = {});
 
 static int link_state(const NavMeshLink &link) { return link.side != 0xff ? link.side >> 1 : 0; }
 
@@ -701,8 +703,9 @@ static uint32_t gather_poly_vertices(const NavMeshTile &tile, const NavMeshPoly 
 }
 
 static MoveAlongSurfaceResult move_along_surface_in(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position,
-                                                   const QueryFilter &filter, SearchWorkspace &workspace) {
-    MoveAlongSurfaceResult result = {false, start_position, start_node_ref, {}};
+                                                   const QueryFilter &filter, SearchWorkspace &workspace, Array<NodeRef> visited) {
+    visited.clear();
+    MoveAlongSurfaceResult result = {false, start_position, start_node_ref, visited};
 
     if (!nav_mesh_api::is_valid_node_ref(nav_mesh, start_node_ref) || !vec3::finite(start_position) || !vec3::finite(end_position)) return result;
 
@@ -816,18 +819,30 @@ static MoveAlongSurfaceResult move_along_surface_in(const NavMesh &nav_mesh, Nod
 
 MoveAlongSurfaceResult move_along_surface(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position,
                                           const QueryFilter &filter, SearchWorkspace *workspace) {
-    if (workspace) return move_along_surface_in(nav_mesh, start_node_ref, start_position, end_position, filter, *workspace);
+    if (workspace) return move_along_surface_in(nav_mesh, start_node_ref, start_position, end_position, filter, *workspace, {});
     SearchWorkspace temporary = {};
-    MoveAlongSurfaceResult result = move_along_surface_in(nav_mesh, start_node_ref, start_position, end_position, filter, temporary);
+    MoveAlongSurfaceResult result = move_along_surface_in(nav_mesh, start_node_ref, start_position, end_position, filter, temporary, {});
     release(temporary);
     return result;
+}
+
+void move_along_surface_into(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter,
+                             MoveAlongSurfaceResult &result, SearchWorkspace *workspace) {
+    if (workspace) {
+        result = move_along_surface_in(nav_mesh, start_node_ref, start_position, end_position, filter, *workspace, result.visited);
+        return;
+    }
+    SearchWorkspace temporary = {};
+    result = move_along_surface_in(nav_mesh, start_node_ref, start_position, end_position, filter, temporary, result.visited);
+    release(temporary);
 }
 
 void release(MoveAlongSurfaceResult &result) { result.visited.release(); }
 
 static RaycastResult raycast_base(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter,
-                                  bool calculate_costs, NodeRef previous_ref, bool collect_path, Array<float> &vertices) {
-    RaycastResult result = {0, {0, 0, 0}, -1, {}, 0};
+                                  bool calculate_costs, NodeRef previous_ref, bool collect_path, Array<float> &vertices, Array<NodeRef> path) {
+    path.clear();
+    RaycastResult result = {0, {0, 0, 0}, -1, path, 0};
 
     if (!nav_mesh_api::is_valid_node_ref(nav_mesh, start_node_ref) || !vec3::finite(start_position) || !vec3::finite(end_position)) return result;
 
@@ -977,6 +992,18 @@ static RaycastResult raycast_with_workspace(const NavMesh &nav_mesh, NodeRef sta
         raycast_base(nav_mesh, start_node_ref, start_position, end_position, filter, calculate_costs, previous_ref, true, vertices);
     vertices.release();
     return result;
+}
+
+void raycast_into(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter,
+                  RaycastResult &result, SearchWorkspace *workspace) {
+    if (workspace) {
+        result = raycast_base(nav_mesh, start_node_ref, start_position, end_position, filter, false, INVALID_NODE_REF, true, workspace->raycast_vertices,
+                              result.path);
+        return;
+    }
+    Array<float> vertices = {};
+    result = raycast_base(nav_mesh, start_node_ref, start_position, end_position, filter, false, INVALID_NODE_REF, true, vertices, result.path);
+    vertices.release();
 }
 
 RaycastResult raycast(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter,

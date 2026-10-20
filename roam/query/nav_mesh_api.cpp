@@ -266,10 +266,27 @@ static uint32_t gather_poly_vertices(const NavMeshTile &tile, const NavMeshPoly 
     return poly.vertex_count;
 }
 
-GetPolyHeightResult get_poly_height(const NavMeshTile &tile, const NavMeshPoly &poly, int poly_index, Vec3 position) {
-    Array<float> vertices = {};
-    vertices.resize(poly.vertex_count * 3);
+static const uint32_t INLINE_POLY_VERTICES = 32;
+
+struct PolyVertices {
+    float inline_values[INLINE_POLY_VERTICES * 3];
+    Array<float> overflow;
+    float *data;
+};
+
+static void gather_poly_vertices(const NavMeshTile &tile, const NavMeshPoly &poly, PolyVertices &vertices) {
+    vertices.overflow = {};
+    vertices.data = vertices.inline_values;
+    if (poly.vertex_count > INLINE_POLY_VERTICES) {
+        vertices.overflow.resize(poly.vertex_count * 3);
+        vertices.data = vertices.overflow.data;
+    }
     gather_poly_vertices(tile, poly, vertices.data);
+}
+
+GetPolyHeightResult get_poly_height(const NavMeshTile &tile, const NavMeshPoly &poly, int poly_index, Vec3 position) {
+    PolyVertices vertices;
+    gather_poly_vertices(tile, poly, vertices);
 
     GetPolyHeightResult result = {false, 0};
     if (geometry::point_in_poly(position, vertices.data, (int)poly.vertex_count)) {
@@ -277,7 +294,7 @@ GetPolyHeightResult get_poly_height(const NavMeshTile &tile, const NavMeshPoly &
         result.success = true;
     }
 
-    vertices.release();
+    vertices.overflow.release();
     return result;
 }
 
@@ -307,15 +324,15 @@ ClosestPointOnPolyBoundary get_closest_point_on_poly_boundary(const NavMesh &nav
     const NavMeshTile &tile = *tile_and_poly.tile;
     const NavMeshPoly &poly = *tile_and_poly.poly;
 
-    Array<float> vertices = {};
-    vertices.resize(poly.vertex_count * 3);
-    uint32_t vertex_count = gather_poly_vertices(tile, poly, vertices.data);
+    PolyVertices vertices;
+    gather_poly_vertices(tile, poly, vertices);
+    uint32_t vertex_count = poly.vertex_count;
 
     ClosestPointOnPolyBoundary result = {true, point};
 
     if (geometry::point_in_poly(point, vertices.data, (int)vertex_count)) {
         result.point.y = get_detail_mesh_height(tile, poly, tile_and_poly.poly_index, point);
-        vertices.release();
+        vertices.overflow.release();
         return result;
     }
 
@@ -347,7 +364,7 @@ ClosestPointOnPolyBoundary get_closest_point_on_poly_boundary(const NavMesh &nav
     }
 
     result.point = {va.x + (vb.x - va.x) * t, va.y + (vb.y - va.y) * t, va.z + (vb.z - va.z) * t};
-    vertices.release();
+    vertices.overflow.release();
     return result;
 }
 

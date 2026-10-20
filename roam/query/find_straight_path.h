@@ -46,6 +46,8 @@ namespace find_straight_path {
 FindStraightPathResult find_straight_path(const NavMesh &nav_mesh, Vec3 start, Vec3 end, const NodeRef *path_node_refs, uint32_t path_node_count,
                                           int max_points = UNLIMITED_POINTS, uint32_t straight_path_options = 0);
 
+void find_straight_path_into(const NavMesh &nav_mesh, Vec3 start, Vec3 end, const NodeRef *path_node_refs, uint32_t path_node_count, int max_points,
+                             uint32_t straight_path_options, FindStraightPathResult &result);
 void release(FindStraightPathResult &result);
 
 }

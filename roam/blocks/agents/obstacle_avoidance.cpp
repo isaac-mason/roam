@@ -35,12 +35,12 @@ void reset_obstacle_avoidance_debug_data(ObstacleAvoidanceDebugData &debug) { de
 
 void add_circle_obstacle(ObstacleAvoidanceQuery &query, Vec3 position, float radius, Vec3 velocity, Vec3 desired_velocity) {
     if (query.circles.length >= query.max_circles) return;
-    query.circles.push({position, velocity, desired_velocity, radius, {0, 0, 0}, {0, 0, 0}});
+    query.circles.push({position, velocity, desired_velocity, radius, {0, 0, 0}, {0, 0, 0}, 0, 0, 0});
 }
 
 void add_segment_obstacle(ObstacleAvoidanceQuery &query, Vec3 p, Vec3 q) {
     if (query.segments.length >= query.max_segments) return;
-    query.segments.push({p, q, false});
+    query.segments.push({p, q, false, {0, 0, 0}, {0, 0, 0}, 0});
 }
 
 static float tri_area_2d(Vec3 a, Vec3 b, Vec3 c) {
@@ -87,13 +87,12 @@ struct SweepResult {
     float t_max;
 };
 
-static SweepResult sweep_circle_circle(Vec3 c0, float r0, Vec3 v, Vec3 c1, float r1) {
+static SweepResult sweep_circle_circle(const ObstacleCircle &circle, Vec3 v) {
     const float EPS = 0.0001f;
 
-    float sx = c1.x - c0.x;
-    float sz = c1.z - c0.z;
-    float r = r0 + r1;
-    float c = sx * sx + sz * sz - r * r;
+    float sx = circle.sweep_x;
+    float sz = circle.sweep_z;
+    float c = circle.sweep_c;
     float a = v.x * v.x + v.z * v.z;
     if (a < EPS) return {false, 0, 0};
 
@@ -111,15 +110,15 @@ struct RaySegmentResult {
     float t;
 };
 
-static RaySegmentResult intersect_ray_segment(Vec3 ap, Vec3 u, Vec3 bp, Vec3 bq) {
-    Vec3 v = vec3::subtract(bq, bp);
-    Vec3 w = vec3::subtract(ap, bp);
+static RaySegmentResult intersect_ray_segment(const ObstacleSegment &segment, Vec3 u) {
+    Vec3 v = segment.direction;
+    Vec3 w = segment.to_agent;
 
     float d = perp_2d(u, v);
     if (fabsf(d) < 1e-6f) return {false, 0};
 
     float inverse_d = 1.0f / d;
-    float t = perp_2d(v, w) * inverse_d;
+    float t = segment.direction_perp_to_agent * inverse_d;
     if (t < 0 || t > 1) return {false, 0};
 
     float s = perp_2d(u, w) * inverse_d;
@@ -128,7 +127,7 @@ static RaySegmentResult intersect_ray_segment(Vec3 ap, Vec3 u, Vec3 bp, Vec3 bq)
     return {true, t};
 }
 
-static void prepare_obstacles(ObstacleAvoidanceQuery &query, Vec3 position, Vec3 desired_velocity) {
+static void prepare_obstacles(ObstacleAvoidanceQuery &query, Vec3 position, float radius, Vec3 desired_velocity) {
     for (ObstacleCircle &circle : query.circles) {
         circle.side_direction = vec3::normalize(vec3::subtract(circle.position, position));
         Vec3 dv = vec3::subtract(circle.desired_velocity, desired_velocity);
@@ -139,16 +138,24 @@ static void prepare_obstacles(ObstacleAvoidanceQuery &query, Vec3 position, Vec3
         } else {
             circle.side_normal = {circle.side_direction.z, 0, -circle.side_direction.x};
         }
+
+        circle.sweep_x = circle.position.x - position.x;
+        circle.sweep_z = circle.position.z - position.z;
+        float r = radius + circle.radius;
+        circle.sweep_c = circle.sweep_x * circle.sweep_x + circle.sweep_z * circle.sweep_z - r * r;
     }
 
     for (ObstacleSegment &segment : query.segments) {
         const float r = 0.01f;
         segment.touch = distance_pt_seg_sqr_2d(position, segment.p, segment.q) < r * r;
+        segment.direction = vec3::subtract(segment.q, segment.p);
+        segment.to_agent = vec3::subtract(position, segment.p);
+        segment.direction_perp_to_agent = perp_2d(segment.direction, segment.to_agent);
     }
 }
 
-static float process_sample(const ObstacleAvoidanceQuery &query, Vec3 candidate, float sample_size, Vec3 position, float radius, Vec3 velocity,
-                            Vec3 desired_velocity, float min_penalty, ObstacleAvoidanceDebugData *debug) {
+static float process_sample(const ObstacleAvoidanceQuery &query, Vec3 candidate, float sample_size, Vec3 velocity, Vec3 desired_velocity,
+                            float min_penalty, ObstacleAvoidanceDebugData *debug) {
     const ObstacleAvoidanceParams &params = query.params;
 
     float desired_velocity_penalty = params.weight_des_vel * (distance_2d(candidate, desired_velocity) * query.inv_vmax);
@@ -172,7 +179,7 @@ static float process_sample(const ObstacleAvoidanceQuery &query, Vec3 candidate,
         side += fmaxf(0, fminf(1, fminf(dot_2d(circle.side_direction, vab) * 0.5f + 0.5f, dot_2d(circle.side_normal, vab) * 2)));
         side_count++;
 
-        SweepResult sweep = sweep_circle_circle(position, radius, vab, circle.position, circle.radius);
+        SweepResult sweep = sweep_circle_circle(circle, vab);
         if (!sweep.hit) continue;
 
         float hit_t_min = sweep.t_min;
@@ -188,12 +195,12 @@ static float process_sample(const ObstacleAvoidanceQuery &query, Vec3 candidate,
         float hit_t_min = 0;
 
         if (segment.touch) {
-            Vec3 direction = vec3::subtract(segment.q, segment.p);
+            Vec3 direction = segment.direction;
             Vec3 normal = {-direction.z, direction.y, direction.x};
             if (dot_2d(normal, candidate) < 0.0f) continue;
             hit_t_min = 0.0f;
         } else {
-            RaySegmentResult hit = intersect_ray_segment(position, candidate, segment.p, segment.q);
+            RaySegmentResult hit = intersect_ray_segment(segment, candidate);
             if (!hit.hit) continue;
             hit_t_min = hit.t;
         }
@@ -220,9 +227,9 @@ static float process_sample(const ObstacleAvoidanceQuery &query, Vec3 candidate,
     return penalty;
 }
 
-static void prepare_sampling(ObstacleAvoidanceQuery &query, Vec3 position, float vmax, Vec3 desired_velocity, const ObstacleAvoidanceParams &params,
-                             ObstacleAvoidanceDebugData *debug) {
-    prepare_obstacles(query, position, desired_velocity);
+static void prepare_sampling(ObstacleAvoidanceQuery &query, Vec3 position, float radius, float vmax, Vec3 desired_velocity,
+                             const ObstacleAvoidanceParams &params, ObstacleAvoidanceDebugData *debug) {
+    prepare_obstacles(query, position, radius, desired_velocity);
 
     query.params = params;
     query.inv_horiz_time = 1.0f / query.params.horiz_time;
@@ -234,7 +241,7 @@ static void prepare_sampling(ObstacleAvoidanceQuery &query, Vec3 position, float
 
 SampleVelocityResult sample_velocity_grid(ObstacleAvoidanceQuery &query, Vec3 position, float radius, float vmax, Vec3 velocity, Vec3 desired_velocity,
                                           const ObstacleAvoidanceParams &params, ObstacleAvoidanceDebugData *debug) {
-    prepare_sampling(query, position, vmax, desired_velocity, params, debug);
+    prepare_sampling(query, position, radius, vmax, desired_velocity, params, debug);
 
     SampleVelocityResult result = {{0, 0, 0}, 0};
 
@@ -253,7 +260,7 @@ SampleVelocityResult sample_velocity_grid(ObstacleAvoidanceQuery &query, Vec3 po
             Vec3 candidate = {cvx + (float)x * cs - half, 0, cvz + (float)y * cs - half};
             if (candidate.x * candidate.x + candidate.z * candidate.z > vmax_sqr) continue;
 
-            float penalty = process_sample(query, candidate, cs, position, radius, velocity, desired_velocity, min_penalty, debug);
+            float penalty = process_sample(query, candidate, cs, velocity, desired_velocity, min_penalty, debug);
             result.samples++;
 
             if (penalty < min_penalty) {
@@ -281,7 +288,7 @@ static Vec3 rotate_2d(Vec3 v, float angle) {
 
 SampleVelocityResult sample_velocity_adaptive(ObstacleAvoidanceQuery &query, Vec3 position, float radius, float vmax, Vec3 velocity,
                                               Vec3 desired_velocity, const ObstacleAvoidanceParams &params, ObstacleAvoidanceDebugData *debug) {
-    prepare_sampling(query, position, vmax, desired_velocity, params, debug);
+    prepare_sampling(query, position, radius, vmax, desired_velocity, params, debug);
 
     float *pattern = query.pattern;
     int pattern_count = 0;
@@ -346,7 +353,7 @@ SampleVelocityResult sample_velocity_adaptive(ObstacleAvoidanceQuery &query, Vec
             Vec3 candidate = {res.x + pattern[i * 2] * cr, 0, res.z + pattern[i * 2 + 1] * cr};
             if (candidate.x * candidate.x + candidate.z * candidate.z > vmax_sqr) continue;
 
-            float penalty = process_sample(query, candidate, cr_over_ten, position, radius, velocity, desired_velocity, min_penalty, debug);
+            float penalty = process_sample(query, candidate, cr_over_ten, velocity, desired_velocity, min_penalty, debug);
             result.samples++;
 
             if (penalty < min_penalty) {

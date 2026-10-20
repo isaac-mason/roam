@@ -45,6 +45,7 @@ bool move_position(PathCorridor &corridor, Vec3 new_position, const NavMesh &nav
                    SearchWorkspace *workspace = nullptr);
 
 FindCornersResult find_corners(const PathCorridor &corridor, const NavMesh &nav_mesh, int max_corners);
+bool find_corners_into(const PathCorridor &corridor, const NavMesh &nav_mesh, int max_corners, Array<StraightPathPoint> &corners);
 void release(FindCornersResult &result);
 
 bool corridor_is_valid(const PathCorridor &corridor, uint32_t max_look_ahead, const NavMesh &nav_mesh, const QueryFilter &filter);

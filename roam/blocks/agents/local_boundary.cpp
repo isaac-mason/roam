@@ -84,8 +84,9 @@ void update_local_boundary(LocalBoundary &boundary, NodeRef node_ref, Vec3 posit
 
     float collision_query_range_sqr = collision_query_range * collision_query_range;
 
+    PolyWallSegmentsResult walls = {};
     for (uint32_t p = 0; p < boundary.poly_count; p++) {
-        PolyWallSegmentsResult walls = local_neighbourhood::get_poly_wall_segments(nav_mesh, boundary.polys[p], filter, false);
+        local_neighbourhood::get_poly_wall_segments_into(nav_mesh, boundary.polys[p], filter, false, walls);
         if (walls.success) {
             uint32_t segment_count = walls.segment_vertices.length / 6;
             for (uint32_t k = 0; k < segment_count; k++) {
@@ -99,8 +100,8 @@ void update_local_boundary(LocalBoundary &boundary, NodeRef node_ref, Vec3 posit
                 add_segment_to_boundary(boundary, distance_sqr, start, end);
             }
         }
-        local_neighbourhood::release(walls);
     }
+    local_neighbourhood::release(walls);
 }
 
 bool is_local_boundary_valid(const LocalBoundary &boundary, const NavMesh &nav_mesh, const QueryFilter &filter) {

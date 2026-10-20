@@ -148,11 +148,14 @@ static void push_segment(PolyWallSegmentsResult &result, Vec3 start, Vec3 end, N
     result.segment_refs.push(ref);
 }
 
-PolyWallSegmentsResult get_poly_wall_segments(const NavMesh &nav_mesh, NodeRef node_ref, const QueryFilter &filter, bool include_portals) {
-    PolyWallSegmentsResult result = {};
+void get_poly_wall_segments_into(const NavMesh &nav_mesh, NodeRef node_ref, const QueryFilter &filter, bool include_portals,
+                                 PolyWallSegmentsResult &result) {
+    result.success = false;
+    result.segment_vertices.clear();
+    result.segment_refs.clear();
 
     TileAndPoly tile_and_poly = nav_mesh_api::get_tile_and_poly_by_ref(node_ref, nav_mesh);
-    if (!tile_and_poly.success) return result;
+    if (!tile_and_poly.success) return;
 
     const NavMeshTile &tile = *tile_and_poly.tile;
     const NavMeshPoly &poly = *tile_and_poly.poly;
@@ -212,6 +215,11 @@ PolyWallSegmentsResult get_poly_wall_segments(const NavMesh &nav_mesh, NodeRef n
 
     intervals.release();
     result.success = true;
+}
+
+PolyWallSegmentsResult get_poly_wall_segments(const NavMesh &nav_mesh, NodeRef node_ref, const QueryFilter &filter, bool include_portals) {
+    PolyWallSegmentsResult result = {};
+    get_poly_wall_segments_into(nav_mesh, node_ref, filter, include_portals, result);
     return result;
 }
 

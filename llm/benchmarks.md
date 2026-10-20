@@ -34,3 +34,24 @@ Run: `cmake --preset release && cmake --build --preset release`, then `node tool
 | crowd (100 agents, 60 updates) | 38.6392 | 38.9412 |
 
 The chained-hash pool alone makes `find_path` about 18% faster, even with a temporary workspace per call; reusing one saves little on top. The crowd doesn't move, so its time is elsewhere (obstacle avoidance sampling is the likely cost). Timings vary by a few percent between runs.
+
+## Perf round 1: crowd (2026-10-21)
+
+Profiled `roam_bench crowd` with Instruments' Time Profiler (RelWithDebInfo, `-O3 -g -fno-omit-frame-pointer`). Before the round the update split roughly into obstacle avoidance sampling (about 45%), `update_corners` with its straight path (20%), local boundary refreshes (11-15%) and corridor moves (8-15%), with about 10% of all time in malloc and free.
+
+Changes, all bit-identical (unit and parity tests unchanged, including the 240-frame flat crowd):
+- Obstacle avoidance: per-obstacle values that don't depend on the candidate velocity (the circle sweep offset and `|s|^2 - r^2`, each segment's direction, agent offset and `perp(v, w)`) are computed once in `prepare_obstacles` instead of once per sample.
+- `get_poly_height`, `get_closest_point_on_poly` and `get_closest_point_on_poly_boundary` gather poly vertices into a 32-vertex stack buffer, falling back to the heap only for larger polys.
+- `merge_start_moved` and `merge_start_shortcut` merge corridors in place instead of building a new array.
+- `_into` variants refill a caller-owned result and reuse its capacity: `find_straight_path_into`, `move_along_surface_into`, `raycast_into`, `get_poly_wall_segments_into` and `find_corners_into`. The `SearchWorkspace` keeps a scratch move and raycast result; the corridor uses them when given a workspace, the local boundary reuses one wall segment result across its polys, and the crowd swaps corners with a scratch array.
+
+Results (alternating runs of the before and after binaries, `--time 5000`):
+
+| bench | before median / min ms | after median / min ms |
+|---|---:|---:|
+| crowd (100 agents, 60 updates), quiet machine, after the first three changes | 36.64 / 35.60 | 33.67 / 32.63 |
+| crowd, busy machine, all changes | 43.35 / 38.32 | 39.85 / 34.15 |
+| find path (100 pairs) | 0.898 / 0.629 | 0.708 / 0.565 |
+| find nearest poly (200 points) | 0.309 / 0.278 | 0.218 / 0.187 |
+
+About 8-10% on the crowd and 30% on nearest poly. The crowd's remaining time is mostly inherent work: obstacle avoidance sampling is about 75 candidate velocities per agent per update against every neighbour. navcat collects every neighbour within the collision query range, where recast caps it at the 6 nearest; a cap would be the next big win but changes behaviour against navcat.

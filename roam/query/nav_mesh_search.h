@@ -37,17 +37,6 @@ struct SearchNodeQueue {
     Array<uint32_t> items;
 };
 
-struct SearchWorkspace {
-    SearchNodePool nodes;
-    SearchNodeQueue open_list;
-    SearchNodePool local_nodes;
-    Array<uint32_t> local_queue;
-    Array<float> vertices;
-    Array<float> other_vertices;
-    Array<float> raycast_vertices;
-    Array<NodeRef> neighbours;
-};
-
 enum FindNodePathResultFlags : uint32_t {
     FIND_NODE_PATH_RESULT_NONE = 0,
     FIND_NODE_PATH_RESULT_SUCCESS = 1 << 0,
@@ -115,6 +104,19 @@ struct RaycastResult {
     float path_cost;
 };
 
+struct SearchWorkspace {
+    SearchNodePool nodes;
+    SearchNodeQueue open_list;
+    SearchNodePool local_nodes;
+    Array<uint32_t> local_queue;
+    Array<float> vertices;
+    Array<float> other_vertices;
+    Array<float> raycast_vertices;
+    Array<NodeRef> neighbours;
+    MoveAlongSurfaceResult move_result;
+    RaycastResult raycast_result;
+};
+
 struct FindRandomPointResult {
     bool success;
     NodeRef node_ref;
@@ -158,12 +160,16 @@ void release(SlicedFindNodePathResult &result);
 
 MoveAlongSurfaceResult move_along_surface(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position,
                                           const QueryFilter &filter, SearchWorkspace *workspace = nullptr);
+void move_along_surface_into(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter,
+                             MoveAlongSurfaceResult &result, SearchWorkspace *workspace = nullptr);
 void release(MoveAlongSurfaceResult &result);
 
 RaycastResult raycast(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter,
                       SearchWorkspace *workspace = nullptr);
 RaycastResult raycast_with_costs(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter,
                                  NodeRef previous_ref, SearchWorkspace *workspace = nullptr);
+void raycast_into(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter,
+                  RaycastResult &result, SearchWorkspace *workspace = nullptr);
 void release(RaycastResult &result);
 
 FindRandomPointResult find_random_point(const NavMesh &nav_mesh, const QueryFilter &filter, RandomFunction random, void *random_user_data);

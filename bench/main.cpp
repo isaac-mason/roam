@@ -325,9 +325,12 @@ static void build_query_points() {
 int main(int argc, char **argv) {
     const char *fixture = "../navcat/bench/fixtures/nav-test.json";
     const char *filter = nullptr;
+    double min_total_milliseconds = 500;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--fixture") == 0 && i + 1 < argc) {
             fixture = argv[++i];
+        } else if (strcmp(argv[i], "--time") == 0 && i + 1 < argc) {
+            min_total_milliseconds = atof(argv[++i]);
         } else {
             filter = argv[i];
         }
@@ -361,7 +364,7 @@ int main(int argc, char **argv) {
     for (uint32_t i = 0; i < case_count; i++) {
         if (filter && !strstr(cases[i].name, filter)) continue;
         state.stage = i < STAGE_COUNT ? (int)i : 0;
-        BenchResult result = bench::run(cases[i]);
+        BenchResult result = bench::run(cases[i], min_total_milliseconds);
         printf("%-34s %12.4f %12.4f %8u\n", cases[i].name, result.median_milliseconds, result.min_milliseconds, result.samples);
         fflush(stdout);
     }

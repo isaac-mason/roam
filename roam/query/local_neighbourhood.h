@@ -25,6 +25,8 @@ FindLocalNeighbourhoodResult find_local_neighbourhood(const NavMesh &nav_mesh, N
 void release(FindLocalNeighbourhoodResult &result);
 
 PolyWallSegmentsResult get_poly_wall_segments(const NavMesh &nav_mesh, NodeRef node_ref, const QueryFilter &filter, bool include_portals);
+void get_poly_wall_segments_into(const NavMesh &nav_mesh, NodeRef node_ref, const QueryFilter &filter, bool include_portals,
+                                 PolyWallSegmentsResult &result);
 void release(PolyWallSegmentsResult &result);
 
 }

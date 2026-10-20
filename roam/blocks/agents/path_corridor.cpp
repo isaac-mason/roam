@@ -40,11 +40,6 @@ static bool find_furthest_common(const Array<NodeRef> &current_path, const Array
     return false;
 }
 
-static void replace(Array<NodeRef> &current_path, Array<NodeRef> &merged) {
-    current_path.release();
-    current_path = merged;
-}
-
 void merge_start_moved(Array<NodeRef> &current_path, const Array<NodeRef> &visited) {
     if (visited.length == 0) return;
 
@@ -54,11 +49,16 @@ void merge_start_moved(Array<NodeRef> &current_path, const Array<NodeRef> &visit
 
     uint32_t required = visited.length - (uint32_t)furthest_visited;
     uint32_t original = (uint32_t)furthest_path + 1 < current_path.length ? (uint32_t)furthest_path + 1 : current_path.length;
+    uint32_t kept = current_path.length - original;
 
-    Array<NodeRef> merged = {};
-    for (uint32_t i = 0; i < required; i++) merged.push(visited[visited.length - 1 - i]);
-    for (uint32_t i = original; i < current_path.length; i++) merged.push(current_path[i]);
-    replace(current_path, merged);
+    if (required > original) {
+        current_path.resize(required + kept);
+        for (uint32_t i = kept; i-- > 0;) current_path[required + i] = current_path[original + i];
+    } else {
+        for (uint32_t i = 0; i < kept; i++) current_path[required + i] = current_path[original + i];
+        current_path.resize(required + kept);
+    }
+    for (uint32_t i = 0; i < required; i++) current_path[i] = visited[visited.length - 1 - i];
 }
 
 void merge_start_shortcut(Array<NodeRef> &current_path, const Array<NodeRef> &visited) {
@@ -69,39 +69,52 @@ void merge_start_shortcut(Array<NodeRef> &current_path, const Array<NodeRef> &vi
     if (!find_furthest_common(current_path, visited, furthest_path, furthest_visited)) return;
     if (furthest_visited <= 0) return;
 
-    Array<NodeRef> merged = {};
-    for (uint32_t i = 0; i < (uint32_t)furthest_visited; i++) merged.push(visited[i]);
-    for (uint32_t i = (uint32_t)furthest_path; i < current_path.length; i++) merged.push(current_path[i]);
-    replace(current_path, merged);
+    uint32_t required = (uint32_t)furthest_visited;
+    uint32_t original = (uint32_t)furthest_path;
+    uint32_t kept = current_path.length - original;
+
+    if (required > original) {
+        current_path.resize(required + kept);
+        for (uint32_t i = kept; i-- > 0;) current_path[required + i] = current_path[original + i];
+    } else {
+        for (uint32_t i = 0; i < kept; i++) current_path[required + i] = current_path[original + i];
+        current_path.resize(required + kept);
+    }
+    for (uint32_t i = 0; i < required; i++) current_path[i] = visited[i];
 }
 
 bool move_position(PathCorridor &corridor, Vec3 new_position, const NavMesh &nav_mesh, const QueryFilter &filter, SearchWorkspace *workspace) {
     if (corridor.path.length == 0) return false;
 
-    MoveAlongSurfaceResult result = nav_mesh_search::move_along_surface(nav_mesh, corridor.path[0], corridor.position, new_position, filter, workspace);
+    MoveAlongSurfaceResult temporary = {};
+    MoveAlongSurfaceResult &result = workspace ? workspace->move_result : temporary;
+    nav_mesh_search::move_along_surface_into(nav_mesh, corridor.path[0], corridor.position, new_position, filter, result, workspace);
     bool moved = result.success;
     if (moved) {
         merge_start_moved(corridor.path, result.visited);
         corridor.position = result.position;
     }
 
-    nav_mesh_search::release(result);
+    nav_mesh_search::release(temporary);
     return moved;
 }
 
-FindCornersResult find_corners(const PathCorridor &corridor, const NavMesh &nav_mesh, int max_corners) {
-    FindCornersResult result = {};
-    if (corridor.path.length == 0) return result;
+bool find_corners_into(const PathCorridor &corridor, const NavMesh &nav_mesh, int max_corners, Array<StraightPathPoint> &corners) {
+    corners.clear();
+    if (corridor.path.length == 0) return false;
 
-    FindStraightPathResult straight_path =
-        find_straight_path::find_straight_path(nav_mesh, corridor.position, corridor.target, corridor.path.data, corridor.path.length, max_corners);
+    FindStraightPathResult straight_path = {};
+    straight_path.path = corners;
+    find_straight_path::find_straight_path_into(nav_mesh, corridor.position, corridor.target, corridor.path.data, corridor.path.length, max_corners, 0,
+                                                straight_path);
+    corners = straight_path.path;
 
-    if (!straight_path.success || straight_path.path.length == 0) {
-        find_straight_path::release(straight_path);
-        return result;
+    if (!straight_path.success || corners.length == 0) {
+        corners.clear();
+        return false;
     }
 
-    Array<StraightPathPoint> &points = straight_path.path;
+    Array<StraightPathPoint> &points = corners;
 
     uint32_t first = 0;
     while (first < points.length) {
@@ -118,9 +131,15 @@ FindCornersResult find_corners(const PathCorridor &corridor, const NavMesh &nav_
         }
     }
 
-    result.success = true;
-    for (uint32_t i = first; i < end; i++) result.corners.push(points[i]);
-    find_straight_path::release(straight_path);
+    for (uint32_t i = first; i < end; i++) points[i - first] = points[i];
+    points.resize(end - first);
+    return true;
+}
+
+FindCornersResult find_corners(const PathCorridor &corridor, const NavMesh &nav_mesh, int max_corners) {
+    FindCornersResult result = {};
+    result.success = find_corners_into(corridor, nav_mesh, max_corners, result.corners);
+    if (!result.success) result.corners.release();
     return result;
 }
 
@@ -229,9 +248,11 @@ void optimize_path_visibility(PathCorridor &corridor, Vec3 next, float path_opti
     Vec3 delta = vec3::subtract(next, corridor.position);
     Vec3 goal = vec3::scale_and_add(corridor.position, delta, path_optimization_range / distance);
 
-    RaycastResult result = nav_mesh_search::raycast(nav_mesh, corridor.path[0], corridor.position, goal, filter, workspace);
+    RaycastResult temporary = {};
+    RaycastResult &result = workspace ? workspace->raycast_result : temporary;
+    nav_mesh_search::raycast_into(nav_mesh, corridor.path[0], corridor.position, goal, filter, result, workspace);
     if (result.path.length > 1 && result.t > 0.99f) merge_start_shortcut(corridor.path, result.path);
-    nav_mesh_search::release(result);
+    nav_mesh_search::release(temporary);
 }
 
 }

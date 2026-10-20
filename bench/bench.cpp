@@ -42,17 +42,16 @@ static double sample(const BenchCase &bench_case) {
     return elapsed;
 }
 
-BenchResult run(const BenchCase &bench_case) {
+BenchResult run(const BenchCase &bench_case, double min_total_milliseconds) {
     const uint32_t WARMUP_SAMPLES = 3;
     const uint32_t MIN_SAMPLES = 10;
     const uint32_t MAX_SAMPLES = 2000;
-    const double MIN_TOTAL_MILLISECONDS = 500;
 
     for (uint32_t i = 0; i < WARMUP_SAMPLES; i++) sample(bench_case);
 
     Array<double> times = {};
     double total = 0;
-    while (times.length < MAX_SAMPLES && (times.length < MIN_SAMPLES || total < MIN_TOTAL_MILLISECONDS)) {
+    while (times.length < MAX_SAMPLES && (times.length < MIN_SAMPLES || total < min_total_milliseconds)) {
         double elapsed = sample(bench_case);
         times.push(elapsed);
         total += elapsed;

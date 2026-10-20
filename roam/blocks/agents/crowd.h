@@ -126,6 +126,7 @@ struct Crowd {
     Array<uint32_t> scratch_cells;
     Array<uint32_t> scratch_cell_starts;
     Array<uint32_t> scratch_cell_agents;
+    Array<StraightPathPoint> scratch_corners;
 };
 
 namespace crowd {

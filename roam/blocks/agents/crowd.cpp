@@ -43,6 +43,7 @@ void release(Crowd &crowd) {
     crowd.scratch_cells.release();
     crowd.scratch_cell_starts.release();
     crowd.scratch_cell_agents.release();
+    crowd.scratch_corners.release();
 }
 
 static Agent *get_agent(Crowd &crowd, uint32_t agent_id) {
@@ -487,15 +488,14 @@ static void update_corners(Crowd &crowd, const NavMesh &nav_mesh) {
             continue;
         }
 
-        FindCornersResult corners = path_corridor::find_corners(agent.corridor, nav_mesh, 3);
-        if (!corners.success) {
-            path_corridor::release(corners);
+        if (!path_corridor::find_corners_into(agent.corridor, nav_mesh, 3, crowd.scratch_corners)) {
             agent.desired_velocity = {0, 0, 0};
             continue;
         }
 
-        agent.corners.release();
-        agent.corners = corners.corners;
+        Array<StraightPathPoint> previous = agent.corners;
+        agent.corners = crowd.scratch_corners;
+        crowd.scratch_corners = previous;
 
         if ((agent.update_flags & CROWD_UPDATE_OPTIMIZE_VIS) != 0 && agent.corners.length > 0) {
             uint32_t target_index = agent.corners.length > 1 ? 1 : 0;

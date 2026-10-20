@@ -76,9 +76,9 @@ static const uint32_t ANY_CROSSINGS = FIND_STRAIGHT_PATH_AREA_CROSSINGS | FIND_S
 static const uint32_t PARTIAL = FIND_STRAIGHT_PATH_RESULT_SUCCESS | FIND_STRAIGHT_PATH_RESULT_PARTIAL_PATH;
 static const uint32_t INVALID = FIND_STRAIGHT_PATH_RESULT_NONE | FIND_STRAIGHT_PATH_RESULT_INVALID_INPUT;
 
-FindStraightPathResult find_straight_path(const NavMesh &nav_mesh, Vec3 start, Vec3 end, const NodeRef *path_node_refs, uint32_t path_node_count,
-                                          int max_points, uint32_t straight_path_options) {
-    Array<StraightPathPoint> path = {};
+static FindStraightPathResult find_straight_path_in(const NavMesh &nav_mesh, Vec3 start, Vec3 end, const NodeRef *path_node_refs,
+                                                   uint32_t path_node_count, int max_points, uint32_t straight_path_options, Array<StraightPathPoint> path) {
+    path.clear();
 
     if (!vec3::finite(start) || !vec3::finite(end) || path_node_count == 0) return make_result(INVALID, path);
 
@@ -277,6 +277,16 @@ FindStraightPathResult find_straight_path(const NavMesh &nav_mesh, Vec3 start, V
 
     uint32_t end_status = append_vertex(closest_end_position, path_node_refs[path_node_count - 1], STRAIGHT_PATH_POINT_END, path, NODE_TYPE_POLY, max_points);
     return stopped(end_status, FIND_STRAIGHT_PATH_RESULT_SUCCESS, path);
+}
+
+FindStraightPathResult find_straight_path(const NavMesh &nav_mesh, Vec3 start, Vec3 end, const NodeRef *path_node_refs, uint32_t path_node_count,
+                                          int max_points, uint32_t straight_path_options) {
+    return find_straight_path_in(nav_mesh, start, end, path_node_refs, path_node_count, max_points, straight_path_options, {});
+}
+
+void find_straight_path_into(const NavMesh &nav_mesh, Vec3 start, Vec3 end, const NodeRef *path_node_refs, uint32_t path_node_count, int max_points,
+                             uint32_t straight_path_options, FindStraightPathResult &result) {
+    result = find_straight_path_in(nav_mesh, start, end, path_node_refs, path_node_count, max_points, straight_path_options, result.path);
 }
 
 void release(FindStraightPathResult &result) { result.path.release(); }
