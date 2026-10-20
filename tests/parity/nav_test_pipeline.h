@@ -3,6 +3,7 @@
 #include "roam/generate/common.h"
 #include "roam/generate/compact_heightfield.h"
 #include "roam/generate/compact_heightfield_regions.h"
+#include "roam/generate/contour_set.h"
 #include "roam/generate/heightfield.h"
 #include "roam/generate/input_triangle_mesh.h"
 #include "tests/parity/nav_test_input.h"
@@ -87,6 +88,15 @@ inline roam::CompactHeightfield build_with_regions(NavTest &nav_test, RegionMeth
             break;
     }
     return compact_heightfield;
+}
+
+inline uint32_t contour_flags_for(RegionMethod method) {
+    return method == REGION_METHOD_WATERSHED ? roam::CONTOUR_TESS_WALL_EDGES : roam::CONTOUR_TESS_WALL_EDGES | roam::CONTOUR_TESS_AREA_EDGES;
+}
+
+inline roam::ContourSet build_contour_set(NavTest &nav_test, const roam::CompactHeightfield &compact_heightfield, RegionMethod method) {
+    return roam::contour_set::build_contours(nav_test.context, compact_heightfield, nav_test.options.max_simplification_error,
+                                             nav_test.options.max_edge_length, contour_flags_for(method));
 }
 
 template <typename T, typename Field>

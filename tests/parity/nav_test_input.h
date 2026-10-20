@@ -34,6 +34,7 @@ struct NavTestOptions {
     int merge_region_area;
     float max_simplification_error;
     int max_edge_length;
+    int max_vertices_per_poly;
 };
 
 inline NavTestOptions load_nav_test_options(const fixture::Fixture &nav_test) {
@@ -49,5 +50,6 @@ inline NavTestOptions load_nav_test_options(const fixture::Fixture &nav_test) {
     options.merge_region_area = fixture::i32(nav_test, "options.merge_region_area").data[0];
     options.max_simplification_error = (float)fixture::number(nav_test, "options.max_simplification_error");
     options.max_edge_length = fixture::i32(nav_test, "options.max_edge_length").data[0];
+    options.max_vertices_per_poly = fixture::i32(nav_test, "options.max_vertices_per_poly").data[0];
     return options;
 }

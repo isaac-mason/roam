@@ -53,7 +53,7 @@ From JS to C++:
 - `Record<string, X>` keyed by pool ids becomes an `Array<X>` of slots indexed by an `IndexPool` id, each with an `allocated` flag.
 - The tile position maps become a `Map<uint64_t, …>` keyed by packed (x, y, layer).
 - Result objects become result structs that own `Array`s.
-- `BuildContext` keeps its timings and logs, using a monotonic clock.
+- `BuildContext` keeps only logs. roam never reads a clock: in wasm that means a call out to JS. Callers time stages themselves; the shape rasterizers take no context.
 
 ## Parity testing
 

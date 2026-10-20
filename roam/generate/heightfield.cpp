@@ -266,7 +266,6 @@ static bool rasterize_triangle(Vec3 v0, Vec3 v1, Vec3 v2, uint8_t area_id, Heigh
 
 bool rasterize_triangles(BuildContext &context, Heightfield &heightfield, const float *vertices, const uint32_t *indices,
                          uint32_t index_count, const uint8_t *tri_area_ids, int flag_merge_threshold) {
-    build_context::start(context, "RASTERIZE_TRIANGLES");
 
     uint32_t triangle_count = index_count / 3;
 
@@ -277,12 +276,10 @@ bool rasterize_triangles(BuildContext &context, Heightfield &heightfield, const 
 
         if (!rasterize_triangle(v0, v1, v2, tri_area_ids[triangle], heightfield, flag_merge_threshold)) {
             build_context::error(context, "Failed to rasterize triangle");
-            build_context::end(context, "RASTERIZE_TRIANGLES");
             return false;
         }
     }
 
-    build_context::end(context, "RASTERIZE_TRIANGLES");
     return true;
 }
 
@@ -782,13 +779,11 @@ static YSpan intersect_convex(const CellRect &cell, const uint32_t *triangles, u
     return span;
 }
 
-void rasterize_sphere(Heightfield &heightfield, Vec3 center, float radius, uint8_t area, int flag_merge_threshold, BuildContext &context) {
-    build_context::start(context, "RASTERIZE_SPHERE");
+void rasterize_sphere(Heightfield &heightfield, Vec3 center, float radius, uint8_t area, int flag_merge_threshold) {
     Box3 bounds = {vec3::subtract(center, {radius, radius, radius}), vec3::add(center, {radius, radius, radius})};
     float radius_sqr = radius * radius;
     rasterization_filled_shape(heightfield, bounds, area, flag_merge_threshold,
                                [&](const CellRect &cell) { return intersect_sphere(cell, center, radius_sqr); });
-    build_context::end(context, "RASTERIZE_SPHERE");
 }
 
 static Box3 segment_bounds(Vec3 start, Vec3 end, float radius) {
@@ -796,29 +791,21 @@ static Box3 segment_bounds(Vec3 start, Vec3 end, float radius) {
     return {vec3::subtract(vec3::min(start, end), padding), vec3::add(vec3::max(start, end), padding)};
 }
 
-void rasterize_capsule(Heightfield &heightfield, Vec3 start, Vec3 end, float radius, uint8_t area, int flag_merge_threshold,
-                       BuildContext &context) {
-    build_context::start(context, "RASTERIZE_CAPSULE");
+void rasterize_capsule(Heightfield &heightfield, Vec3 start, Vec3 end, float radius, uint8_t area, int flag_merge_threshold) {
     Vec3 axis = vec3::subtract(end, start);
     float radius_sqr = radius * radius;
     rasterization_filled_shape(heightfield, segment_bounds(start, end, radius), area, flag_merge_threshold,
                                [&](const CellRect &cell) { return intersect_capsule(cell, start, end, axis, radius_sqr); });
-    build_context::end(context, "RASTERIZE_CAPSULE");
 }
 
-void rasterize_cylinder(Heightfield &heightfield, Vec3 start, Vec3 end, float radius, uint8_t area, int flag_merge_threshold,
-                        BuildContext &context) {
-    build_context::start(context, "RASTERIZE_CYLINDER");
+void rasterize_cylinder(Heightfield &heightfield, Vec3 start, Vec3 end, float radius, uint8_t area, int flag_merge_threshold) {
     Vec3 axis = vec3::subtract(end, start);
     float radius_sqr = radius * radius;
     rasterization_filled_shape(heightfield, segment_bounds(start, end, radius), area, flag_merge_threshold,
                                [&](const CellRect &cell) { return intersect_cylinder(cell, start, end, axis, radius_sqr); });
-    build_context::end(context, "RASTERIZE_CYLINDER");
 }
 
-void rasterize_box(Heightfield &heightfield, Vec3 center, const Vec3 half_edges[3], uint8_t area, int flag_merge_threshold,
-                   BuildContext &context) {
-    build_context::start(context, "RASTERIZE_BOX");
+void rasterize_box(Heightfield &heightfield, Vec3 center, const Vec3 half_edges[3], uint8_t area, int flag_merge_threshold) {
     Vec3 normals[3] = {vec3::normalize(half_edges[0]), vec3::normalize(half_edges[1]), vec3::normalize(half_edges[2])};
 
     float vertices[8 * 3];
@@ -842,7 +829,6 @@ void rasterize_box(Heightfield &heightfield, Vec3 center, const Vec3 half_edges[
 
     rasterization_filled_shape(heightfield, bounds, area, flag_merge_threshold,
                                [&](const CellRect &cell) { return intersect_box(cell, vertices, planes); });
-    build_context::end(context, "RASTERIZE_BOX");
 }
 
 static Plane plane_from_edges(Vec3 v1, Vec3 v2, Vec3 point) {
@@ -853,8 +839,7 @@ static Plane plane_from_edges(Vec3 v1, Vec3 v2, Vec3 point) {
 static Plane scale_plane(Plane plane, float scale) { return {vec3::scale(plane.normal, scale), plane.distance * scale}; }
 
 void rasterize_convex(Heightfield &heightfield, const float *vertices, uint32_t vertex_float_count, const uint32_t *triangles,
-                      uint32_t triangle_index_count, uint8_t area, int flag_merge_threshold, BuildContext &context) {
-    build_context::start(context, "RASTERIZE_CONVEX");
+                      uint32_t triangle_index_count, uint8_t area, int flag_merge_threshold) {
 
     Box3 bounds = {vec3::load(vertices, 0), vec3::load(vertices, 0)};
     for (uint32_t i = 0; i < vertex_float_count; i += 3) bounds = box3::expand_by_point(bounds, vec3::load(vertices, i));
@@ -887,7 +872,6 @@ void rasterize_convex(Heightfield &heightfield, const float *vertices, uint32_t 
 
     planes.release();
     triangle_bounds.release();
-    build_context::end(context, "RASTERIZE_CONVEX");
 }
 
 }

@@ -49,15 +49,12 @@ void filter_low_hanging_walkable_obstacles(Heightfield &heightfield, int walkabl
 void filter_ledge_spans(Heightfield &heightfield, int walkable_height, int walkable_climb);
 void filter_walkable_low_height_spans(Heightfield &heightfield, int walkable_height);
 
-void rasterize_sphere(Heightfield &heightfield, Vec3 center, float radius, uint8_t area, int flag_merge_threshold, BuildContext &context);
-void rasterize_capsule(Heightfield &heightfield, Vec3 start, Vec3 end, float radius, uint8_t area, int flag_merge_threshold,
-                       BuildContext &context);
-void rasterize_cylinder(Heightfield &heightfield, Vec3 start, Vec3 end, float radius, uint8_t area, int flag_merge_threshold,
-                        BuildContext &context);
-void rasterize_box(Heightfield &heightfield, Vec3 center, const Vec3 half_edges[3], uint8_t area, int flag_merge_threshold,
-                   BuildContext &context);
+void rasterize_sphere(Heightfield &heightfield, Vec3 center, float radius, uint8_t area, int flag_merge_threshold);
+void rasterize_capsule(Heightfield &heightfield, Vec3 start, Vec3 end, float radius, uint8_t area, int flag_merge_threshold);
+void rasterize_cylinder(Heightfield &heightfield, Vec3 start, Vec3 end, float radius, uint8_t area, int flag_merge_threshold);
+void rasterize_box(Heightfield &heightfield, Vec3 center, const Vec3 half_edges[3], uint8_t area, int flag_merge_threshold);
 void rasterize_convex(Heightfield &heightfield, const float *vertices, uint32_t vertex_float_count, const uint32_t *triangles,
-                      uint32_t triangle_index_count, uint8_t area, int flag_merge_threshold, BuildContext &context);
+                      uint32_t triangle_index_count, uint8_t area, int flag_merge_threshold);
 
 }
 

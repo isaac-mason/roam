@@ -117,6 +117,16 @@ const contourSetEntries = (prefix, contourSet) => [
     i32(`${prefix}.areas`, contourSet.contours.map((contour) => contour.area)),
 ];
 
+const polyMeshEntries = (prefix, polyMesh) => [
+    i32(`${prefix}.vertex_count`, polyMesh.nVertices),
+    i32(`${prefix}.poly_count`, polyMesh.nPolys),
+    i32(`${prefix}.vertices`, polyMesh.vertices.slice(0, polyMesh.nVertices * 3)),
+    i32(`${prefix}.polys`, polyMesh.polys.slice(0, polyMesh.nPolys * polyMesh.maxVerticesPerPoly)),
+    i32(`${prefix}.regions`, polyMesh.regions.slice(0, polyMesh.nPolys)),
+    i32(`${prefix}.areas`, polyMesh.areas.slice(0, polyMesh.nPolys)),
+    f64(`${prefix}.bounds`, polyMesh.bounds),
+];
+
 const config = {
     cellSize: 0.15,
     cellHeight: 0.15,
@@ -129,6 +139,7 @@ const config = {
     mergeRegionArea: 20,
     maxSimplificationError: 1.3,
     maxEdgeLength: 12,
+    maxVerticesPerPoly: 5,
 };
 
 const options = {
@@ -153,6 +164,7 @@ const dumpSoloGeneration = (name, positions, indices) => {
         i32('options.merge_region_area', options.mergeRegionArea),
         f64('options.max_simplification_error', options.maxSimplificationError),
         i32('options.max_edge_length', options.maxEdgeLength),
+        i32('options.max_vertices_per_poly', options.maxVerticesPerPoly),
     ];
 
     const ctx = navcat.BuildContext.create();
@@ -195,6 +207,9 @@ const dumpSoloGeneration = (name, positions, indices) => {
     const contourSet = navcat.buildContours(ctx, chf, options.maxSimplificationError, options.maxEdgeLength, navcat.ContourBuildFlags.CONTOUR_TESS_WALL_EDGES);
     entries.push(...contourSetEntries('contours.watershed', contourSet));
 
+    const polyMesh = navcat.buildPolyMesh(ctx, contourSet, options.maxVerticesPerPoly);
+    entries.push(...polyMeshEntries('poly_mesh.watershed', polyMesh));
+
     const monotone = buildCompact();
     navcat.erodeWalkableArea(options.walkableRadiusVoxels, monotone);
     navcat.buildDistanceField(monotone);
@@ -208,8 +223,13 @@ const dumpSoloGeneration = (name, positions, indices) => {
     entries.push(...regionEntries('regions.layers', layers));
 
     const tessellateAll = navcat.ContourBuildFlags.CONTOUR_TESS_WALL_EDGES | navcat.ContourBuildFlags.CONTOUR_TESS_AREA_EDGES;
-    entries.push(...contourSetEntries('contours.monotone', navcat.buildContours(ctx, monotone, options.maxSimplificationError, options.maxEdgeLength, tessellateAll)));
-    entries.push(...contourSetEntries('contours.layers', navcat.buildContours(ctx, layers, options.maxSimplificationError, options.maxEdgeLength, tessellateAll)));
+    const monotoneContours = navcat.buildContours(ctx, monotone, options.maxSimplificationError, options.maxEdgeLength, tessellateAll);
+    const layerContours = navcat.buildContours(ctx, layers, options.maxSimplificationError, options.maxEdgeLength, tessellateAll);
+    entries.push(...contourSetEntries('contours.monotone', monotoneContours));
+    entries.push(...contourSetEntries('contours.layers', layerContours));
+    entries.push(...polyMeshEntries('poly_mesh.monotone', navcat.buildPolyMesh(ctx, monotoneContours, options.maxVerticesPerPoly)));
+    entries.push(...polyMeshEntries('poly_mesh.layers', navcat.buildPolyMesh(ctx, layerContours, options.maxVerticesPerPoly)));
+    entries.push(...polyMeshEntries('poly_mesh.triangles', navcat.buildPolyMesh(ctx, contourSet, 3)));
 
     writeFixture(name, entries);
     console.log(`wrote ${name}.bin (${entries.length} entries)`);
