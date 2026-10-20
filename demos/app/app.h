@@ -13,12 +13,20 @@ struct Click {
     bool shift;
 };
 
+struct Hover {
+    bool hit;
+    roam::Vec3 point;
+};
+
 struct App {
     Renderer renderer;
     Camera camera;
     Model level;
     bool show_level;
     Click click;
+    bool want_hover;
+    Hover hover;
+    bool keys[512];
     roam::Array<StaticDrawing> statics;
 };
 

@@ -68,6 +68,7 @@ static void select_example(int index) {
     if (current_example >= 0 && EXAMPLES[current_example]->shutdown) EXAMPLES[current_example]->shutdown(state);
     current_example = index;
     state.click = {};
+    state.want_hover = false;
     EXAMPLES[current_example]->init(state);
 }
 
@@ -125,6 +126,12 @@ static void frame() {
     camera::update(state.camera, width, height);
     renderer::clear(state.renderer.frame);
     state.statics.clear();
+
+    state.hover = {};
+    if (state.want_hover && !ImGui::GetIO().WantCaptureMouse) {
+        RayHit hit = model::raycast(state.level, camera::screen_ray(state.camera, input.x, input.y));
+        state.hover = {hit.hit, hit.point};
+    }
 
     const Example &example = *EXAMPLES[current_example];
     if (example.update) example.update(state, delta_time);
@@ -204,6 +211,12 @@ static void event(const sapp_event *e) {
         case SAPP_EVENTTYPE_MOUSE_UP:
             if (input.down && !input.dragging) click(e->mouse_x, e->mouse_y, e->mouse_button, e->modifiers);
             input.down = false;
+            break;
+        case SAPP_EVENTTYPE_KEY_DOWN:
+            if (!ImGui::GetIO().WantCaptureKeyboard && e->key_code >= 0 && e->key_code < 512) state.keys[e->key_code] = true;
+            break;
+        case SAPP_EVENTTYPE_KEY_UP:
+            if (e->key_code >= 0 && e->key_code < 512) state.keys[e->key_code] = false;
             break;
         case SAPP_EVENTTYPE_MOUSE_SCROLL:
             camera::zoom(state.camera, e->scroll_y);
