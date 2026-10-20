@@ -79,6 +79,7 @@ struct OffMeshConnectionsExample {
     uint32_t node_count;
     uint32_t off_mesh_node_count;
     Array<StraightPathPoint> path;
+    SearchWorkspace workspace;
 };
 
 static OffMeshConnectionsExample off_mesh_connections_example;
@@ -109,7 +110,7 @@ static void update_path() {
     flag(list, state.start, {0.129f, 0.588f, 0.953f, 1});
     flag(list, state.end, {0, 1, 0, 1});
 
-    FindPathResult path = find_path::find_path(nav_mesh, state.start, state.end, {1, 1, 1}, state.filter);
+    FindPathResult path = find_path::find_path(nav_mesh, state.start, state.end, {1, 1, 1}, state.filter, {}, &state.workspace);
     state.success = path.success;
     state.flags = path.flags;
     state.straight_path_flags = path.straight_path_flags;
@@ -120,7 +121,7 @@ static void update_path() {
     for (const StraightPathPoint &point : path.path) state.path.push(point);
 
     if (path.success) {
-        DebugPrimitives nodes = debug::create_search_nodes_helper(path.node_path.nodes);
+        DebugPrimitives nodes = debug::create_search_nodes_helper(state.workspace.nodes);
         renderer::add_primitives(list, nodes);
         debug::release(nodes);
 
@@ -226,6 +227,7 @@ static void ui(App &) {
 static void shutdown(App &) {
     OffMeshConnectionsExample &state = off_mesh_connections_example;
     renderer::release(state.nav_mesh_drawing);
+    nav_mesh_search::release(state.workspace);
     renderer::release(state.off_mesh_connections_drawing);
     renderer::release(state.path_drawing);
     state.path.release();

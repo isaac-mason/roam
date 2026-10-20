@@ -57,6 +57,7 @@ struct AreaFiltersExample {
     bool success;
     bool partial;
     uint32_t point_count;
+    SearchWorkspace workspace;
 };
 
 static AreaFiltersExample area_filters_example;
@@ -206,12 +207,12 @@ static void update_path() {
                          : state.filter == AREA_FILTERS_FILTER_GROUND ? area_only_query_filter(AREA_FILTERS_GROUND)
                                                                       : area_only_query_filter(AREA_FILTERS_WATER);
 
-    FindPathResult path = find_path::find_path(nav_mesh, state.start, state.end, {1, 1, 1}, filter);
+    FindPathResult path = find_path::find_path(nav_mesh, state.start, state.end, {1, 1, 1}, filter, {}, &state.workspace);
     state.success = path.success;
     state.partial = (path.straight_path_flags & FIND_STRAIGHT_PATH_RESULT_PARTIAL_PATH) != 0;
     state.point_count = path.path.length;
 
-    DebugPrimitives nodes = debug::create_search_nodes_helper(path.node_path.nodes);
+    DebugPrimitives nodes = debug::create_search_nodes_helper(state.workspace.nodes);
     renderer::add_primitives(list, nodes);
     debug::release(nodes);
 
@@ -288,6 +289,7 @@ static void ui(App &) {
 static void shutdown(App &) {
     AreaFiltersExample &state = area_filters_example;
     renderer::release(state.nav_mesh_drawing);
+    nav_mesh_search::release(state.workspace);
     renderer::release(state.heightfield_drawing);
     renderer::release(state.compact_heightfield_drawing);
     renderer::release(state.path_drawing);
