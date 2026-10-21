@@ -1,3 +1,6 @@
+#include <float.h>
+#include <math.h>
+
 #include "roam/generate/common.h"
 #include "roam/query/nav_mesh_api.h"
 #include "tests/harness/fixture.h"
@@ -65,6 +68,44 @@ TEST(nav_mesh_matches_navcat_on_nav_test) {
     }
     CHECK(nearest_mismatches == 0);
     CHECK(polygon_mismatches == 0);
+
+    uint32_t pruning_mismatches = 0;
+    uint32_t seed = 12345;
+    for (uint32_t i = 0; i < 400; i++) {
+        float u[3];
+        for (float &value : u) {
+            seed = seed * 1664525u + 1013904223u;
+            value = (float)(seed >> 8) / (float)(1u << 24);
+        }
+        Vec3 point = {params.bounds.min.x + (params.bounds.max.x - params.bounds.min.x) * u[0],
+                      params.bounds.min.y + (params.bounds.max.y - params.bounds.min.y) * u[1],
+                      params.bounds.min.z + (params.bounds.max.z - params.bounds.min.z) * u[2]};
+        Vec3 half_extents = {3, 4, 3};
+
+        FindNearestPolyResult pruned;
+        nav_mesh_api::find_nearest_poly(pruned, nav_mesh, point, half_extents, nav_mesh_api::DEFAULT_QUERY_FILTER);
+
+        NodeRef candidates[1024];
+        QueryPolygonsResult polygons;
+        nav_mesh_api::query_polygons(polygons, nav_mesh, {vec3::subtract(point, half_extents), vec3::add(point, half_extents)},
+                                     nav_mesh_api::DEFAULT_QUERY_FILTER, candidates, 1024);
+        FindNearestPolyResult brute = {false, INVALID_NODE_REF, point};
+        float best = FLT_MAX;
+        for (uint32_t k = 0; k < polygons.poly_count; k++) {
+            GetClosestPointOnPolyResult closest;
+            nav_mesh_api::get_closest_point_on_poly(closest, nav_mesh, candidates[k], point);
+            Vec3 difference = vec3::subtract(point, closest.position);
+            float height_difference = fabsf(difference.y) - nav_mesh.tiles[0].walkable_climb;
+            float distance_sqr = closest.is_over_poly ? (height_difference > 0 ? height_difference * height_difference : 0) : vec3::squared_length(difference);
+            if (distance_sqr < best) {
+                best = distance_sqr;
+                brute = {true, candidates[k], closest.position};
+            }
+        }
+        bool same = pruned.success == brute.success && pruned.node_ref == brute.node_ref && vec3::exactly_equals(pruned.position, brute.position);
+        if (!same) pruning_mismatches++;
+    }
+    CHECK(pruning_mismatches == 0);
 
     fixture::F64 start = fixture::f64(expected, "off_mesh.start");
     fixture::F64 end = fixture::f64(expected, "off_mesh.end");

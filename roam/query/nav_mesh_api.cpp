@@ -281,7 +281,7 @@ void release(PolyVertices &vertices) {
 }
 
 void get_poly_height(GetPolyHeightResult &out, const NavMeshTile &tile, const NavMeshPoly &poly, int poly_index, Vec3 position) {
-    PolyVertices vertices = {};
+    PolyVertices vertices;
     gather_poly_vertices(tile, poly, vertices);
 
     out = {false, 0};
@@ -320,7 +320,7 @@ void get_closest_point_on_poly_boundary(ClosestPointOnPolyBoundary &out, const N
     const NavMeshTile &tile = *tile_and_poly.tile;
     const NavMeshPoly &poly = *tile_and_poly.poly;
 
-    PolyVertices vertices = {};
+    PolyVertices vertices;
     gather_poly_vertices(tile, poly, vertices);
     uint32_t vertex_count = poly.vertex_count;
 
@@ -363,7 +363,7 @@ void get_closest_point_on_poly_boundary(ClosestPointOnPolyBoundary &out, const N
     release(vertices);
 }
 
-using PolyVisitor = void (*)(NodeRef ref, void *user_data);
+using PolyVisitor = void (*)(const NavMeshTile &tile, int poly_index, NodeRef ref, void *user_data);
 
 static void visit_polygons_in_tile(const NavMesh &nav_mesh, const NavMeshTile &tile, Box3 bounds, const QueryFilter &filter, PolyVisitor visit,
                                    void *user_data) {
@@ -389,7 +389,7 @@ static void visit_polygons_in_tile(const NavMesh &nav_mesh, const NavMeshTile &t
 
         if (is_leaf_node && overlap) {
             NodeRef ref = get_node_by_tile_and_poly(nav_mesh, tile, bv_node.i).ref;
-            if (filter.pass_filter(filter, ref, nav_mesh)) visit(ref, user_data);
+            if (filter.pass_filter(filter, ref, nav_mesh)) visit(tile, bv_node.i, ref, user_data);
         }
 
         if (overlap || is_leaf_node) {
@@ -422,31 +422,51 @@ struct NearestPolySearch {
     FindNearestPolyResult *out;
 };
 
-static void visit_nearest_poly(NodeRef ref, void *user_data) {
+static const float NEAREST_POLY_BOUNDS_SLACK = 1e-3f;
+
+static float squared_distance_to_poly_bounds_2d(Vec3 point, const float *vertices, uint32_t vertex_count) {
+    float min_x = vertices[0];
+    float max_x = vertices[0];
+    float min_z = vertices[2];
+    float max_z = vertices[2];
+    for (uint32_t i = 1; i < vertex_count; i++) {
+        min_x = scalar::min(min_x, vertices[i * 3]);
+        max_x = scalar::max(max_x, vertices[i * 3]);
+        min_z = scalar::min(min_z, vertices[i * 3 + 2]);
+        max_z = scalar::max(max_z, vertices[i * 3 + 2]);
+    }
+    float dx = scalar::max(scalar::max(min_x - NEAREST_POLY_BOUNDS_SLACK - point.x, point.x - max_x - NEAREST_POLY_BOUNDS_SLACK), 0.0f);
+    float dz = scalar::max(scalar::max(min_z - NEAREST_POLY_BOUNDS_SLACK - point.z, point.z - max_z - NEAREST_POLY_BOUNDS_SLACK), 0.0f);
+    return dx * dx + dz * dz;
+}
+
+static void visit_nearest_poly(const NavMeshTile &tile, int poly_index, NodeRef ref, void *user_data) {
     NearestPolySearch &search = *(NearestPolySearch *)user_data;
-    const NavMesh &nav_mesh = *search.nav_mesh;
+    const NavMeshPoly &poly = tile.polys[(uint32_t)poly_index];
 
-    GetClosestPointOnPolyResult closest_point;
-    get_closest_point_on_poly(closest_point, nav_mesh, ref, search.center);
-    if (!closest_point.success) return;
-
-    const NavMeshTile *tile = tile_by_id(nav_mesh, get_node_by_ref(nav_mesh, ref).tile_id);
-    if (!tile) return;
-
-    Vec3 difference = vec3::subtract(search.center, closest_point.position);
+    PolyVertices vertices;
+    uint32_t vertex_count = gather_poly_vertices(tile, poly, vertices);
+    float lower_bound = squared_distance_to_poly_bounds_2d(search.center, vertices.data, vertex_count);
+    bool over_poly = lower_bound == 0 && geometry::point_in_poly(search.center, vertices.data, (int)vertex_count);
+    release(vertices);
+    if (!over_poly && lower_bound >= search.nearest_distance_sqr) return;
 
     float distance_sqr;
-    if (closest_point.is_over_poly) {
-        float height_difference = fabsf(difference.y) - tile->walkable_climb;
+    Vec3 closest;
+    if (over_poly) {
+        float height = get_detail_mesh_height(tile, poly, poly_index, search.center);
+        closest = {search.center.x, height, search.center.z};
+        float height_difference = fabsf(search.center.y - height) - tile.walkable_climb;
         distance_sqr = height_difference > 0 ? height_difference * height_difference : 0;
     } else {
-        distance_sqr = vec3::squared_length(difference);
+        closest = get_closest_point_on_detail_edges(tile, poly, poly_index, search.center, true).point;
+        distance_sqr = vec3::squared_length(vec3::subtract(search.center, closest));
     }
 
     if (distance_sqr < search.nearest_distance_sqr) {
         search.nearest_distance_sqr = distance_sqr;
         search.out->node_ref = ref;
-        search.out->position = closest_point.position;
+        search.out->position = closest;
         search.out->success = true;
     }
 }
@@ -465,7 +485,7 @@ struct PolyWriter {
     uint32_t count;
 };
 
-static void write_poly(NodeRef ref, void *user_data) {
+static void write_poly(const NavMeshTile &, int, NodeRef ref, void *user_data) {
     PolyWriter &writer = *(PolyWriter *)user_data;
     if (writer.count < writer.capacity) writer.polys[writer.count] = ref;
     writer.count++;

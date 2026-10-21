@@ -30,8 +30,8 @@ constexpr uint32_t INLINE_POLY_VERTICES = 32;
 
 struct PolyVertices {
     float inline_values[INLINE_POLY_VERTICES * 3];
-    Array<float> overflow;
-    float *data;
+    Array<float> overflow = {};
+    float *data = nullptr;
 };
 
 struct GetPolyHeightResult {

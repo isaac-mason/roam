@@ -899,7 +899,7 @@ static void raycast_base(RaycastResult &result, const NavMesh &nav_mesh, NodeRef
 
     if (!nav_mesh_api::is_valid_node_ref(nav_mesh, start_node_ref) || !vec3::finite(start_position) || !vec3::finite(end_position)) return;
 
-    PolyVertices vertices = {};
+    PolyVertices vertices;
 
     NodeRef current_ref = start_node_ref;
     NodeRef previous_ref_tracking = previous_ref;
@@ -1063,7 +1063,7 @@ static float poly_area(const NavMeshTile &tile, const NavMeshPoly &poly) {
 
 static void random_point_in_poly(FindRandomPointResult &out, const NavMesh &nav_mesh, const NavMeshTile &tile, const NavMeshPoly &poly,
                                  NodeRef poly_ref, RandomFunction random, void *random_user_data) {
-    PolyVertices vertices = {};
+    PolyVertices vertices;
     uint32_t vertex_count = nav_mesh_api::gather_poly_vertices(tile, poly, vertices);
 
     float s = random(random_user_data);
