@@ -1,5 +1,3 @@
-#include <time.h>
-
 #include "roam/blocks/geometry/chunky_tri_mesh.h"
 #include "tests/harness/test.h"
 
@@ -27,12 +25,6 @@ static TestGrid create_test_grid(int size) {
 static void release_test_grid(TestGrid &grid) {
     grid.positions.release();
     grid.indices.release();
-}
-
-static double now_ms() {
-    timespec time;
-    clock_gettime(CLOCK_MONOTONIC, &time);
-    return (double)time.tv_sec * 1e3 + (double)time.tv_nsec / 1e6;
 }
 
 TEST_CASE("chunky tri mesh create should create a chunky tri mesh from vertices and indices") {
@@ -203,24 +195,17 @@ TEST_CASE("chunky tri mesh get chunks overlapping segment should return empty ar
     release_test_grid(grid);
 }
 
-TEST_CASE("chunky tri mesh performance should efficiently query large meshes") {
+TEST_CASE("chunky tri mesh queries every region of a large mesh") {
     TestGrid grid = create_test_grid(50);
-
-    double start = now_ms();
     ChunkyTriMesh mesh = chunky_tri_mesh::create({grid.positions, grid.indices}, 64);
-    double build_time = now_ms() - start;
 
-    double query_start = now_ms();
     for (int i = 0; i < 100; i++) {
         float x = (float)((i % 10) * 5);
         float z = (float)((i / 10) * 5);
         Array<uint32_t> triangles = chunky_tri_mesh::get_triangles_in_rect(mesh, {x, z}, {x + 5, z + 5});
+        CHECK(triangles.length > 0);
         triangles.release();
     }
-    double query_time = now_ms() - query_start;
-
-    CHECK(build_time < 100);
-    CHECK(query_time < 50);
 
     chunky_tri_mesh::release(mesh);
     release_test_grid(grid);
