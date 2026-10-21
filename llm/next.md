@@ -37,13 +37,13 @@ Generation:
 - [ ] **Counts that duplicate array lengths.** `CompactHeightfield::span_count`, `Contour::vertex_count` / `raw_vertex_count`, `PolyMesh::vertex_count` / `poly_count`, `PolyMeshDetail::mesh_count` / `vertex_count` / `triangle_count` sit next to arrays that already know their length. Two sources of truth (the nav mesh structs dropped theirs).
 - [ ] **Borrowed arrays that look owned.** `NavMeshTileParams` holds `Array<T>` fields that it doesn't own (`build_tile` copies them). Make them `Span<const T>`. Also add one helper that builds tile params from tile polys and detail mesh; the solo and tiled generators and the bench each write the 15-field copy by hand.
 - [ ] **Internal constants in `roam::`.** `common.h` exports `AXIS_X`, `BORDER_VERTEX`, `AREA_BORDER`, `MULTIPLE_REGS`, `CONTOUR_REG_MASK`, `MAX_LAYERS` and the direction helpers next to the public `NULL_AREA`, `WALKABLE_AREA`, `MESH_NULL_IDX`.
-- [ ] Maybe: typed records for the flat int arrays (`PolyMesh::vertices` stride 3, `polys` stride 2 x nvp, detail `meshes` and `triangles` stride 4). Bigger change; parity tests compare these arrays.
+- [ ] **Later phase: typed records** for the flat int arrays (`PolyMesh::vertices` stride 3, `polys` stride 2 x nvp, detail `meshes` and `triangles` stride 4). Bigger change; parity tests compare these arrays.
 - [ ] Small: `flag_merge_threshold` defaults to 1 on `rasterize_triangles` but is required on the shape rasterizers.
 
 Query:
 
-- [ ] **`release_nav_mesh`** is the only `release_<thing>` left; everything else is a `release(T &)` overload.
-- [ ] **Result naming.** `ClosestPointOnPolyBoundary` and `ClosestPointOnDetailEdges` lack the `Result` suffix that `GetClosestPointOnPolyResult` has, and use `point` where the others use `position`. `get_closest_point_on_detail_edges` returns by value while its siblings write `out`.
-- [ ] **`success` and a `SUCCESS` flag** both live in `FindNodePathResult`, `FindPathResult`, `FindStraightPathResult`, `FindSmoothPathResult`. Two sources of truth; navcat has both, so decide deliberately.
+- [x] **`release_nav_mesh`** → `release(NavMesh &)`. Was the only `release_<thing>` left; everything else is a `release(T &)` overload.
+- [x] **Result naming.** Now `GetClosestPointOnPolyBoundaryResult`, `GetClosestPointOnDetailEdgesResult` (out-first), `GetPortalPointsResult`, `GetEdgeMidPointResult`, all with `position`. Was: `ClosestPointOnPolyBoundary` and `ClosestPointOnDetailEdges` lack the `Result` suffix that `GetClosestPointOnPolyResult` has, and use `point` where the others use `position`. `get_closest_point_on_detail_edges` returns by value while its siblings write `out`.
+- [ ] **Later: `success` and a `SUCCESS` flag** both live in `FindNodePathResult`, `FindPathResult`, `FindStraightPathResult`, `FindSmoothPathResult`. Two sources of truth; navcat has both, so decide deliberately.
 - [ ] Small: `StraightPathPoint::type` repeats the type bits in `node_ref` (40 → 32 bytes without it; navcat has the field).
-- [ ] Blocks (crowd, path corridor) use `SearchWorkspace` arrays (`node_path`, `visited`, `raycast_path`) as their own scratch, coupling them to the workspace's internals.
+- [ ] **Later, design: blocks scratch.** Blocks (crowd, path corridor) use `SearchWorkspace` arrays (`node_path`, `visited`, `raycast_path`) as their own scratch, coupling them to the workspace's internals. They may want their own scratch.

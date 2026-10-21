@@ -207,7 +207,7 @@ static void shutdown(App &app) {
     nav_mesh_search::release(state.workspace);
     renderer::release(state.nav_mesh_links_drawing);
     renderer::release(state.path_drawing);
-    if (state.generated) nav_mesh_api::release_nav_mesh(state.nav_mesh);
+    if (state.generated) nav_mesh_api::release(state.nav_mesh);
     state.generated = false;
     model::release(state.nav_mesh_geometry);
     app.show_level = true;

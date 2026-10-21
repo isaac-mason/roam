@@ -124,7 +124,7 @@ TEST(nav_mesh_matches_navcat_on_nav_test) {
 
     check_nav_mesh("nav_mesh.with_off_mesh", nav_mesh, expected);
 
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
     release(params);
     fixture::release(expected);
 }

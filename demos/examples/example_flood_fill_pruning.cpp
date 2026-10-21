@@ -181,7 +181,7 @@ static void update_polys_drawing() {
 
 static void clear_prune() {
     FloodFillPruningExample &state = flood_fill_pruning_example;
-    if (state.pruned) nav_mesh_api::release_nav_mesh(state.pruned_nav_mesh);
+    if (state.pruned) nav_mesh_api::release(state.pruned_nav_mesh);
     state.pruned = false;
     state.reachable.clear();
 }
@@ -294,7 +294,7 @@ static void shutdown(App &) {
     renderer::release(state.polys_drawing);
     if (state.generated) {
         generate_tiled_nav_mesh::release(state.result.intermediates);
-        nav_mesh_api::release_nav_mesh(state.result.nav_mesh);
+        nav_mesh_api::release(state.result.nav_mesh);
     }
     state.generated = false;
 }

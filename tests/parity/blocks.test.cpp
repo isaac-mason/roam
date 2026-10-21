@@ -282,7 +282,7 @@ TEST(generate_solo_nav_mesh_matches_navcat_on_nav_test) {
     check_tiles("solo", result.nav_mesh, test.expected);
 
     generate_solo_nav_mesh::release(result.intermediates);
-    nav_mesh_api::release_nav_mesh(result.nav_mesh);
+    nav_mesh_api::release(result.nav_mesh);
     release(test);
 }
 
@@ -399,7 +399,7 @@ TEST(generate_tiled_nav_mesh_and_flood_fill_match_navcat_on_nav_test) {
     unreachable.release();
     seed_refs.release();
     generate_tiled_nav_mesh::release(result.intermediates);
-    nav_mesh_api::release_nav_mesh(result.nav_mesh);
+    nav_mesh_api::release(result.nav_mesh);
     release(test);
 }
 
@@ -442,7 +442,7 @@ TEST(removing_and_re_adding_a_tile_restores_every_link) {
     without.release();
     after.release();
     generate_tiled_nav_mesh::release(result.intermediates);
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
     release(test);
 }
 
@@ -502,7 +502,7 @@ TEST(local_boundary_matches_navcat_on_nav_test) {
     nav_mesh_search::release(workspace);
     points.release();
     generate_tiled_nav_mesh::release(tiled.intermediates);
-    nav_mesh_api::release_nav_mesh(tiled.nav_mesh);
+    nav_mesh_api::release(tiled.nav_mesh);
     release(test);
 }
 
@@ -662,7 +662,7 @@ TEST(crowd_matches_navcat_on_a_flat_scene) {
     agent_ids.release();
     crowd::release(crowd);
     generate_tiled_nav_mesh::release(tiled.intermediates);
-    nav_mesh_api::release_nav_mesh(tiled.nav_mesh);
+    nav_mesh_api::release(tiled.nav_mesh);
     positions.release();
     indices.release();
     release(test);
@@ -698,6 +698,6 @@ TEST(crowd_matches_navcat_on_nav_test) {
     crowd::release(crowd);
     points.release();
     generate_tiled_nav_mesh::release(tiled.intermediates);
-    nav_mesh_api::release_nav_mesh(tiled.nav_mesh);
+    nav_mesh_api::release(tiled.nav_mesh);
     release(test);
 }

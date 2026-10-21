@@ -106,7 +106,7 @@ void find_local_neighbourhood(FindLocalNeighbourhoodResult &result, SearchWorksp
             if (node::get_node_ref_type(neighbour_ref) == NODE_TYPE_OFFMESH) continue;
             if (!nav_mesh_api::passes_filter(filter, neighbour_ref, nav_mesh)) continue;
 
-            PortalPoints portal;
+            GetPortalPointsResult portal;
             nav_mesh_search::get_portal_points(portal, nav_mesh, current_ref, neighbour_ref);
             if (!portal.success) continue;
 

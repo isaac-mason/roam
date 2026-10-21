@@ -41,7 +41,7 @@ TEST(node_graph_tile_polys) {
     NavMesh nav_mesh = nav_mesh_api::create_nav_mesh();
     CHECK(nav_mesh.nodes.length == 0);
     CHECK(nav_mesh.links.length == 0);
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
 
     nav_mesh = create_nav_mesh_from_triangles(positions, 4, indices, 6);
 
@@ -68,7 +68,7 @@ TEST(node_graph_tile_polys) {
     CHECK(nav_mesh.link_index_pool.counter == nav_mesh.link_index_pool.free.length);
     CHECK(nav_mesh.links.length == 2);
 
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
 }
 
 static NavMesh create_off_mesh_test_nav_mesh() {
@@ -123,7 +123,7 @@ TEST(node_graph_bidirectional_off_mesh_connection) {
     CHECK(allocated_node_count(nav_mesh, NODE_TYPE_OFFMESH) == 0);
     CHECK(!nav_mesh_api::is_valid_node_ref(nav_mesh, off_mesh_node_ref));
 
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
 }
 
 TEST(node_graph_one_way_off_mesh_connection) {
@@ -162,5 +162,5 @@ TEST(node_graph_one_way_off_mesh_connection) {
     CHECK(allocated_node_count(nav_mesh, NODE_TYPE_OFFMESH) == 0);
     CHECK(!nav_mesh_api::is_valid_node_ref(nav_mesh, off_mesh_node_ref));
 
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
 }

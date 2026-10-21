@@ -180,7 +180,7 @@ static Vec3 tile_vertex(const NavMeshTile &tile, const NavMeshPoly &poly, uint32
     return vec3::load(tile.vertices.data, tile.poly_vertices[poly.vertex_base + i] * 3);
 }
 
-void get_portal_points(PortalPoints &out, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref) {
+void get_portal_points(GetPortalPointsResult &out, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref) {
     out = {};
     const NavMeshNode &from_node = nav_mesh_api::get_node_by_ref(nav_mesh, from_node_ref);
 
@@ -230,8 +230,8 @@ void get_portal_points(PortalPoints &out, const NavMesh &nav_mesh, NodeRef from_
     }
 }
 
-void get_edge_mid_point(EdgeMidPoint &out, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref) {
-    PortalPoints portal;
+void get_edge_mid_point(GetEdgeMidPointResult &out, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref) {
+    GetPortalPointsResult portal;
     get_portal_points(portal, nav_mesh, from_node_ref, to_node_ref);
     out.success = portal.success;
     out.position = portal.success ? vec3::scale(vec3::add(portal.left, portal.right), 0.5f) : Vec3{0, 0, 0};
@@ -291,7 +291,7 @@ static uint32_t get_or_add_neighbour(const NavMesh &nav_mesh, SearchNodePool &po
     if (existing != NULL_SEARCH_NODE) return (uint32_t)existing;
 
     SearchNode node = make_search_node(neighbour_node_ref, state, 0, {0, 0, 0});
-    EdgeMidPoint mid;
+    GetEdgeMidPointResult mid;
     get_edge_mid_point(mid, nav_mesh, best_node_ref, neighbour_node_ref);
     node.position = mid.position;
     return add_search_node(pool, node);
@@ -1166,7 +1166,7 @@ void find_random_point_around_circle(FindRandomPointResult &out, SearchWorkspace
             if (!nav_mesh_api::get_tile_and_poly_by_ref(nav_mesh, neighbour_ref).success) continue;
             if (!nav_mesh_api::passes_filter(filter, neighbour_ref, nav_mesh)) continue;
 
-            PortalPoints portal;
+            GetPortalPointsResult portal;
             get_portal_points(portal, nav_mesh, best_ref, neighbour_ref);
             if (!portal.success) continue;
 

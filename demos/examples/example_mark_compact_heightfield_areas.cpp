@@ -257,7 +257,7 @@ static void shutdown(App &app) {
     renderer::release(state.area_markers_drawing);
     if (state.generated) {
         generate_solo_nav_mesh::release(state.result.intermediates);
-        nav_mesh_api::release_nav_mesh(state.result.nav_mesh);
+        nav_mesh_api::release(state.result.nav_mesh);
     }
     state.generated = false;
     app.camera.fov_y = mark_areas.previous_fov_y;

@@ -88,7 +88,7 @@ static float compute_unpenalized_cost(const NavMesh &nav_mesh, const Array<NodeR
     Array<Vec3> mids = {};
     mids.push(start);
     for (uint32_t i = 0; i + 1 < path.length; i++) {
-        EdgeMidPoint mid;
+        GetEdgeMidPointResult mid;
         nav_mesh_search::get_edge_mid_point(mid, nav_mesh, path[i], path[i + 1]);
         if (mid.success) mids.push(mid.position);
     }
@@ -362,7 +362,7 @@ static void shutdown(App &) {
     nav_mesh_search::release(state.workspace);
     if (state.generated) {
         generate_tiled_nav_mesh::release(state.result.intermediates);
-        nav_mesh_api::release_nav_mesh(state.result.nav_mesh);
+        nav_mesh_api::release(state.result.nav_mesh);
     }
     state.generated = false;
 }

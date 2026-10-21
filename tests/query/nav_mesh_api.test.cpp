@@ -25,13 +25,13 @@ TEST(get_tile_at_returns_tile_at_position) {
     REQUIRE(tile != nullptr);
     CHECK(tile->tile_x == 0 && tile->tile_y == 0 && tile->tile_layer == 0);
 
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
 }
 
 TEST(get_tile_at_returns_null_for_missing_position) {
     NavMesh nav_mesh = nav_mesh_api::create_nav_mesh();
     CHECK(nav_mesh_api::get_tile_at(nav_mesh, 5, 5, 0) == nullptr);
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
 }
 
 TEST(get_tile_at_differentiates_layers) {
@@ -46,7 +46,7 @@ TEST(get_tile_at_differentiates_layers) {
     CHECK(layer_1->tile_layer == 1);
     CHECK(layer_0->id != layer_1->id);
 
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
 }
 
 TEST(get_tile_at_handles_negative_coordinates) {
@@ -57,7 +57,7 @@ TEST(get_tile_at_handles_negative_coordinates) {
     REQUIRE(tile != nullptr);
     CHECK(tile->tile_x == -5 && tile->tile_y == -3);
 
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
 }
 
 TEST(get_tile_ids_at_returns_all_layers) {
@@ -70,13 +70,13 @@ TEST(get_tile_ids_at_returns_all_layers) {
     for (uint32_t tile_id : tile_ids) layer_mask |= 1 << nav_mesh.tiles[tile_id].tile_layer;
     CHECK(layer_mask == 0x7);
 
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
 }
 
 TEST(get_tile_ids_at_returns_empty_for_missing_position) {
     NavMesh nav_mesh = nav_mesh_api::create_nav_mesh();
     CHECK(nav_mesh_api::get_tile_ids_at(nav_mesh, 10, 10).capacity == 0);
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
 }
 
 TEST(get_tile_ids_at_handles_negative_coordinates_and_ignores_other_columns) {
@@ -88,7 +88,7 @@ TEST(get_tile_ids_at_handles_negative_coordinates_and_ignores_other_columns) {
     REQUIRE(tile_ids.capacity == 1);
     CHECK(nav_mesh.tiles[tile_ids[0]].tile_x == -10 && nav_mesh.tiles[tile_ids[0]].tile_y == -5);
 
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
 }
 
 TEST(add_tile_replaces_tile_at_same_position) {
@@ -100,5 +100,5 @@ TEST(add_tile_replaces_tile_at_same_position) {
     CHECK(nav_mesh_api::get_tile_ids_at(nav_mesh, 0, 0).capacity == 1);
     CHECK(nav_mesh_api::get_tile_at(nav_mesh, 0, 0, 0)->sequence == first_sequence + 1);
 
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
 }

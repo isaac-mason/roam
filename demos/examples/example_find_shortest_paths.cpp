@@ -100,7 +100,7 @@ static float calculate_path_cost(const NavMesh &nav_mesh, const Array<NodeRef> &
         if (i == path.length - 1) {
             current_position = end;
         } else {
-            EdgeMidPoint midpoint;
+            GetEdgeMidPointResult midpoint;
             nav_mesh_search::get_edge_mid_point(midpoint, nav_mesh, path[i], path[i + 1]);
             if (midpoint.success) current_position = midpoint.position;
         }
@@ -163,7 +163,7 @@ static Array<ShortestNodePath> find_shortest_paths(SearchWorkspace &workspace, S
 
             Vec3 spur_node_position = start;
             if (i != 0) {
-                EdgeMidPoint midpoint;
+                GetEdgeMidPointResult midpoint;
                 nav_mesh_search::get_edge_mid_point(midpoint, nav_mesh, spur_node, previous_path[i + 1]);
                 spur_node_position = midpoint.position;
             }
@@ -318,7 +318,7 @@ static void shutdown(App &) {
     nav_mesh_search::release(state.workspace);
     if (state.generated) {
         generate_tiled_nav_mesh::release(state.result.intermediates);
-        nav_mesh_api::release_nav_mesh(state.result.nav_mesh);
+        nav_mesh_api::release(state.result.nav_mesh);
     }
     state.generated = false;
 }

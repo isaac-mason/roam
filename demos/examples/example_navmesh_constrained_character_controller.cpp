@@ -37,19 +37,19 @@ struct CharacterControllerExample {
 
 static CharacterControllerExample character_controller_example;
 
-static void release_nav_mesh() {
+static void release() {
     CharacterControllerExample &state = character_controller_example;
     renderer::release(state.nav_mesh_drawing);
     if (state.generated) {
         generate_solo_nav_mesh::release(state.result.intermediates);
-        nav_mesh_api::release_nav_mesh(state.result.nav_mesh);
+        nav_mesh_api::release(state.result.nav_mesh);
     }
     state.generated = false;
 }
 
 static void generate_nav_mesh(const Model &level) {
     CharacterControllerExample &state = character_controller_example;
-    release_nav_mesh();
+    release();
 
     SoloNavMeshOptions options = {
         .cell_size = state.cell_size,
@@ -229,7 +229,7 @@ static void ui(App &app) {
 
 static void shutdown(App &) {
     CharacterControllerExample &state = character_controller_example;
-    release_nav_mesh();
+    release();
     nav_mesh_search::release(state.workspace);
 }
 

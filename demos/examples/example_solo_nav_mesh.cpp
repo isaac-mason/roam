@@ -76,7 +76,7 @@ static void update_drawing(int helper) {
 static void release_result() {
     if (!solo.generated) return;
     generate_solo_nav_mesh::release(solo.result.intermediates);
-    nav_mesh_api::release_nav_mesh(solo.result.nav_mesh);
+    nav_mesh_api::release(solo.result.nav_mesh);
     solo.generated = false;
 }
 

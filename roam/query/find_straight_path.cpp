@@ -55,7 +55,7 @@ static uint32_t append_portals(const NavMesh &nav_mesh, int start_index, int end
             if (nav_mesh_api::get_node_by_ref(nav_mesh, from).area == nav_mesh_api::get_node_by_ref(nav_mesh, to).area) continue;
         }
 
-        PortalPoints portal;
+        GetPortalPointsResult portal;
         nav_mesh_search::get_portal_points(portal, nav_mesh, from, to);
         if (!portal.success) break;
 
@@ -94,16 +94,16 @@ static FindStraightPathResult find_straight_path_in(const NavMesh &nav_mesh, Vec
 
     if (!vec3::finite(start) || !vec3::finite(end) || path_node_count == 0 || path.capacity == 0) return make_result(INVALID, path);
 
-    ClosestPointOnPolyBoundary closest_start = {};
+    GetClosestPointOnPolyBoundaryResult closest_start = {};
     nav_mesh_api::get_closest_point_on_poly_boundary(closest_start, nav_mesh, path_node_refs[0], start);
     if (!closest_start.success) return make_result(INVALID, path);
 
-    ClosestPointOnPolyBoundary closest_end = {};
+    GetClosestPointOnPolyBoundaryResult closest_end = {};
     nav_mesh_api::get_closest_point_on_poly_boundary(closest_end, nav_mesh, path_node_refs[path_node_count - 1], end);
     if (!closest_end.success) return make_result(INVALID, path);
 
-    Vec3 closest_start_position = closest_start.point;
-    Vec3 closest_end_position = closest_end.point;
+    Vec3 closest_start_position = closest_start.position;
+    Vec3 closest_end_position = closest_end.position;
 
     uint32_t start_status = append_vertex(closest_start_position, path_node_refs[0], STRAIGHT_PATH_POINT_START, path,
                                           node::get_node_ref_type(path_node_refs[0]), max_points);
@@ -134,20 +134,20 @@ static FindStraightPathResult find_straight_path_in(const NavMesh &nav_mesh, Vec
                 NodeRef to_ref = path_node_refs[i + 1];
                 to_type = node::get_node_ref_type(to_ref);
 
-                PortalPoints portal;
+                GetPortalPointsResult portal;
                 nav_mesh_search::get_portal_points(portal, nav_mesh, path_node_refs[i], to_ref);
                 left = portal.left;
                 right = portal.right;
                 if (!portal.success) {
-                    ClosestPointOnPolyBoundary end_clamp = {};
+                    GetClosestPointOnPolyBoundaryResult end_clamp = {};
                     nav_mesh_api::get_closest_point_on_poly_boundary(end_clamp, nav_mesh, path_node_refs[i], end);
                     if (!end_clamp.success) return make_result(INVALID, path);
 
                     if (straight_path_options & ANY_CROSSINGS) {
-                        append_portals(nav_mesh, apex_index, i, end_clamp.point, path_node_refs, path, straight_path_options, max_points);
+                        append_portals(nav_mesh, apex_index, i, end_clamp.position, path_node_refs, path, straight_path_options, max_points);
                     }
 
-                    append_vertex(end_clamp.point, path_node_refs[i], 0, path, node::get_node_ref_type(path_node_refs[i]), max_points);
+                    append_vertex(end_clamp.position, path_node_refs[i], 0, path, node::get_node_ref_type(path_node_refs[i]), max_points);
 
                     return make_result(PARTIAL, path);
                 }

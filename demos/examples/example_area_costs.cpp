@@ -313,7 +313,7 @@ static void shutdown(App &) {
     renderer::release(state.overlay_drawing);
     renderer::release(state.path_drawing);
     nav_mesh_search::release(state.workspace);
-    if (state.generated) nav_mesh_api::release_nav_mesh(state.nav_mesh);
+    if (state.generated) nav_mesh_api::release(state.nav_mesh);
     state.generated = false;
 }
 

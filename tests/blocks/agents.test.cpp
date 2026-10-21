@@ -105,7 +105,7 @@ TEST(path_corridor_move_over_off_mesh_connection_lands_on_the_far_side) {
     CHECK(corridor.position.x == 7.5f);
 
     path_corridor::release(corridor);
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
 }
 
 static AgentParams test_agent_params() {
@@ -141,7 +141,7 @@ TEST(crowd_reuses_removed_agent_ids) {
     CHECK(crowd.agents[lost].state == AGENT_STATE_INVALID);
 
     crowd::release(crowd);
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
 }
 
 TEST(crowd_agent_crosses_an_off_mesh_connection_to_its_target) {
@@ -167,7 +167,7 @@ TEST(crowd_agent_crosses_an_off_mesh_connection_to_its_target) {
     CHECK(crowd.agents[agent_id].position.x > 7);
 
     crowd::release(crowd);
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
 }
 
 static NavMesh create_open_floor() {
@@ -203,5 +203,5 @@ TEST(crowd_max_neighbours_keeps_the_nearest) {
         crowd::release(crowd);
     }
 
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
 }

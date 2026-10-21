@@ -115,7 +115,7 @@ TEST(search_workspace_reuse_matches_fresh_queries) {
     }
 
     nav_mesh_search::release(reused);
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
 }
 
 TEST(small_buffers_keep_the_start_of_the_path_and_report_its_full_length) {
@@ -203,7 +203,7 @@ TEST(small_buffers_keep_the_start_of_the_path_and_report_its_full_length) {
     CHECK(after_other_search.path_total == 0);
 
     nav_mesh_search::release(workspace);
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
 }
 
 TEST(sliced_finalize_can_be_repeated_to_grow_the_buffer) {
@@ -235,7 +235,7 @@ TEST(sliced_finalize_can_be_repeated_to_grow_the_buffer) {
     CHECK(all[again.path_count - 1] == end.node_ref);
 
     nav_mesh_search::release(query);
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
 }
 
 TEST(warm_queries_do_not_allocate) {
@@ -275,5 +275,5 @@ TEST(warm_queries_do_not_allocate) {
     CHECK(memory::outstanding().total_allocations == allocations_after_warm_up);
 
     nav_mesh_search::release(workspace);
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
 }

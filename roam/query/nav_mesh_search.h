@@ -120,13 +120,13 @@ struct MoveAlongSurfaceResult {
     bool truncated;
 };
 
-struct PortalPoints {
+struct GetPortalPointsResult {
     bool success;
     Vec3 left;
     Vec3 right;
 };
 
-struct EdgeMidPoint {
+struct GetEdgeMidPointResult {
     bool success;
     Vec3 position;
 };
@@ -171,8 +171,8 @@ int32_t pop_node_from_queue(SearchNodeQueue &queue, const SearchNodePool &pool);
 void reindex_node_in_queue(SearchNodeQueue &queue, const SearchNodePool &pool, uint32_t node);
 void release(SearchNodeQueue &queue);
 
-void get_portal_points(PortalPoints &out, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref);
-void get_edge_mid_point(EdgeMidPoint &out, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref);
+void get_portal_points(GetPortalPointsResult &out, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref);
+void get_edge_mid_point(GetEdgeMidPointResult &out, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref);
 
 void copy_last_node_path(FindNodePathResult &out, const SearchWorkspace &workspace, Span<NodeRef> path);
 void find_node_path(FindNodePathResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref, NodeRef end_node_ref,

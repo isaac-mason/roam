@@ -492,7 +492,7 @@ static void shutdown(App &app) {
     renderer::release(state.walkable_points_drawing);
     renderer::release(state.triangulation_drawing);
     renderer::release(state.path_drawing);
-    if (state.generated) nav_mesh_api::release_nav_mesh(state.nav_mesh);
+    if (state.generated) nav_mesh_api::release(state.nav_mesh);
     state.generated = false;
     state.terrain_positions.release();
     state.terrain_indices.release();

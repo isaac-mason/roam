@@ -108,7 +108,7 @@ TEST(flood_fill_nav_mesh_splits_disconnected_islands) {
     CHECK(result.unreachable_count == 2);
     CHECK(reachable[0] == seed);
 
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
 }
 
 static const float PLANE_POSITIONS[] = {0, 0, 0, 10, 0, 0, 10, 0, 10, 0, 0, 10};
@@ -146,7 +146,7 @@ TEST(generate_solo_nav_mesh_covers_a_plane) {
 
     nav_mesh_search::release(workspace);
     generate_solo_nav_mesh::release(result.intermediates);
-    nav_mesh_api::release_nav_mesh(result.nav_mesh);
+    nav_mesh_api::release(result.nav_mesh);
 }
 
 TEST(generate_tiled_nav_mesh_connects_tiles_across_a_plane) {
@@ -194,5 +194,5 @@ TEST(generate_tiled_nav_mesh_connects_tiles_across_a_plane) {
 
     nav_mesh_search::release(workspace);
     generate_tiled_nav_mesh::release(result.intermediates);
-    nav_mesh_api::release_nav_mesh(result.nav_mesh);
+    nav_mesh_api::release(result.nav_mesh);
 }

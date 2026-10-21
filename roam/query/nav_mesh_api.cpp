@@ -38,7 +38,7 @@ static void release_tile_data(NavMeshTile &tile) {
     tile.bv_tree.nodes.release();
 }
 
-void release_nav_mesh(NavMesh &nav_mesh) {
+void release(NavMesh &nav_mesh) {
     for (NavMeshTile &tile : nav_mesh.tiles) release_tile_data(tile);
     nav_mesh.tiles.release();
     nav_mesh.nodes.release();
@@ -174,7 +174,7 @@ static Vec3 detail_triangle_vertex(const NavMeshTile &tile, const NavMeshPoly &p
 
 static int get_detail_tri_edge_flags(int triangle_flags, int edge_index) { return (triangle_flags >> (edge_index * 2)) & 0x3; }
 
-ClosestPointOnDetailEdges get_closest_point_on_detail_edges(const NavMeshTile &tile, const NavMeshPoly &poly, int poly_index, Vec3 position,
+void get_closest_point_on_detail_edges(GetClosestPointOnDetailEdgesResult &out, const NavMeshTile &tile, const NavMeshPoly &poly, int poly_index, Vec3 position,
                                                             bool only_boundary) {
     float dmin = FLT_MAX;
     float tmin = 0;
@@ -211,7 +211,7 @@ ClosestPointOnDetailEdges get_closest_point_on_detail_edges(const NavMeshTile &t
         }
     }
 
-    return {vec3::lerp(pmin, pmax, tmin), dmin};
+    out = {vec3::lerp(pmin, pmax, tmin), dmin};
 }
 
 static float get_detail_mesh_height(const NavMeshTile &tile, const NavMeshPoly &poly, int poly_index, Vec3 position) {
@@ -228,7 +228,9 @@ static float get_detail_mesh_height(const NavMeshTile &tile, const NavMeshPoly &
         }
     }
 
-    return get_closest_point_on_detail_edges(tile, poly, poly_index, position, false).point.y;
+    GetClosestPointOnDetailEdgesResult closest;
+    get_closest_point_on_detail_edges(closest, tile, poly, poly_index, position, false);
+    return closest.position.y;
 }
 
 static uint32_t gather_poly_vertices(const NavMeshTile &tile, const NavMeshPoly &poly, float *out_vertices) {
@@ -279,10 +281,12 @@ void get_closest_point_on_poly(GetClosestPointOnPolyResult &out, const NavMesh &
         return;
     }
 
-    out.position = get_closest_point_on_detail_edges(*tile_and_poly.tile, *tile_and_poly.poly, tile_and_poly.poly_index, position, true).point;
+    GetClosestPointOnDetailEdgesResult closest;
+    get_closest_point_on_detail_edges(closest, *tile_and_poly.tile, *tile_and_poly.poly, tile_and_poly.poly_index, position, true);
+    out.position = closest.position;
 }
 
-void get_closest_point_on_poly_boundary(ClosestPointOnPolyBoundary &out, const NavMesh &nav_mesh, NodeRef node_ref, Vec3 point) {
+void get_closest_point_on_poly_boundary(GetClosestPointOnPolyBoundaryResult &out, const NavMesh &nav_mesh, NodeRef node_ref, Vec3 point) {
     out = {false, point};
     TileAndPoly tile_and_poly = get_tile_and_poly_by_ref(nav_mesh, node_ref);
     if (!tile_and_poly.success || !vec3::finite(point)) return;
@@ -297,7 +301,7 @@ void get_closest_point_on_poly_boundary(ClosestPointOnPolyBoundary &out, const N
     out.success = true;
 
     if (geometry::point_in_poly(point, vertices.data, (int)vertex_count)) {
-        out.point.y = get_detail_mesh_height(tile, poly, tile_and_poly.poly_index, point);
+        out.position.y = get_detail_mesh_height(tile, poly, tile_and_poly.poly_index, point);
         release(vertices);
         return;
     }
@@ -329,7 +333,7 @@ void get_closest_point_on_poly_boundary(ClosestPointOnPolyBoundary &out, const N
         t = 1;
     }
 
-    out.point = {va.x + (vb.x - va.x) * t, va.y + (vb.y - va.y) * t, va.z + (vb.z - va.z) * t};
+    out.position = {va.x + (vb.x - va.x) * t, va.y + (vb.y - va.y) * t, va.z + (vb.z - va.z) * t};
     release(vertices);
 }
 
@@ -429,7 +433,9 @@ static void visit_nearest_poly(const NavMeshTile &tile, int poly_index, NodeRef 
         float height_difference = fabsf(search.center.y - height) - tile.walkable_climb;
         distance_sqr = height_difference > 0 ? height_difference * height_difference : 0;
     } else {
-        closest = get_closest_point_on_detail_edges(tile, poly, poly_index, search.center, true).point;
+        GetClosestPointOnDetailEdgesResult edge;
+        get_closest_point_on_detail_edges(edge, tile, poly, poly_index, search.center, true);
+        closest = edge.position;
         distance_sqr = vec3::squared_length(vec3::subtract(search.center, closest));
     }
 

@@ -179,7 +179,7 @@ static AreaFiltersNavMesh generate_nav_mesh(const float *positions, const uint32
 }
 
 static void release(AreaFiltersNavMesh &result) {
-    nav_mesh_api::release_nav_mesh(result.nav_mesh);
+    nav_mesh_api::release(result.nav_mesh);
     build_context::release(result.build_context);
     result.tri_area_ids.release();
     heightfield::release(result.heightfield);

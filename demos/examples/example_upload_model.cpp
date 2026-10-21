@@ -187,10 +187,10 @@ static void release_result() {
     if (!upload.generated) return;
     if (upload.generated_tiled) {
         generate_tiled_nav_mesh::release(upload.tiled_result.intermediates);
-        nav_mesh_api::release_nav_mesh(upload.tiled_result.nav_mesh);
+        nav_mesh_api::release(upload.tiled_result.nav_mesh);
     } else {
         generate_solo_nav_mesh::release(upload.solo.intermediates);
-        nav_mesh_api::release_nav_mesh(upload.solo.nav_mesh);
+        nav_mesh_api::release(upload.solo.nav_mesh);
     }
     upload.generated = false;
 }

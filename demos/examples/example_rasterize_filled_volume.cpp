@@ -251,7 +251,7 @@ static void update_drawing(int helper) {
 static void release_result() {
     if (!filled_volume.generated) return;
     generate_solo_nav_mesh::release(filled_volume.result.intermediates);
-    nav_mesh_api::release_nav_mesh(filled_volume.result.nav_mesh);
+    nav_mesh_api::release(filled_volume.result.nav_mesh);
     filled_volume.generated = false;
 }
 

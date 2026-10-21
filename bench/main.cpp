@@ -232,14 +232,14 @@ static void run_solo() {
     SoloNavMeshResult result =
         generate_solo_nav_mesh::generate_solo_nav_mesh({state.input.positions.data, state.input.indices.data, state.input.indices.length}, state.options);
     generate_solo_nav_mesh::release(result.intermediates);
-    nav_mesh_api::release_nav_mesh(result.nav_mesh);
+    nav_mesh_api::release(result.nav_mesh);
 }
 
 static void run_tiled() {
     TiledNavMeshResult result =
         generate_tiled_nav_mesh::generate_tiled_nav_mesh({state.input.positions.data, state.input.indices.data, state.input.indices.length}, tiled_options());
     generate_tiled_nav_mesh::release(result.intermediates);
-    nav_mesh_api::release_nav_mesh(result.nav_mesh);
+    nav_mesh_api::release(result.nav_mesh);
 }
 
 static const uint32_t QUERY_COUNT = 100;
@@ -571,8 +571,8 @@ int main(int argc, char **argv) {
     }
 
     nav_mesh_search::release(query_workspace);
-    nav_mesh_api::release_nav_mesh(state.nav_mesh);
-    nav_mesh_api::release_nav_mesh(state.tiled_nav_mesh);
+    nav_mesh_api::release(state.nav_mesh);
+    nav_mesh_api::release(state.tiled_nav_mesh);
     state.rebuilt_tiles.release();
     state.node_paths.release();
     state.node_path_starts.release();

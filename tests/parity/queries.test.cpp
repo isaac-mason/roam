@@ -278,6 +278,6 @@ TEST(queries_match_navcat_on_nav_test) {
     }
     report("random point", randoms.mismatches, randoms.first, random_points.count / 4);
 
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
     fixture::release(expected);
 }

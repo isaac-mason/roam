@@ -94,7 +94,7 @@ static void update_drawing(int helper) {
 static void release_result() {
     if (!tiled.generated) return;
     generate_tiled_nav_mesh::release(tiled.result.intermediates);
-    nav_mesh_api::release_nav_mesh(tiled.result.nav_mesh);
+    nav_mesh_api::release(tiled.result.nav_mesh);
     tiled.generated = false;
 }
 

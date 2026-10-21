@@ -307,7 +307,7 @@ static void shutdown(App &) {
     renderer::release(state.path_drawing);
     if (state.generated) {
         generate_tiled_nav_mesh::release(state.result.intermediates);
-        nav_mesh_api::release_nav_mesh(state.result.nav_mesh);
+        nav_mesh_api::release(state.result.nav_mesh);
     }
     state.generated = false;
 }

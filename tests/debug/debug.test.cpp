@@ -89,5 +89,5 @@ TEST(debug_helpers_draw_a_generated_nav_mesh) {
     nav_mesh_search::release(workspace);
 
     generate_solo_nav_mesh::release(result.intermediates);
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
 }

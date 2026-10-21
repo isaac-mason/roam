@@ -29,5 +29,5 @@ TEST(find_smooth_path_takes_off_mesh_connection_from_its_start) {
     CHECK_NEAR(last.position.z, 1.5f, 1e-4f);
 
     nav_mesh_search::release(workspace);
-    nav_mesh_api::release_nav_mesh(nav_mesh);
+    nav_mesh_api::release(nav_mesh);
 }
