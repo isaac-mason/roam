@@ -278,7 +278,6 @@ static void run_node_paths() {
         FindNodePathResult result;
         nav_mesh_search::find_node_path(result, query_workspace, state.nav_mesh, state.center_refs[a], state.center_refs[b], state.centers[a],
                                         state.centers[b], nav_mesh_api::DEFAULT_QUERY_FILTER, path, MAX_PATH);
-        if (getenv("ROAM_COUNT_NODES")) fprintf(stderr, "nodes %u path %u\n", query_workspace.nodes.nodes.length, result.path_count);
     }
 }
 

@@ -434,7 +434,6 @@ static void run_node_paths() {
         int b = pair_end(i);
         int path_count = 0;
         state.query->findPath(state.center_refs[(size_t)a], state.center_refs[(size_t)b], center(a), center(b), &state.filter, path, &path_count, MAX_PATH);
-        if (getenv("ROAM_COUNT_NODES")) fprintf(stderr, "nodes %d path %d\n", state.query->getNodePool()->getNodeCount(), path_count);
     }
 }
 
