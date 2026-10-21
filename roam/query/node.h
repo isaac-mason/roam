@@ -4,7 +4,7 @@
 
 namespace roam {
 
-enum NodeType : uint32_t {
+enum NodeType : uint8_t {
     NODE_TYPE_POLY = 0,
     NODE_TYPE_OFFMESH = 1,
 };

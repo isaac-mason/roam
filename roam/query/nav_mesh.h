@@ -29,18 +29,18 @@ struct NavMeshPolyDetail {
 };
 
 struct NavMeshNode {
-    bool allocated;
-    uint32_t index;
     NodeRef ref;
     int32_t first_link;
-    int32_t last_link;
     uint32_t flags;
-    uint8_t area;
-    NodeType type;
     int32_t tile_id;
     int32_t poly_index;
     int32_t off_mesh_connection_id;
+    uint8_t area;
+    NodeType type;
+    bool allocated;
 };
+
+static_assert(sizeof(NavMeshNode) == 32);
 
 struct NavMeshLink {
     NodeRef to_node_ref;

@@ -116,12 +116,10 @@ const NavMeshTile *get_tile_at(const NavMesh &nav_mesh, int x, int y, int layer)
     return tile_by_id(nav_mesh, (int32_t)*tile_id);
 }
 
-Array<const NavMeshTile *> get_tiles_at(const NavMesh &nav_mesh, int x, int y) {
-    Array<const NavMeshTile *> tiles = {};
+Span<const uint32_t> get_tile_ids_at(const NavMesh &nav_mesh, int x, int y) {
     const Array<uint32_t> *column = tile_column(nav_mesh, x, y);
-    if (!column) return tiles;
-    for (uint32_t tile_id : *column) tiles.push(&nav_mesh.tiles[tile_id]);
-    return tiles;
+    if (!column) return {};
+    return *column;
 }
 
 static void neighbour_position(int x, int y, int side, int &out_x, int &out_y) {
@@ -516,9 +514,7 @@ static uint32_t allocate_node(NavMesh &nav_mesh) {
     NavMeshNode &node = nav_mesh.nodes[node_index];
     node = {};
     node.allocated = true;
-    node.index = node_index;
     node.first_link = NULL_LINK;
-    node.last_link = NULL_LINK;
     node.tile_id = -1;
     node.poly_index = -1;
     node.off_mesh_connection_id = -1;
@@ -528,9 +524,7 @@ static uint32_t allocate_node(NavMesh &nav_mesh) {
 static void release_node(NavMesh &nav_mesh, uint32_t index) {
     NavMeshNode &node = nav_mesh.nodes[index];
     node = {};
-    node.index = index;
     node.first_link = NULL_LINK;
-    node.last_link = NULL_LINK;
     node.tile_id = -1;
     node.poly_index = -1;
     node.off_mesh_connection_id = -1;
@@ -557,30 +551,23 @@ static void release_link(NavMesh &nav_mesh, uint32_t index) {
 }
 
 static void append_link(NavMesh &nav_mesh, uint32_t node_index, uint32_t link_index) {
-    NavMeshNode &node = nav_mesh.nodes[node_index];
     nav_mesh.links[link_index].next = NULL_LINK;
-    if (node.last_link != NULL_LINK) {
-        nav_mesh.links[(uint32_t)node.last_link].next = (int32_t)link_index;
-    } else {
-        node.first_link = (int32_t)link_index;
-    }
-    node.last_link = (int32_t)link_index;
+    int32_t *tail = &nav_mesh.nodes[node_index].first_link;
+    while (*tail != NULL_LINK) tail = &nav_mesh.links[(uint32_t)*tail].next;
+    *tail = (int32_t)link_index;
 }
 
 template <typename ShouldRelease>
 static void release_links_where(NavMesh &nav_mesh, uint32_t node_index, ShouldRelease should_release) {
-    int32_t link_index = nav_mesh.nodes[node_index].first_link;
-    nav_mesh.nodes[node_index].first_link = NULL_LINK;
-    nav_mesh.nodes[node_index].last_link = NULL_LINK;
-
-    while (link_index != NULL_LINK) {
-        int32_t next = nav_mesh.links[(uint32_t)link_index].next;
-        if (should_release(nav_mesh.links[(uint32_t)link_index])) {
-            release_link(nav_mesh, (uint32_t)link_index);
+    int32_t *tail = &nav_mesh.nodes[node_index].first_link;
+    while (*tail != NULL_LINK) {
+        uint32_t link_index = (uint32_t)*tail;
+        if (should_release(nav_mesh.links[link_index])) {
+            *tail = nav_mesh.links[link_index].next;
+            release_link(nav_mesh, link_index);
         } else {
-            append_link(nav_mesh, node_index, (uint32_t)link_index);
+            tail = &nav_mesh.links[link_index].next;
         }
-        link_index = next;
     }
 }
 

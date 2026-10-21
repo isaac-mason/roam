@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 #include <math.h>
+#include <stdlib.h>
 
 #include "roam/blocks/agents/crowd.h"
 #include "roam/blocks/generators/generate_solo_nav_mesh.h"
@@ -8,6 +9,7 @@
 #include "roam/blocks/geometry/chunky_tri_mesh.h"
 #include "roam/blocks/geometry/merge_positions_and_indices.h"
 #include "roam/blocks/search/flood_fill_nav_mesh.h"
+#include "roam/util/sort.h"
 #include "tests/harness/fixture.h"
 #include "tests/harness/test.h"
 #include "tests/parity/detail_ties.h"
@@ -312,6 +314,65 @@ static TiledNavMeshResult generate_tiled(const BlocksTest &test) {
     return generate_tiled_nav_mesh::generate_tiled_nav_mesh({test.input.positions.data, test.input.indices.data, test.input.indices.length}, options);
 }
 
+struct LinkKey {
+    int64_t from;
+    int64_t to;
+    int edge;
+    int side;
+    int bmin;
+    int bmax;
+};
+
+static int64_t node_key(const NavMesh &nav_mesh, NodeRef ref) {
+    const NavMeshNode &node = nav_mesh_api::get_node_by_ref(nav_mesh, ref);
+    if (node.type != NODE_TYPE_POLY) return -1 - node.off_mesh_connection_id;
+    const NavMeshTile &tile = nav_mesh.tiles[(uint32_t)node.tile_id];
+    return ((int64_t)tile.tile_x << 40) | ((int64_t)tile.tile_y << 20) | node.poly_index;
+}
+
+static bool link_key_less(const LinkKey &a, const LinkKey &b) {
+    if (a.from != b.from) return a.from < b.from;
+    if (a.to != b.to) return a.to < b.to;
+    if (a.edge != b.edge) return a.edge < b.edge;
+    if (a.side != b.side) return a.side < b.side;
+    if (a.bmin != b.bmin) return a.bmin < b.bmin;
+    return a.bmax < b.bmax;
+}
+
+static Array<LinkKey> link_keys(const NavMesh &nav_mesh) {
+    Array<LinkKey> keys = {};
+    for (const NavMeshNode &node : nav_mesh.nodes) {
+        if (!node.allocated) continue;
+        for (int32_t link = node.first_link; link != NULL_LINK; link = nav_mesh.links[(uint32_t)link].next) {
+            const NavMeshLink &l = nav_mesh.links[(uint32_t)link];
+            keys.push({node_key(nav_mesh, node.ref), node_key(nav_mesh, l.to_node_ref), l.edge, l.side, l.bmin, l.bmax});
+        }
+    }
+    sort::stable(keys.data, keys.length, link_key_less);
+    return keys;
+}
+
+template <typename T>
+static Array<T> copy_of(const Array<T> &source) {
+    Array<T> copy = {};
+    for (const T &value : source) copy.push(value);
+    return copy;
+}
+
+static NavMeshTile copy_tile(const NavMeshTile &tile) {
+    NavMeshTile copy = tile;
+    copy.vertices = copy_of(tile.vertices);
+    copy.polys = copy_of(tile.polys);
+    copy.poly_vertices = copy_of(tile.poly_vertices);
+    copy.poly_neis = copy_of(tile.poly_neis);
+    copy.detail_meshes = copy_of(tile.detail_meshes);
+    copy.detail_vertices = copy_of(tile.detail_vertices);
+    copy.detail_triangles = copy_of(tile.detail_triangles);
+    copy.poly_nodes = {};
+    copy.bv_tree.nodes = copy_of(tile.bv_tree.nodes);
+    return copy;
+}
+
 TEST(generate_tiled_nav_mesh_and_flood_fill_match_navcat_on_nav_test) {
     BlocksTest test = load_blocks_test();
     REQUIRE(test.expected.loaded);
@@ -339,6 +400,49 @@ TEST(generate_tiled_nav_mesh_and_flood_fill_match_navcat_on_nav_test) {
     seed_refs.release();
     generate_tiled_nav_mesh::release(result.intermediates);
     nav_mesh_api::release_nav_mesh(result.nav_mesh);
+    release(test);
+}
+
+TEST(removing_and_re_adding_a_tile_restores_every_link) {
+    BlocksTest test = load_blocks_test();
+    REQUIRE(test.expected.loaded);
+
+    TiledNavMeshResult result = generate_tiled(test);
+    NavMesh &nav_mesh = result.nav_mesh;
+    Array<LinkKey> before = link_keys(nav_mesh);
+
+    uint32_t removed = 0;
+    for (const NavMeshTile &tile : nav_mesh.tiles) {
+        if (!tile.allocated) continue;
+        uint32_t neighbours = 0;
+        for (const NavMeshTile &other : nav_mesh.tiles) {
+            if (other.allocated && abs(other.tile_x - tile.tile_x) + abs(other.tile_y - tile.tile_y) == 1) neighbours++;
+        }
+        if (neighbours >= 3) {
+            removed = tile.id;
+            break;
+        }
+    }
+    NavMeshTile saved = copy_tile(nav_mesh.tiles[removed]);
+    REQUIRE(nav_mesh_api::remove_tile(nav_mesh, saved.tile_x, saved.tile_y, saved.tile_layer));
+    Array<LinkKey> without = link_keys(nav_mesh);
+    CHECK(without.length < before.length);
+    nav_mesh_api::add_tile(nav_mesh, saved);
+
+    Array<LinkKey> after = link_keys(nav_mesh);
+    bool same = after.length == before.length;
+    for (uint32_t i = 0; same && i < after.length; i++) {
+        same = after[i].from == before[i].from && after[i].to == before[i].to && after[i].edge == before[i].edge && after[i].side == before[i].side &&
+               after[i].bmin == before[i].bmin && after[i].bmax == before[i].bmax;
+    }
+    CHECK(same);
+    CHECK(nav_mesh.link_index_pool.counter - nav_mesh.link_index_pool.free.length == after.length);
+
+    before.release();
+    without.release();
+    after.release();
+    generate_tiled_nav_mesh::release(result.intermediates);
+    nav_mesh_api::release_nav_mesh(nav_mesh);
     release(test);
 }
 

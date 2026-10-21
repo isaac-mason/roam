@@ -101,7 +101,7 @@ const NavMeshNode &get_node_by_tile_and_poly(const NavMesh &nav_mesh, const NavM
 bool is_valid_node_ref(const NavMesh &nav_mesh, NodeRef node_ref);
 
 const NavMeshTile *get_tile_at(const NavMesh &nav_mesh, int x, int y, int layer);
-Array<const NavMeshTile *> get_tiles_at(const NavMesh &nav_mesh, int x, int y);
+Span<const uint32_t> get_tile_ids_at(const NavMesh &nav_mesh, int x, int y);
 Vec2 world_to_tile_position(const NavMesh &nav_mesh, Vec3 world_position);
 
 TileAndPoly get_tile_and_poly_by_ref(NodeRef ref, const NavMesh &nav_mesh);

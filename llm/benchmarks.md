@@ -197,3 +197,24 @@ roam is now ahead of Detour on every workload. The one exception is the crowd wi
 - **Regions** stay at about 0.97x. Flood and expand got the same indexing change and merges build into a reused scratch array (fewer instructions, no measurable time change). About 15% of the stage is allocating and growing the 8 level stacks; reserving them from a counting pass was slower (0.85x), since cumulative reservations touch far more memory than the stacks hold. A generation workspace that keeps these buffers across builds and tiles would remove the churn.
 
 FPS map, thread CPU time minimums after this round (Detour / roam): compact 1.14x, erode 1.03x, distance field 1.01x, regions 0.97x, contours 1.00x, detail 1.06x, solo 1.63x, tiled 1.18x.
+
+### Leaner nav mesh layout (2026-10-21)
+
+The nav mesh structs mirrored navcat's objects field for field: values stored twice (a link's `from_*` fields and its own `index`, a node's `index`), and small values in 4-byte ints. Same values, smaller storage:
+
+- `NavMeshLink` 56 → 16 bytes: `{ to_node_ref, next, edge, side, bmin, bmax }` with byte-sized edge data. Tile removal already walked each node's own list, so nothing needed the `from_*` fields. `add_link` takes bytes; callers narrow where the value is produced, and `build_tile` asserts polys have at most `MAX_POLY_VERTICES` (255).
+- `NavMeshNode` 48 → 32 bytes: no `index` (unused) or `last_link` (appends walk the short list; only tile adds pay), `NodeType` is a byte.
+- Detail triangles 16 → 4 bytes (navcat caps detail meshes at 127 vertices per poly).
+- `get_tiles_at` (allocated an `Array` per call) became `get_tile_ids_at`, a read-only view of the column's tile ids.
+
+Parity and unit tests pass, plus a new test that removing and re-adding a tile restores every link. FPS map solo mesh: 418.6 KB → 268.0 KB (303 → 194 bytes per poly). Thread CPU time minimums, before → after (ms):
+
+| bench | nav-test | game-level | FPS map |
+|---|---|---|---|
+| find path (100 pairs) | 0.387 → 0.350 | 1.471 → 1.342 | 0.537 → 0.513 |
+| node paths (100 A*) | 0.216 → 0.190 | 1.232 → 1.106 | 0.377 → 0.363 |
+| find nearest poly (200) | 0.083 → 0.075 | 0.082 → 0.077 | 0.062 → 0.058 |
+| raycast (100) | 0.0064 → 0.0062 | 0.0073 → 0.0069 | 0.0086 → 0.0081 |
+| crowd (100 agents, 60 updates) | 33.5 → 31.8 | 26.4 → 25.1 | 23.1 → 22.5 |
+
+The crowd with navcat's unlimited neighbours is now about level with Detour's capped crowd on nav-test (31.4 ms).
