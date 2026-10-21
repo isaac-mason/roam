@@ -124,10 +124,10 @@ static void remove_front(Array<NodeRef> &values, uint32_t count) {
 static void move_with_visited(MoveAlongSurfaceResult &moved, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
                               Vec3 start_position, Vec3 end_position, const QueryFilter &filter) {
     Array<NodeRef> &visited = workspace.visited;
-    nav_mesh_search::move_along_surface(moved, workspace, nav_mesh, start_node_ref, start_position, end_position, filter, {visited.data, visited.capacity});
+    nav_mesh_search::move_along_surface(moved, workspace, nav_mesh, start_node_ref, start_position, end_position, filter, visited);
     if (moved.truncated) {
         visited.reserve(moved.visited_total);
-        nav_mesh_search::move_along_surface(moved, workspace, nav_mesh, start_node_ref, start_position, end_position, filter, {visited.data, visited.capacity});
+        nav_mesh_search::move_along_surface(moved, workspace, nav_mesh, start_node_ref, start_position, end_position, filter, visited);
     }
     visited.resize(moved.visited_count);
 }
@@ -159,10 +159,10 @@ void find_smooth_path(FindSmoothPathResult &result, SearchWorkspace &workspace, 
     FindNodePathResult node_path;
     Array<NodeRef> &polys = workspace.node_path;
     nav_mesh_search::find_node_path(node_path, workspace, nav_mesh, result.start_node_ref, result.end_node_ref, result.start_position,
-                                    result.end_position, filter, {polys.data, polys.capacity}, {options.raycast_distance});
+                                    result.end_position, filter, polys, {options.raycast_distance});
     if (node_path.truncated) {
         polys.reserve(node_path.path_total);
-        nav_mesh_search::copy_last_node_path(node_path, workspace, {polys.data, polys.capacity});
+        nav_mesh_search::copy_last_node_path(node_path, workspace, polys);
     }
     polys.resize(node_path.path_count);
     result.node_path_flags = node_path.flags;

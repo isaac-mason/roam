@@ -100,8 +100,9 @@ static float calculate_path_cost(const NavMesh &nav_mesh, const Array<NodeRef> &
         if (i == path.length - 1) {
             current_position = end;
         } else {
-            Vec3 midpoint = {0, 0, 0};
-            if (nav_mesh_search::get_edge_mid_point(nav_mesh, path[i], path[i + 1], midpoint)) current_position = midpoint;
+            EdgeMidPoint midpoint;
+            nav_mesh_search::get_edge_mid_point(midpoint, nav_mesh, path[i], path[i + 1]);
+            if (midpoint.success) current_position = midpoint.position;
         }
         total_cost += vec3::distance(previous_position, current_position);
         previous_position = current_position;
@@ -162,9 +163,9 @@ static Array<ShortestNodePath> find_shortest_paths(SearchWorkspace &workspace, S
 
             Vec3 spur_node_position = start;
             if (i != 0) {
-                Vec3 midpoint = {0, 0, 0};
-                nav_mesh_search::get_edge_mid_point(nav_mesh, spur_node, previous_path[i + 1], midpoint);
-                spur_node_position = midpoint;
+                EdgeMidPoint midpoint;
+                nav_mesh_search::get_edge_mid_point(midpoint, nav_mesh, spur_node, previous_path[i + 1]);
+                spur_node_position = midpoint.position;
             }
 
             FindNodePathResult spur = {};

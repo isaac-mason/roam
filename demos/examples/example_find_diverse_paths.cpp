@@ -88,8 +88,9 @@ static float compute_unpenalized_cost(const NavMesh &nav_mesh, const Array<NodeR
     Array<Vec3> mids = {};
     mids.push(start);
     for (uint32_t i = 0; i + 1 < path.length; i++) {
-        Vec3 mid = {0, 0, 0};
-        if (nav_mesh_search::get_edge_mid_point(nav_mesh, path[i], path[i + 1], mid)) mids.push(mid);
+        EdgeMidPoint mid;
+        nav_mesh_search::get_edge_mid_point(mid, nav_mesh, path[i], path[i + 1]);
+        if (mid.success) mids.push(mid.position);
     }
     mids.push(end);
 

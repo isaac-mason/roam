@@ -219,28 +219,28 @@ static void check_path_validity(Crowd &crowd, const NavMesh &nav_mesh, float del
 
 static void finalize_into(Array<NodeRef> &path, const NavMesh &nav_mesh, SlicedNodePathQuery &query) {
     SlicedFindNodePathResult result;
-    nav_mesh_search::finalize_sliced_find_node_path(result, nav_mesh, query, {path.data, path.capacity});
+    nav_mesh_search::finalize_sliced_find_node_path(result, nav_mesh, query, path);
     if (result.truncated) {
         path.reserve(result.path_total);
-        nav_mesh_search::finalize_sliced_find_node_path(result, nav_mesh, query, {path.data, path.capacity});
+        nav_mesh_search::finalize_sliced_find_node_path(result, nav_mesh, query, path);
     }
     path.resize(result.path_count);
 }
 
 static void finalize_partial_into(Array<NodeRef> &path, const NavMesh &nav_mesh, SlicedNodePathQuery &query, const Array<NodeRef> &existing) {
     SlicedFindNodePathResult result;
-    nav_mesh_search::finalize_sliced_find_node_path_partial(result, nav_mesh, query, existing, {path.data, path.capacity});
+    nav_mesh_search::finalize_sliced_find_node_path_partial(result, nav_mesh, query, existing, path);
     if (result.truncated) {
         path.reserve(result.path_total);
-        nav_mesh_search::finalize_sliced_find_node_path_partial(result, nav_mesh, query, existing, {path.data, path.capacity});
+        nav_mesh_search::finalize_sliced_find_node_path_partial(result, nav_mesh, query, existing, path);
     }
     path.resize(result.path_count);
 }
 
 static void request_path(Crowd &crowd, const NavMesh &nav_mesh, Agent &agent) {
-    nav_mesh_search::init_sliced_find_node_path(nav_mesh, agent.sliced_query, first_corridor_ref(agent), agent.target_ref, agent.position,
+    nav_mesh_search::init_sliced_find_node_path(agent.sliced_query, nav_mesh, first_corridor_ref(agent), agent.target_ref, agent.position,
                                                 agent.target_position, agent.query_filter);
-    nav_mesh_search::update_sliced_find_node_path(nav_mesh, agent.sliced_query, crowd.quick_search_iterations);
+    nav_mesh_search::update_sliced_find_node_path(agent.sliced_query, nav_mesh, crowd.quick_search_iterations);
 
     Array<NodeRef> &request_path = crowd.workspace.node_path;
     if (agent.target_replan) {
@@ -368,7 +368,7 @@ static void update_move_requests(Crowd &crowd, const NavMesh &nav_mesh, float de
         if (!agent.allocated) continue;
 
         if (agent.target_state == AGENT_TARGET_STATE_WAITING_FOR_QUEUE) {
-            nav_mesh_search::init_sliced_find_node_path(nav_mesh, agent.sliced_query, agent.corridor.path.back(), agent.target_ref, agent.corridor.target,
+            nav_mesh_search::init_sliced_find_node_path(agent.sliced_query, nav_mesh, agent.corridor.path.back(), agent.target_ref, agent.corridor.target,
                                                         agent.target_position, agent.query_filter);
             agent.target_state = AGENT_TARGET_STATE_WAITING_FOR_PATH;
             pathfinding_agents.push(agent_id);
@@ -389,7 +389,7 @@ static void update_move_requests(Crowd &crowd, const NavMesh &nav_mesh, float de
 
         if ((agent.sliced_query.status & SLICED_FIND_NODE_PATH_IN_PROGRESS) != 0 && remaining_iterations > 0) {
             int iterations = crowd.max_iterations_per_agent < remaining_iterations ? crowd.max_iterations_per_agent : remaining_iterations;
-            remaining_iterations -= nav_mesh_search::update_sliced_find_node_path(nav_mesh, agent.sliced_query, iterations);
+            remaining_iterations -= nav_mesh_search::update_sliced_find_node_path(agent.sliced_query, nav_mesh, iterations);
         }
 
         if ((agent.sliced_query.status & SLICED_FIND_NODE_PATH_FAILURE) != 0) {

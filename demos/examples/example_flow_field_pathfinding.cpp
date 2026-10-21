@@ -103,7 +103,7 @@ static bool get_node_path_from_flow_field(const FlowField &flow_field, NodeRef s
 
 static bool get_poly_center(const NavMesh &nav_mesh, NodeRef node_ref, Vec3 &out_center) {
     if (node::get_node_ref_type(node_ref) != NODE_TYPE_POLY) return false;
-    TileAndPoly tile_and_poly = nav_mesh_api::get_tile_and_poly_by_ref(node_ref, nav_mesh);
+    TileAndPoly tile_and_poly = nav_mesh_api::get_tile_and_poly_by_ref(nav_mesh, node_ref);
     if (!tile_and_poly.success) return false;
     const NavMeshTile &tile = *tile_and_poly.tile;
     const NavMeshPoly &poly = *tile_and_poly.poly;

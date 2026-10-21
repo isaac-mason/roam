@@ -55,14 +55,14 @@ static uint32_t append_portals(const NavMesh &nav_mesh, int start_index, int end
             if (nav_mesh_api::get_node_by_ref(nav_mesh, from).area == nav_mesh_api::get_node_by_ref(nav_mesh, to).area) continue;
         }
 
-        Vec3 left;
-        Vec3 right;
-        if (!nav_mesh_search::get_portal_points(nav_mesh, from, to, left, right)) break;
+        PortalPoints portal;
+        nav_mesh_search::get_portal_points(portal, nav_mesh, from, to);
+        if (!portal.success) break;
 
-        geometry::IntersectSegSeg2dResult intersection = geometry::intersect_seg_seg_2d(start_position, end_position, left, right);
+        geometry::IntersectSegSeg2dResult intersection = geometry::intersect_seg_seg_2d(start_position, end_position, portal.left, portal.right);
         if (!intersection.hit) continue;
 
-        Vec3 point = vec3::lerp(left, right, intersection.t);
+        Vec3 point = vec3::lerp(portal.left, portal.right, intersection.t);
 
         uint32_t status = append_vertex(point, to, 0, out_points, node::get_node_ref_type(to), max_points);
         if (status != APPEND_VERTEX_IN_PROGRESS) return status;
@@ -134,7 +134,11 @@ static FindStraightPathResult find_straight_path_in(const NavMesh &nav_mesh, Vec
                 NodeRef to_ref = path_node_refs[i + 1];
                 to_type = node::get_node_ref_type(to_ref);
 
-                if (!nav_mesh_search::get_portal_points(nav_mesh, path_node_refs[i], to_ref, left, right)) {
+                PortalPoints portal;
+                nav_mesh_search::get_portal_points(portal, nav_mesh, path_node_refs[i], to_ref);
+                left = portal.left;
+                right = portal.right;
+                if (!portal.success) {
                     ClosestPointOnPolyBoundary end_clamp = {};
                     nav_mesh_api::get_closest_point_on_poly_boundary(end_clamp, nav_mesh, path_node_refs[i], end);
                     if (!end_clamp.success) return make_result(INVALID, path);

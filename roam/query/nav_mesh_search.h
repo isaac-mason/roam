@@ -120,6 +120,17 @@ struct MoveAlongSurfaceResult {
     bool truncated;
 };
 
+struct PortalPoints {
+    bool success;
+    Vec3 left;
+    Vec3 right;
+};
+
+struct EdgeMidPoint {
+    bool success;
+    Vec3 position;
+};
+
 struct SearchWorkspace {
     SearchNodePool nodes;
     SearchNodeQueue open_list;
@@ -147,6 +158,7 @@ namespace nav_mesh_search {
 
 SearchWorkspace create_search_workspace();
 void release(SearchWorkspace &workspace);
+uint32_t get_search_node_count(const SearchWorkspace &workspace);
 
 int32_t get_search_node(const SearchNodePool &pool, NodeRef node_ref, int state);
 int32_t get_first_search_node(const SearchNodePool &pool, NodeRef node_ref);
@@ -159,17 +171,17 @@ int32_t pop_node_from_queue(SearchNodeQueue &queue, const SearchNodePool &pool);
 void reindex_node_in_queue(SearchNodeQueue &queue, const SearchNodePool &pool, uint32_t node);
 void release(SearchNodeQueue &queue);
 
-bool get_portal_points(const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref, Vec3 &out_left, Vec3 &out_right);
-bool get_edge_mid_point(const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref, Vec3 &out_mid_point);
+void get_portal_points(PortalPoints &out, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref);
+void get_edge_mid_point(EdgeMidPoint &out, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref);
 
 void copy_last_node_path(FindNodePathResult &out, const SearchWorkspace &workspace, Span<NodeRef> path);
 void find_node_path(FindNodePathResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref, NodeRef end_node_ref,
                     Vec3 start_position, Vec3 end_position, const QueryFilter &filter, Span<NodeRef> path, FindNodePathOptions options = {});
 
 SlicedNodePathQuery create_sliced_node_path_query();
-uint32_t init_sliced_find_node_path(const NavMesh &nav_mesh, SlicedNodePathQuery &query, NodeRef start_node_ref, NodeRef end_node_ref,
+void init_sliced_find_node_path(SlicedNodePathQuery &query, const NavMesh &nav_mesh, NodeRef start_node_ref, NodeRef end_node_ref,
                                     Vec3 start_position, Vec3 end_position, const QueryFilter &filter, uint32_t flags = 0);
-int update_sliced_find_node_path(const NavMesh &nav_mesh, SlicedNodePathQuery &query, int max_iterations);
+int update_sliced_find_node_path(SlicedNodePathQuery &query, const NavMesh &nav_mesh, int max_iterations);
 void finalize_sliced_find_node_path(SlicedFindNodePathResult &out, const NavMesh &nav_mesh, SlicedNodePathQuery &query, Span<NodeRef> path);
 void finalize_sliced_find_node_path_partial(SlicedFindNodePathResult &out, const NavMesh &nav_mesh, SlicedNodePathQuery &query,
                                             Span<const NodeRef> existing_path, Span<NodeRef> path);

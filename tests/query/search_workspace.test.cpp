@@ -216,8 +216,8 @@ TEST(sliced_finalize_can_be_repeated_to_grow_the_buffer) {
     nav_mesh_api::find_nearest_poly(end, nav_mesh, {5.5f, 0, 1.5f}, {1, 1, 1}, filter);
 
     SlicedNodePathQuery query = nav_mesh_search::create_sliced_node_path_query();
-    nav_mesh_search::init_sliced_find_node_path(nav_mesh, query, start.node_ref, end.node_ref, start.position, end.position, filter);
-    while (query.status & SLICED_FIND_NODE_PATH_IN_PROGRESS) nav_mesh_search::update_sliced_find_node_path(nav_mesh, query, 2);
+    nav_mesh_search::init_sliced_find_node_path(query, nav_mesh, start.node_ref, end.node_ref, start.position, end.position, filter);
+    while (query.status & SLICED_FIND_NODE_PATH_IN_PROGRESS) nav_mesh_search::update_sliced_find_node_path(query, nav_mesh, 2);
 
     NodeRef first[1];
     SlicedFindNodePathResult cut;

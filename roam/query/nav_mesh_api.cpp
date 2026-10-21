@@ -168,7 +168,7 @@ Vec2 world_to_tile_position(const NavMesh &nav_mesh, Vec3 world_position) {
     return {floorf((world_position.x - nav_mesh.origin.x) / nav_mesh.tile_width), floorf((world_position.z - nav_mesh.origin.z) / nav_mesh.tile_height)};
 }
 
-TileAndPoly get_tile_and_poly_by_ref(NodeRef ref, const NavMesh &nav_mesh) {
+TileAndPoly get_tile_and_poly_by_ref(const NavMesh &nav_mesh, NodeRef ref) {
     TileAndPoly result = {false, nullptr, nullptr, -1};
 
     if (node::get_node_ref_type(ref) != NODE_TYPE_POLY) return result;
@@ -291,7 +291,7 @@ void get_poly_height(GetPolyHeightResult &out, const NavMeshTile &tile, const Na
 void get_closest_point_on_poly(GetClosestPointOnPolyResult &out, const NavMesh &nav_mesh, NodeRef node_ref, Vec3 position) {
     out = {false, false, position};
 
-    TileAndPoly tile_and_poly = get_tile_and_poly_by_ref(node_ref, nav_mesh);
+    TileAndPoly tile_and_poly = get_tile_and_poly_by_ref(nav_mesh, node_ref);
     if (!tile_and_poly.success) return;
 
     out.success = true;
@@ -309,7 +309,7 @@ void get_closest_point_on_poly(GetClosestPointOnPolyResult &out, const NavMesh &
 
 void get_closest_point_on_poly_boundary(ClosestPointOnPolyBoundary &out, const NavMesh &nav_mesh, NodeRef node_ref, Vec3 point) {
     out = {false, point};
-    TileAndPoly tile_and_poly = get_tile_and_poly_by_ref(node_ref, nav_mesh);
+    TileAndPoly tile_and_poly = get_tile_and_poly_by_ref(nav_mesh, node_ref);
     if (!tile_and_poly.success || !vec3::finite(point)) return;
 
     const NavMeshTile &tile = *tile_and_poly.tile;

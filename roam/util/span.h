@@ -42,7 +42,9 @@ struct Span {
     template <size_t N>
     Span(T (&array)[N]) : data(array), capacity((uint32_t)N) {}
 
-    Span(Array<Element> &array) : data(array.data), capacity(array.length) {}
+    Span(Array<Element> &array)
+        requires(!IS_CONST<T>)
+        : data(array.data), capacity(array.capacity) {}
 
     Span(const Array<Element> &array)
         requires IS_CONST<T>

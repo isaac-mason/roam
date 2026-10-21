@@ -89,7 +89,7 @@ void find_local_neighbourhood(FindLocalNeighbourhoodResult &result, SearchWorksp
     for (uint32_t head = 0; head < queue.length; head++) {
         NodeRef current_ref = nodes.nodes[queue[head]].node_ref;
 
-        if (!nav_mesh_api::get_tile_and_poly_by_ref(current_ref, nav_mesh).success) continue;
+        if (!nav_mesh_api::get_tile_and_poly_by_ref(nav_mesh, current_ref).success) continue;
 
         const NavMeshNode &node = nav_mesh_api::get_node_by_ref(nav_mesh, current_ref);
 
@@ -100,17 +100,17 @@ void find_local_neighbourhood(FindLocalNeighbourhoodResult &result, SearchWorksp
             int32_t existing = nav_mesh_search::get_search_node(nodes, neighbour_ref, 0);
             if (existing != NULL_SEARCH_NODE && nodes.nodes[(uint32_t)existing].flags & NODE_FLAG_CLOSED) continue;
 
-            TileAndPoly neighbour = nav_mesh_api::get_tile_and_poly_by_ref(neighbour_ref, nav_mesh);
+            TileAndPoly neighbour = nav_mesh_api::get_tile_and_poly_by_ref(nav_mesh, neighbour_ref);
             if (!neighbour.success) continue;
 
             if (node::get_node_ref_type(neighbour_ref) == NODE_TYPE_OFFMESH) continue;
             if (!nav_mesh_api::passes_filter(filter, neighbour_ref, nav_mesh)) continue;
 
-            Vec3 va;
-            Vec3 vb;
-            if (!nav_mesh_search::get_portal_points(nav_mesh, current_ref, neighbour_ref, va, vb)) continue;
+            PortalPoints portal;
+            nav_mesh_search::get_portal_points(portal, nav_mesh, current_ref, neighbour_ref);
+            if (!portal.success) continue;
 
-            if (geometry::distance_pt_seg_sqr_2d(position, va, vb).dist_sqr > radius_sqr) continue;
+            if (geometry::distance_pt_seg_sqr_2d(position, portal.left, portal.right).dist_sqr > radius_sqr) continue;
 
             SearchNode neighbour_node = {};
             neighbour_node.position = position;
@@ -128,7 +128,7 @@ void find_local_neighbourhood(FindLocalNeighbourhoodResult &result, SearchWorksp
 
                 if (links_to(nav_mesh, node, past_ref)) continue;
 
-                TileAndPoly past = nav_mesh_api::get_tile_and_poly_by_ref(past_ref, nav_mesh);
+                TileAndPoly past = nav_mesh_api::get_tile_and_poly_by_ref(nav_mesh, past_ref);
                 if (!past.success) continue;
 
                 uint32_t vertex_count_b = gather_vertices(*past.tile, *past.poly, vertices_b);
@@ -170,7 +170,7 @@ void get_poly_wall_segments(PolyWallSegmentsResult &result, const NavMesh &nav_m
     result = {false, 0, 0, false};
     SegmentWriter writer = {segments, segment_refs, 0};
 
-    TileAndPoly tile_and_poly = nav_mesh_api::get_tile_and_poly_by_ref(node_ref, nav_mesh);
+    TileAndPoly tile_and_poly = nav_mesh_api::get_tile_and_poly_by_ref(nav_mesh, node_ref);
     if (!tile_and_poly.success) return;
 
     const NavMeshTile &tile = *tile_and_poly.tile;
@@ -193,14 +193,14 @@ void get_poly_wall_segments(PolyWallSegmentsResult &result, const NavMesh &nav_m
                 const NavMeshLink &link = nav_mesh.links[(uint32_t)link_index];
                 if ((uint32_t)link.edge != j) continue;
                 if (link.to_node_ref == INVALID_NODE_REF) continue;
-                if (!nav_mesh_api::get_tile_and_poly_by_ref(link.to_node_ref, nav_mesh).success) continue;
+                if (!nav_mesh_api::get_tile_and_poly_by_ref(nav_mesh, link.to_node_ref).success) continue;
                 if (nav_mesh_api::passes_filter(filter, link.to_node_ref, nav_mesh)) insert_interval(intervals, link.bmin, link.bmax, link.to_node_ref);
             }
         } else {
             NodeRef neighbour_ref = INVALID_NODE_REF;
             if (nei) {
                 neighbour_ref = nav_mesh_api::get_node_by_tile_and_poly(nav_mesh, tile, nei - 1).ref;
-                if (nav_mesh_api::get_tile_and_poly_by_ref(neighbour_ref, nav_mesh).success && !nav_mesh_api::passes_filter(filter, neighbour_ref, nav_mesh)) {
+                if (nav_mesh_api::get_tile_and_poly_by_ref(nav_mesh, neighbour_ref).success && !nav_mesh_api::passes_filter(filter, neighbour_ref, nav_mesh)) {
                     neighbour_ref = INVALID_NODE_REF;
                 }
             }

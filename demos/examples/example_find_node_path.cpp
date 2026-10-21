@@ -59,7 +59,7 @@ static void update_path() {
         nav_mesh_search::find_node_path(path, state.workspace, nav_mesh, start.node_ref, end.node_ref, start.position, end.position,
                                         nav_mesh_api::DEFAULT_QUERY_FILTER, state.node_path);
         if (path.truncated) {
-            state.node_path.resize(path.path_total);
+            state.node_path.reserve(path.path_total);
             state.times_grown++;
             nav_mesh_search::copy_last_node_path(path, state.workspace, state.node_path);
         }
@@ -68,7 +68,7 @@ static void update_path() {
         state.success = path.success;
         state.flags = path.flags;
         state.node_count = path.path_count;
-        state.search_node_count = state.workspace.nodes.nodes.length;
+        state.search_node_count = nav_mesh_search::get_search_node_count(state.workspace);
 
         DebugPrimitives nodes = debug::create_search_nodes_helper(state.workspace);
         renderer::add_primitives(list, nodes);
@@ -92,7 +92,7 @@ static void init(App &app) {
     FindNodePathExample &state = find_node_path_example;
     state = {};
     state.workspace = nav_mesh_search::create_search_workspace();
-    state.node_path.resize(INITIAL_NODE_PATH);
+    state.node_path.reserve(INITIAL_NODE_PATH);
     state.start = {-3.94f, 0.26f, 4.71f};
     state.end = {2.52f, 2.39f, -2.2f};
     app.want_hover = true;
@@ -146,7 +146,7 @@ static void ui(App &) {
     }
     ImGui::Text("%s in %.3f ms", state.success ? "found" : "failed", state.query_milliseconds);
     ImGui::Text("%u path nodes, %u search nodes", state.node_count, state.search_node_count);
-    ImGui::Text("path buffer holds %u nodes, grown %u times", state.node_path.length, state.times_grown);
+    ImGui::Text("path buffer holds %u nodes, grown %u times", state.node_path.capacity, state.times_grown);
     if (state.flags & FIND_NODE_PATH_RESULT_PARTIAL_PATH) ImGui::Text("partial path");
 }
 

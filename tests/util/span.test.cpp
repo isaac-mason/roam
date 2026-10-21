@@ -24,13 +24,15 @@ TEST(span_comes_from_arrays_and_c_arrays) {
     values.reserve(16);
     values.resize(4);
     Span<int> written = values;
-    CHECK(written.capacity == 4);
+    CHECK(written.capacity == 16);
+    Span<const int> elements = values;
+    CHECK(elements.capacity == 4);
     fill(values);
     CHECK(sum(values) == 10);
 
     const Array<int> &read_only = values;
     CHECK(sum(read_only) == 10);
-    CHECK(sum(written) == 10);
+    CHECK(sum(elements) == 10);
     CHECK(sum({fixed, 2}) == 3);
     CHECK(sum({}) == 0);
 

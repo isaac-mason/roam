@@ -35,6 +35,8 @@ void release(SearchWorkspace &workspace) {
     workspace.local_refs.release();
 }
 
+uint32_t get_search_node_count(const SearchWorkspace &workspace) { return workspace.nodes.nodes.length; }
+
 static int32_t first_with_ref(const SearchNodePool &pool, NodeRef node_ref) {
     uint32_t index = node::get_node_ref_index(node_ref);
     if (index >= pool.stamp_by_index.length || pool.stamp_by_index[index] != pool.stamp) return NULL_SEARCH_NODE;
@@ -178,11 +180,12 @@ static Vec3 tile_vertex(const NavMeshTile &tile, const NavMeshPoly &poly, uint32
     return vec3::load(tile.vertices.data, tile.poly_vertices[poly.vertex_base + i] * 3);
 }
 
-bool get_portal_points(const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref, Vec3 &out_left, Vec3 &out_right) {
+void get_portal_points(PortalPoints &out, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref) {
+    out = {};
     const NavMeshNode &from_node = nav_mesh_api::get_node_by_ref(nav_mesh, from_node_ref);
 
     const NavMeshLink *to_link = find_link_to(nav_mesh, from_node, to_node_ref);
-    if (!to_link) return false;
+    if (!to_link) return;
 
     NodeType from_type = node::get_node_ref_type(from_node_ref);
     NodeType to_type = node::get_node_ref_type(to_node_ref);
@@ -196,43 +199,42 @@ bool get_portal_points(const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef t
 
         if (to_link->side != 0xff && (to_link->bmin != 0 || to_link->bmax != 255)) {
             const float s = 1.0f / 255.0f;
-            out_left = vec3::lerp(v0, v1, (float)to_link->bmin * s);
-            out_right = vec3::lerp(v0, v1, (float)to_link->bmax * s);
+            out.left = vec3::lerp(v0, v1, (float)to_link->bmin * s);
+            out.right = vec3::lerp(v0, v1, (float)to_link->bmax * s);
         } else {
-            out_left = v0;
-            out_right = v1;
+            out.left = v0;
+            out.right = v1;
         }
 
-        return true;
+        out.success = true;
+        return;
     }
 
     if (from_type == NODE_TYPE_POLY && to_type == NODE_TYPE_OFFMESH) {
         const OffMeshConnection *connection = off_mesh_connection_of(nav_mesh, nav_mesh_api::get_node_by_ref(nav_mesh, to_node_ref));
-        if (!connection) return false;
+        if (!connection) return;
         Vec3 position = to_link->edge == 0 ? connection->start : connection->end;
-        out_left = position;
-        out_right = position;
-        return true;
+        out.left = position;
+        out.right = position;
+        out.success = true;
+        return;
     }
 
     if (from_type == NODE_TYPE_OFFMESH && to_type == NODE_TYPE_POLY) {
         const OffMeshConnection *connection = off_mesh_connection_of(nav_mesh, from_node);
-        if (!connection) return false;
+        if (!connection) return;
         Vec3 position = to_link->edge == 0 ? connection->start : connection->end;
-        out_left = position;
-        out_right = position;
-        return true;
+        out.left = position;
+        out.right = position;
+        out.success = true;
     }
-
-    return false;
 }
 
-bool get_edge_mid_point(const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref, Vec3 &out_mid_point) {
-    Vec3 left;
-    Vec3 right;
-    if (!get_portal_points(nav_mesh, from_node_ref, to_node_ref, left, right)) return false;
-    out_mid_point = vec3::scale(vec3::add(left, right), 0.5f);
-    return true;
+void get_edge_mid_point(EdgeMidPoint &out, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref) {
+    PortalPoints portal;
+    get_portal_points(portal, nav_mesh, from_node_ref, to_node_ref);
+    out.success = portal.success;
+    out.position = portal.success ? vec3::scale(vec3::add(portal.left, portal.right), 0.5f) : Vec3{0, 0, 0};
 }
 
 struct RefWriter {
@@ -289,7 +291,9 @@ static uint32_t get_or_add_neighbour(const NavMesh &nav_mesh, SearchNodePool &po
     if (existing != NULL_SEARCH_NODE) return (uint32_t)existing;
 
     SearchNode node = make_search_node(neighbour_node_ref, state, 0, {0, 0, 0});
-    get_edge_mid_point(nav_mesh, best_node_ref, neighbour_node_ref, node.position);
+    EdgeMidPoint mid;
+    get_edge_mid_point(mid, nav_mesh, best_node_ref, neighbour_node_ref);
+    node.position = mid.position;
     return add_search_node(pool, node);
 }
 
@@ -455,7 +459,7 @@ SlicedNodePathQuery create_sliced_node_path_query() {
     return query;
 }
 
-uint32_t init_sliced_find_node_path(const NavMesh &nav_mesh, SlicedNodePathQuery &query, NodeRef start_node_ref, NodeRef end_node_ref,
+void init_sliced_find_node_path(SlicedNodePathQuery &query, const NavMesh &nav_mesh, NodeRef start_node_ref, NodeRef end_node_ref,
                                     Vec3 start_position, Vec3 end_position, const QueryFilter &filter, uint32_t flags) {
     query.start_node_ref = start_node_ref;
     query.end_node_ref = end_node_ref;
@@ -473,7 +477,7 @@ uint32_t init_sliced_find_node_path(const NavMesh &nav_mesh, SlicedNodePathQuery
     if (!nav_mesh_api::is_valid_node_ref(nav_mesh, start_node_ref) || !nav_mesh_api::is_valid_node_ref(nav_mesh, end_node_ref) ||
         !vec3::finite(start_position) || !vec3::finite(end_position)) {
         query.status = SLICED_FIND_NODE_PATH_FAILURE | SLICED_FIND_NODE_PATH_INVALID_PARAM;
-        return query.status;
+        return;
     }
 
     if (flags & SLICED_FIND_NODE_PATH_ANY_ANGLE) {
@@ -492,16 +496,14 @@ uint32_t init_sliced_find_node_path(const NavMesh &nav_mesh, SlicedNodePathQuery
 
     if (start_node_ref == end_node_ref) {
         query.status = SLICED_FIND_NODE_PATH_SUCCESS;
-        return query.status;
+        return;
     }
 
     push_node_to_queue(query.open_list, query.nodes, start_index);
     query.status = SLICED_FIND_NODE_PATH_IN_PROGRESS;
-
-    return query.status;
 }
 
-int update_sliced_find_node_path(const NavMesh &nav_mesh, SlicedNodePathQuery &query, int max_iterations) {
+int update_sliced_find_node_path(SlicedNodePathQuery &query, const NavMesh &nav_mesh, int max_iterations) {
     int iterations_done = 0;
 
     if (!(query.status & SLICED_FIND_NODE_PATH_IN_PROGRESS)) return iterations_done;
@@ -779,7 +781,7 @@ void move_along_surface(MoveAlongSurfaceResult &result, SearchWorkspace &workspa
         uint32_t current_index = queue[head];
         NodeRef current_ref = nodes.nodes[current_index].node_ref;
 
-        TileAndPoly tile_and_poly = nav_mesh_api::get_tile_and_poly_by_ref(current_ref, nav_mesh);
+        TileAndPoly tile_and_poly = nav_mesh_api::get_tile_and_poly_by_ref(nav_mesh, current_ref);
         if (!tile_and_poly.success) continue;
 
         const NavMeshTile &tile = *tile_and_poly.tile;
@@ -852,7 +854,7 @@ void move_along_surface(MoveAlongSurfaceResult &result, SearchWorkspace &workspa
     result.position = best_position;
     result.node_ref = nodes.nodes[(uint32_t)best_node].node_ref;
 
-    TileAndPoly tile_and_poly = nav_mesh_api::get_tile_and_poly_by_ref(result.node_ref, nav_mesh);
+    TileAndPoly tile_and_poly = nav_mesh_api::get_tile_and_poly_by_ref(nav_mesh, result.node_ref);
     if (tile_and_poly.success) {
         GetPolyHeightResult height;
         nav_mesh_api::get_poly_height(height, *tile_and_poly.tile, *tile_and_poly.poly, tile_and_poly.poly_index, result.position);
@@ -887,7 +889,7 @@ static void raycast_base(RaycastResult &result, const NavMesh &nav_mesh, NodeRef
     }
 
     while (current_ref != INVALID_NODE_REF) {
-        TileAndPoly tile_and_poly = nav_mesh_api::get_tile_and_poly_by_ref(current_ref, nav_mesh);
+        TileAndPoly tile_and_poly = nav_mesh_api::get_tile_and_poly_by_ref(nav_mesh, current_ref);
         if (!tile_and_poly.success) break;
         const NavMeshTile &tile = *tile_and_poly.tile;
         const NavMeshPoly &poly = *tile_and_poly.poly;
@@ -922,7 +924,7 @@ static void raycast_base(RaycastResult &result, const NavMesh &nav_mesh, NodeRef
 
             if (link.edge != intersection.seg_max) continue;
             if (node::get_node_ref_type(link.to_node_ref) == NODE_TYPE_OFFMESH) continue;
-            if (!nav_mesh_api::get_tile_and_poly_by_ref(link.to_node_ref, nav_mesh).success) continue;
+            if (!nav_mesh_api::get_tile_and_poly_by_ref(nav_mesh, link.to_node_ref).success) continue;
             if (!nav_mesh_api::passes_filter(filter, link.to_node_ref, nav_mesh)) continue;
 
             if (link.side == 0xff) {
@@ -1108,7 +1110,7 @@ void find_random_point_around_circle(FindRandomPointResult &out, SearchWorkspace
 
     if (!nav_mesh_api::is_valid_node_ref(nav_mesh, start_node_ref) || !vec3::finite(position) || max_radius < 0 || !isfinite(max_radius)) return;
 
-    if (!nav_mesh_api::get_tile_and_poly_by_ref(start_node_ref, nav_mesh).success) return;
+    if (!nav_mesh_api::get_tile_and_poly_by_ref(nav_mesh, start_node_ref).success) return;
     if (!nav_mesh_api::passes_filter(filter, start_node_ref, nav_mesh)) return;
 
     SearchNodePool &nodes = workspace.nodes;
@@ -1134,7 +1136,7 @@ void find_random_point_around_circle(FindRandomPointResult &out, SearchWorkspace
         SearchNode best = nodes.nodes[best_index];
 
         NodeRef best_ref = best.node_ref;
-        TileAndPoly best_tile_and_poly = nav_mesh_api::get_tile_and_poly_by_ref(best_ref, nav_mesh);
+        TileAndPoly best_tile_and_poly = nav_mesh_api::get_tile_and_poly_by_ref(nav_mesh, best_ref);
         if (!best_tile_and_poly.success) continue;
 
         float area = poly_area(*best_tile_and_poly.tile, *best_tile_and_poly.poly);
@@ -1153,14 +1155,14 @@ void find_random_point_around_circle(FindRandomPointResult &out, SearchWorkspace
             NodeRef neighbour_ref = nav_mesh.links[(uint32_t)link_index].to_node_ref;
 
             if (neighbour_ref == INVALID_NODE_REF || neighbour_ref == parent_ref) continue;
-            if (!nav_mesh_api::get_tile_and_poly_by_ref(neighbour_ref, nav_mesh).success) continue;
+            if (!nav_mesh_api::get_tile_and_poly_by_ref(nav_mesh, neighbour_ref).success) continue;
             if (!nav_mesh_api::passes_filter(filter, neighbour_ref, nav_mesh)) continue;
 
-            Vec3 va;
-            Vec3 vb;
-            if (!get_portal_points(nav_mesh, best_ref, neighbour_ref, va, vb)) continue;
+            PortalPoints portal;
+            get_portal_points(portal, nav_mesh, best_ref, neighbour_ref);
+            if (!portal.success) continue;
 
-            if (geometry::distance_pt_seg_sqr_2d(position, va, vb).dist_sqr > radius_sqr) continue;
+            if (geometry::distance_pt_seg_sqr_2d(position, portal.left, portal.right).dist_sqr > radius_sqr) continue;
 
             int32_t neighbour_index = get_search_node(nodes, neighbour_ref, 0);
             if (neighbour_index == NULL_SEARCH_NODE) neighbour_index = (int32_t)add_search_node(nodes, make_search_node(neighbour_ref, 0, 0, {0, 0, 0}));
@@ -1168,7 +1170,7 @@ void find_random_point_around_circle(FindRandomPointResult &out, SearchWorkspace
             SearchNode &neighbour = nodes.nodes[(uint32_t)neighbour_index];
             if (neighbour.flags & NODE_FLAG_CLOSED) continue;
 
-            if (neighbour.flags == 0) neighbour.position = vec3::lerp(va, vb, 0.5f);
+            if (neighbour.flags == 0) neighbour.position = vec3::lerp(portal.left, portal.right, 0.5f);
 
             float total = best.total + vec3::distance(best.position, neighbour.position);
 

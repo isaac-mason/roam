@@ -66,7 +66,7 @@ static void update_path() {
         state.success = path.success;
         state.flags = path.flags;
         state.node_count = path.path_count;
-        state.search_node_count = state.workspace.nodes.nodes.length;
+        state.search_node_count = nav_mesh_search::get_search_node_count(state.workspace);
 
         if (path.success) {
             DebugPrimitives nodes = debug::create_search_nodes_helper(state.workspace);

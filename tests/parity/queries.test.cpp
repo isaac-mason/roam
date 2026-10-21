@@ -237,9 +237,9 @@ TEST(queries_match_navcat_on_nav_test) {
         wall_cursor += wall_count;
         walls.record(same_wall, pair);
 
-        nav_mesh_search::init_sliced_find_node_path(nav_mesh, query, start_ref, path.end_node_ref, path.start_position, path.end_position, filter,
+        nav_mesh_search::init_sliced_find_node_path(query, nav_mesh, start_ref, path.end_node_ref, path.start_position, path.end_position, filter,
                                                     SLICED_FIND_NODE_PATH_ANY_ANGLE);
-        while (query.status & SLICED_FIND_NODE_PATH_IN_PROGRESS) nav_mesh_search::update_sliced_find_node_path(nav_mesh, query, 7);
+        while (query.status & SLICED_FIND_NODE_PATH_IN_PROGRESS) nav_mesh_search::update_sliced_find_node_path(query, nav_mesh, 7);
         SlicedFindNodePathResult sliced;
         nav_mesh_search::finalize_sliced_find_node_path(sliced, nav_mesh, query, other_refs);
         bool same_sliced = (int32_t)sliced.status == sliced_status.data[pair];

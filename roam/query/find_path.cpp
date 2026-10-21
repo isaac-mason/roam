@@ -28,10 +28,10 @@ void find_path(FindPathResult &out, SearchWorkspace &workspace, const NavMesh &n
     FindNodePathResult node_path;
     Array<NodeRef> &node_refs = workspace.node_path;
     nav_mesh_search::find_node_path(node_path, workspace, nav_mesh, out.start_node_ref, out.end_node_ref, out.start_position, out.end_position, filter,
-                                    {node_refs.data, node_refs.capacity}, {options.raycast_distance});
+                                    node_refs, {options.raycast_distance});
     if (node_path.truncated) {
         node_refs.reserve(node_path.path_total);
-        nav_mesh_search::copy_last_node_path(node_path, workspace, {node_refs.data, node_refs.capacity});
+        nav_mesh_search::copy_last_node_path(node_path, workspace, node_refs);
     }
     node_refs.resize(node_path.path_count);
     out.node_path_flags = node_path.flags;

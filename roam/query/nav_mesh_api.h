@@ -104,7 +104,7 @@ const NavMeshTile *get_tile_at(const NavMesh &nav_mesh, int x, int y, int layer)
 Span<const uint32_t> get_tile_ids_at(const NavMesh &nav_mesh, int x, int y);
 Vec2 world_to_tile_position(const NavMesh &nav_mesh, Vec3 world_position);
 
-TileAndPoly get_tile_and_poly_by_ref(NodeRef ref, const NavMesh &nav_mesh);
+TileAndPoly get_tile_and_poly_by_ref(const NavMesh &nav_mesh, NodeRef ref);
 
 uint32_t gather_poly_vertices(const NavMeshTile &tile, const NavMeshPoly &poly, PolyVertices &vertices);
 void release(PolyVertices &vertices);
