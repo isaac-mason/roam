@@ -298,6 +298,11 @@ static void prepare_crowd() {
     }
 }
 
+static void prepare_capped_crowd() {
+    prepare_crowd();
+    state.crowd.max_neighbours = 6;
+}
+
 static void run_crowd() {
     for (uint32_t frame = 0; frame < CROWD_FRAMES; frame++) crowd::update(state.crowd, state.nav_mesh, 1.0f / 60.0f);
 }
@@ -349,7 +354,7 @@ int main(int argc, char **argv) {
         "build distance field",    "build regions",       "build contours",     "build poly mesh",          "build poly mesh detail",
     };
 
-    BenchCase cases[STAGE_COUNT + 7] = {};
+    BenchCase cases[STAGE_COUNT + 8] = {};
     uint32_t case_count = 0;
     for (int stage = 0; stage < STAGE_COUNT; stage++) cases[case_count++] = {STAGE_NAMES[stage], prepare_stage, run_stage, finish_stage};
     cases[case_count++] = {"generate solo nav mesh", nullptr, run_solo, nullptr};
@@ -359,6 +364,7 @@ int main(int argc, char **argv) {
     cases[case_count++] = {"raycast (100 rays)", nullptr, run_raycast, nullptr};
     cases[case_count++] = {"find nearest poly (200 points)", nullptr, run_find_nearest_poly, nullptr};
     cases[case_count++] = {"crowd (100 agents, 60 updates)", prepare_crowd, run_crowd, finish_crowd};
+    cases[case_count++] = {"crowd (100 agents, 60 updates, 6 neighbours)", prepare_capped_crowd, run_crowd, finish_crowd};
 
     printf("%-34s %12s %12s %8s\n", "bench", "median ms", "min ms", "samples");
     for (uint32_t i = 0; i < case_count; i++) {

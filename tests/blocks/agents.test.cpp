@@ -167,3 +167,39 @@ TEST(crowd_agent_crosses_an_off_mesh_connection_to_its_target) {
     crowd::release(crowd);
     nav_mesh_api::release_nav_mesh(nav_mesh);
 }
+
+static NavMesh create_open_floor() {
+    const float positions[] = {0, 0, 0, 10, 0, 0, 10, 0, 10, 0, 0, 10};
+    const uint32_t indices[] = {0, 1, 2, 0, 2, 3};
+    return create_nav_mesh_from_triangles(positions, 4, indices, 6);
+}
+
+TEST(crowd_max_neighbours_keeps_the_nearest) {
+    NavMesh nav_mesh = create_open_floor();
+
+    for (uint32_t cap = 0; cap <= 2; cap += 2) {
+        Crowd crowd = crowd::create(0.5f);
+        crowd.max_neighbours = cap;
+        AgentParams params = test_agent_params();
+        params.collision_query_range = 5;
+
+        uint32_t center = crowd::add_agent(crowd, nav_mesh, {5, 0, 5}, params);
+        const float offsets[] = {2.0f, 0.5f, 1.5f, 1.0f};
+        for (float offset : offsets) crowd::add_agent(crowd, nav_mesh, {5 + offset, 0, 5}, params);
+
+        crowd::update(crowd, nav_mesh, 0.0f);
+
+        const Array<AgentNeighbour> &neis = crowd.agents[center].neis;
+        if (cap == 0) {
+            CHECK(neis.length == 4);
+        } else {
+            REQUIRE(neis.length == 2);
+            CHECK_NEAR(neis[0].distance_sqr, 0.25f, 1e-4f);
+            CHECK_NEAR(neis[1].distance_sqr, 1.0f, 1e-4f);
+        }
+
+        crowd::release(crowd);
+    }
+
+    nav_mesh_api::release_nav_mesh(nav_mesh);
+}

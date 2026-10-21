@@ -380,6 +380,21 @@ static void update_move_requests(Crowd &crowd, const NavMesh &nav_mesh, float de
     }
 }
 
+static void add_neighbour(Array<AgentNeighbour> &neis, AgentNeighbour neighbour, uint32_t max_neighbours) {
+    if (max_neighbours == 0) {
+        neis.push(neighbour);
+        return;
+    }
+
+    uint32_t insert_index = neis.length;
+    while (insert_index > 0 && neighbour.distance_sqr < neis[insert_index - 1].distance_sqr) insert_index--;
+    if (insert_index >= max_neighbours) return;
+
+    if (neis.length < max_neighbours) neis.push(neighbour);
+    for (uint32_t i = neis.length - 1; i > insert_index; i--) neis[i] = neis[i - 1];
+    neis[insert_index] = neighbour;
+}
+
 static void update_neighbours(Crowd &crowd) {
     float min_x = INFINITY;
     float min_z = INFINITY;
@@ -458,7 +473,7 @@ static void update_neighbours(Crowd &crowd) {
                     if (other_id == agent_id) continue;
 
                     float distance_sqr = vec3::squared_distance(agent.position, crowd.agents[other_id].position);
-                    if (distance_sqr < query_range_sqr) agent.neis.push({other_id, distance_sqr});
+                    if (distance_sqr < query_range_sqr) add_neighbour(agent.neis, {other_id, distance_sqr}, crowd.max_neighbours);
                 }
             }
         }
