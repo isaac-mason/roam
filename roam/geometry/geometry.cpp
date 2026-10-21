@@ -27,41 +27,38 @@ Vec3 closest_pt_seg_2d(Vec3 point, Vec3 p, Vec3 q) {
 }
 
 bool point_in_poly(Vec3 point, const float *vertices, int vertex_count) {
+    if (vertex_count <= 0) return false;
+
     bool inside = false;
     float x = point.x;
     float z = point.z;
 
-    for (int l = vertex_count, i = 0, j = l - 1; i < l; j = i++) {
-        float xj = vertices[j * 3];
-        float zj = vertices[j * 3 + 2];
-        float xi = vertices[i * 3];
-        float zi = vertices[i * 3 + 2];
-        float where = (zi - zj) * (x - xi) - (xi - xj) * (z - zi);
+    int last = vertex_count - 1;
+    float xj = vertices[last * 3];
+    float zj = vertices[last * 3 + 2];
+    float z_before_j = vertices[(last == 0 ? 0 : last - 1) * 3 + 2];
+
+    for (const float *vertex = vertices, *end = vertices + vertex_count * 3; vertex != end; vertex += 3) {
+        float xi = vertex[0];
+        float zi = vertex[2];
         if (zj < zi) {
             if (z >= zj && z < zi) {
+                float where = (zi - zj) * (x - xi) - (xi - xj) * (z - zi);
                 if (where == 0) return true;
-                if (where > 0) {
-                    if (z == zj) {
-                        if (z > vertices[(j == 0 ? l - 1 : j - 1) * 3 + 2]) inside = !inside;
-                    } else {
-                        inside = !inside;
-                    }
-                }
+                if (where > 0 && (z != zj || z > z_before_j)) inside = !inside;
             }
         } else if (zi < zj) {
             if (z > zi && z <= zj) {
+                float where = (zi - zj) * (x - xi) - (xi - xj) * (z - zi);
                 if (where == 0) return true;
-                if (where < 0) {
-                    if (z == zj) {
-                        if (z < vertices[(j == 0 ? l - 1 : j - 1) * 3 + 2]) inside = !inside;
-                    } else {
-                        inside = !inside;
-                    }
-                }
+                if (where < 0 && (z != zj || z < z_before_j)) inside = !inside;
             }
         } else if (z == zi && ((x >= xj && x <= xi) || (x >= xi && x <= xj))) {
             return true;
         }
+        z_before_j = zj;
+        xj = xi;
+        zj = zi;
     }
 
     return inside;

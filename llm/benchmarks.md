@@ -293,3 +293,19 @@ Regions retire the same instructions as Detour on the FPS map (62.9M vs 63.6M) b
 Solo builds are now 1.16x / 1.42x / 1.71x faster than Detour.
 
 **Mark walkable** stays at about 0.95-1.0x. Detour runs about 37 instructions per triangle, roam about 45, of which the fills before the stage are part. Blocking the loop (gathering edges into flat arrays, then a plain loop the compiler vectorizes 4 wide with vector `sqrt` and divide, bit-identical across 181 slope angles on all three levels) didn't change the time, so the stage is bound by the indexed vertex loads, which both libraries do the same way. Kept the simple loop.
+
+### Move along surface, profiled (2026-10-21)
+
+Profiled with Instruments' Time Profiler (`xctrace record --template 'Time Profiler'`, headless) on a `-g` release build (`build/profile`, same code generation), 300k samples of the move-along-surface case on game-level, counting only samples under the bench loop. roam 4698 ms against Detour's 3356 ms:
+
+| | roam | Detour |
+|---|---:|---:|
+| point in poly | 951 | 491 |
+| search node pool (get, add, make) | 506 | 314 (`dtNodePool::getNode`) |
+| gathering poly vertices (vec3 load and store) | 522 | inlined into the query |
+| segment distance | 535 | 435 |
+| height snap | 325 | 459 |
+
+navcat's `point_in_poly` is an exact crossing test with on-edge and vertex tie rules, so it does more per edge than Detour's `dtPointInPolygon`. In isolation (random 5-gons, neither inlined) it took 17 ns against Detour's 8-9 ns. Making it branchless (16 ns) or branching once per edge (15-16 ns) didn't help; carrying the previous vertex (and the one before it) in registers instead of reloading by index did: 11.5 ns. Fuzzed against the previous version on 4 million polygons, including grid-snapped points, vertices, NaN and infinity: identical. `move_along_surface` also skips `point_in_poly` when the end point is outside the poly's z range, since every inside or on-edge branch needs z within an edge's z range.
+
+Move along surface went from 0.73x to 0.75-0.79x of Detour; find nearest poly from about 1.3x to 1.19-1.66x. The rest of the gap is the general search node pool against Detour's 64-node tiny pool, and point in poly's tie rules, which parity with navcat requires.

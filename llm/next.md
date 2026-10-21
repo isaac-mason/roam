@@ -21,7 +21,7 @@ A working checklist. Tick items as they land, and record findings and numbers in
 - [ ] **The crowd's hottest phases.** Obstacle avoidance: three exact scalar rewrites measured and dropped; the remaining lever is SIMD over obstacles (deferred). Next: corners (`find_corners`).
 - [x] **Tile add and remove**: 0.6x → 1.10-1.37x of Detour by indexing border edges per tile.
 - [x] **Wall segments** (0.7x → 0.87-1.0x), **local neighbourhood** (→ 1.01-1.07x), **query polygons** (→ 0.94-1.02x): inline node lookups and a leaner wall segment loop.
-- [ ] **Move along surface** (0.73x with equal work): about 900 more instructions per move than Detour; the link walk and height snap are ruled out. Needs a profile.
+- [ ] **Move along surface** (0.75-0.79x): profiled. Faster `point_in_poly` and a z-range skip landed. Remaining: a small pool for tiny searches (Detour uses a 64-node pool), and the cost of navcat's exact point-in-poly tie rules.
 - [ ] **Parallel tiled builds.** Tiles are independent. Expose per-tile generation as a thread-safe public function, and show a threaded build in the bench and a demo. roam itself stays single-threaded.
 - [x] **Regions: a closer look.** Now 1.03-1.21x ahead of Detour: 16-bit scratch, sorting only unassigned spans, and expansion drops resolved entries.
 - [x] **Mark walkable: a closer look.** Bound by indexed vertex loads; vectorizing the arithmetic didn't change the time.

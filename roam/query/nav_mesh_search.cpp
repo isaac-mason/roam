@@ -789,7 +789,15 @@ void move_along_surface(MoveAlongSurfaceResult &result, SearchWorkspace &workspa
 
         uint32_t vertex_count = gather_poly_vertices(tile, poly, vertices);
 
-        if (geometry::point_in_poly(end_position, vertices.data, (int)vertex_count)) {
+        float min_z = INFINITY;
+        float max_z = -INFINITY;
+        for (uint32_t k = 0; k < vertex_count; k++) {
+            min_z = fminf(min_z, vertices[k * 3 + 2]);
+            max_z = fmaxf(max_z, vertices[k * 3 + 2]);
+        }
+        bool within_z = end_position.z >= min_z && end_position.z <= max_z;
+
+        if (within_z && geometry::point_in_poly(end_position, vertices.data, (int)vertex_count)) {
             best_node = (int32_t)current_index;
             best_position = end_position;
             break;
