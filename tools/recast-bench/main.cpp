@@ -532,6 +532,7 @@ static void run_move_along_surface() {
         float result[3];
         int visited_count = 0;
         state.query->moveAlongSurface(state.center_refs[(size_t)a], center(a), end, &state.filter, result, visited, &visited_count, 16);
+        if (visited_count > 0) state.query->getPolyHeight(visited[visited_count - 1], result, &result[1]);
     }
 }
 

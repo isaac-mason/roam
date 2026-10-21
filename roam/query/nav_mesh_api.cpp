@@ -34,6 +34,7 @@ static void release_tile_data(NavMeshTile &tile) {
     tile.detail_vertices.release();
     tile.detail_triangles.release();
     tile.poly_nodes.release();
+    tile.portals.release();
     tile.bv_tree.nodes.release();
 }
 
@@ -654,82 +655,108 @@ struct ConnectingPoly {
     float umax;
 };
 
-static void find_connecting_polys(Array<ConnectingPoly> &results, const NavMesh &nav_mesh, Vec3 va, Vec3 vb, const NavMeshTile &target, int side) {
-    results.clear();
+static void build_tile_portals(NavMeshTile &tile) {
+    uint32_t counts[8] = {};
+    for (const NavMeshPoly &poly : tile.polys) {
+        for (uint32_t j = 0; j < poly.vertex_count; j++) {
+            int nei = tile.poly_neis[poly.vertex_base + j];
+            if (nei & POLY_NEIS_FLAG_EXT_LINK) counts[nei & POLY_NEIS_FLAG_EXT_LINK_DIR_MASK]++;
+        }
+    }
+    tile.portal_starts[0] = 0;
+    for (int direction = 0; direction < 8; direction++) tile.portal_starts[direction + 1] = tile.portal_starts[direction] + counts[direction];
 
-    Vec2 amin = {0, 0};
-    Vec2 amax = {0, 0};
-    calc_slab_end_points(va, vb, amin, amax, side);
-    float apos = get_slab_coord(va, side);
-
-    for (uint32_t i = 0; i < target.polys.length; i++) {
-        const NavMeshPoly &poly = target.polys[i];
+    tile.portals.resize(tile.portal_starts[8]);
+    uint32_t next[8];
+    for (int direction = 0; direction < 8; direction++) next[direction] = tile.portal_starts[direction];
+    for (uint32_t i = 0; i < tile.polys.length; i++) {
+        const NavMeshPoly &poly = tile.polys[i];
         uint32_t vertex_count = poly.vertex_count;
         for (uint32_t j = 0; j < vertex_count; j++) {
-            int nei = target.poly_neis[poly.vertex_base + j];
+            int nei = tile.poly_neis[poly.vertex_base + j];
             if ((nei & POLY_NEIS_FLAG_EXT_LINK) == 0) continue;
-            if ((nei & POLY_NEIS_FLAG_EXT_LINK_DIR_MASK) != side) continue;
-
-            Vec3 vc = tile_poly_vertex(target, poly, j);
-            Vec3 vd = tile_poly_vertex(target, poly, (j + 1) % vertex_count);
-
-            float bpos = get_slab_coord(vc, side);
-            if (fabsf(apos - bpos) > 0.01f) continue;
-
-            Vec2 bmin = {0, 0};
-            Vec2 bmax = {0, 0};
-            calc_slab_end_points(vc, vd, bmin, bmax, side);
-            if (!overlap_slabs(amin, amax, bmin, bmax, 0.01f, target.walkable_climb)) continue;
-
-            results.push({get_node_by_tile_and_poly(nav_mesh, target, (int)i).ref, fmaxf(amin.x, bmin.x), fminf(amax.x, bmax.x)});
-            break;
+            int direction = nei & POLY_NEIS_FLAG_EXT_LINK_DIR_MASK;
+            NavMeshTilePortal &portal = tile.portals[next[direction]++];
+            portal.poly_index = i;
+            portal.edge = (uint8_t)j;
+            portal.start = tile_poly_vertex(tile, poly, j);
+            portal.end = tile_poly_vertex(tile, poly, (j + 1) % vertex_count);
+            portal.position = get_slab_coord(portal.start, direction);
+            portal.bmin = {0, 0};
+            portal.bmax = {0, 0};
+            calc_slab_end_points(portal.start, portal.end, portal.bmin, portal.bmax, direction);
         }
+    }
+}
+
+static void find_connecting_polys(Array<ConnectingPoly> &results, const NavMesh &nav_mesh, const NavMeshTilePortal &source, const NavMeshTile &target,
+                                  int side) {
+    results.clear();
+
+    Vec2 amin = source.bmin;
+    Vec2 amax = source.bmax;
+    float apos = source.position;
+
+    uint32_t connected_poly = UINT32_MAX;
+    for (uint32_t k = target.portal_starts[side]; k < target.portal_starts[side + 1]; k++) {
+        const NavMeshTilePortal &portal = target.portals[k];
+        if (portal.poly_index == connected_poly) continue;
+        if (fabsf(apos - portal.position) > 0.01f) continue;
+        if (!overlap_slabs(amin, amax, portal.bmin, portal.bmax, 0.01f, target.walkable_climb)) continue;
+
+        results.push({get_node_by_tile_and_poly(nav_mesh, target, (int)portal.poly_index).ref, fmaxf(amin.x, portal.bmin.x), fminf(amax.x, portal.bmax.x)});
+        connected_poly = portal.poly_index;
     }
 }
 
 static uint8_t portal_fraction(float t) { return (uint8_t)floorf(t * 255 + 0.5f); }
 
+static void connect_portal(NavMesh &nav_mesh, Array<ConnectingPoly> &overlaps, const NavMeshTile &tile, const NavMeshTilePortal &portal,
+                           const NavMeshTile &target, int direction) {
+    find_connecting_polys(overlaps, nav_mesh, portal, target, opposite_tile(direction));
+
+    Vec3 va = portal.start;
+    Vec3 vb = portal.end;
+    uint32_t node_index = tile.poly_nodes[portal.poly_index];
+    for (const ConnectingPoly &overlap : overlaps) {
+        float tmin;
+        float tmax;
+        if (direction == 0 || direction == 4) {
+            tmin = (overlap.umin - va.z) / (vb.z - va.z);
+            tmax = (overlap.umax - va.z) / (vb.z - va.z);
+        } else {
+            tmin = (overlap.umin - va.x) / (vb.x - va.x);
+            tmax = (overlap.umax - va.x) / (vb.x - va.x);
+        }
+
+        if (tmin > tmax) {
+            float swap = tmin;
+            tmin = tmax;
+            tmax = swap;
+        }
+
+        tmin = fmaxf(0, fminf(1, tmin));
+        tmax = fmaxf(0, fminf(1, tmax));
+
+        add_link(nav_mesh, node_index, overlap.node_ref, portal.edge, (uint8_t)direction, portal_fraction(tmin), portal_fraction(tmax));
+    }
+}
+
 static void connect_external_links(NavMesh &nav_mesh, const NavMeshTile &tile, const NavMeshTile &target, int side) {
     Array<ConnectingPoly> overlaps = {};
 
-    for (uint32_t poly_index = 0; poly_index < tile.polys.length; poly_index++) {
-        const NavMeshPoly &poly = tile.polys[poly_index];
-        uint32_t node_index = tile.poly_nodes[poly_index];
-        uint32_t vertex_count = poly.vertex_count;
-
-        for (uint32_t j = 0; j < vertex_count; j++) {
-            int nei = tile.poly_neis[poly.vertex_base + j];
-            if ((nei & POLY_NEIS_FLAG_EXT_LINK) == 0) continue;
-
-            int direction = nei & POLY_NEIS_FLAG_EXT_LINK_DIR_MASK;
-            if (side != -1 && direction != side) continue;
-
-            Vec3 va = tile_poly_vertex(tile, poly, j);
-            Vec3 vb = tile_poly_vertex(tile, poly, (j + 1) % vertex_count);
-
-            find_connecting_polys(overlaps, nav_mesh, va, vb, target, opposite_tile(direction));
-
-            for (const ConnectingPoly &overlap : overlaps) {
-                float tmin;
-                float tmax;
-                if (direction == 0 || direction == 4) {
-                    tmin = (overlap.umin - va.z) / (vb.z - va.z);
-                    tmax = (overlap.umax - va.z) / (vb.z - va.z);
-                } else {
-                    tmin = (overlap.umin - va.x) / (vb.x - va.x);
-                    tmax = (overlap.umax - va.x) / (vb.x - va.x);
-                }
-
-                if (tmin > tmax) {
-                    float swap = tmin;
-                    tmin = tmax;
-                    tmax = swap;
-                }
-
-                tmin = fmaxf(0, fminf(1, tmin));
-                tmax = fmaxf(0, fminf(1, tmax));
-
-                add_link(nav_mesh, node_index, overlap.node_ref, (uint8_t)j, (uint8_t)direction, portal_fraction(tmin), portal_fraction(tmax));
+    if (side != -1) {
+        for (uint32_t k = tile.portal_starts[side]; k < tile.portal_starts[side + 1]; k++) connect_portal(nav_mesh, overlaps, tile, tile.portals[k], target, side);
+    } else {
+        uint32_t next[8];
+        for (int direction = 0; direction < 8; direction++) next[direction] = tile.portal_starts[direction];
+        for (uint32_t poly_index = 0; poly_index < tile.polys.length; poly_index++) {
+            const NavMeshPoly &poly = tile.polys[poly_index];
+            for (uint32_t j = 0; j < poly.vertex_count; j++) {
+                int nei = tile.poly_neis[poly.vertex_base + j];
+                if ((nei & POLY_NEIS_FLAG_EXT_LINK) == 0) continue;
+                int direction = nei & POLY_NEIS_FLAG_EXT_LINK_DIR_MASK;
+                connect_portal(nav_mesh, overlaps, tile, tile.portals[next[direction]++], target, direction);
             }
         }
     }
@@ -741,7 +768,7 @@ static void disconnect_external_links(NavMesh &nav_mesh, const NavMeshTile &tile
     int32_t target_id = (int32_t)target.id;
     for (uint32_t poly_index = 0; poly_index < tile.polys.length; poly_index++) {
         release_links_where(nav_mesh, tile.poly_nodes[poly_index], [&](const NavMeshLink &link) {
-            return get_node_by_ref(nav_mesh, link.to_node_ref).tile_id == target_id;
+            return link.side != 0xff && get_node_by_ref(nav_mesh, link.to_node_ref).tile_id == target_id;
         });
     }
 }
@@ -882,6 +909,9 @@ uint32_t add_tile(NavMesh &nav_mesh, NavMeshTile tile) {
     tile.id = id;
     tile.sequence = sequence;
     tile.poly_nodes.clear();
+    tile.poly_nodes.reserve(tile.polys.length);
+    tile.portals = {};
+    build_tile_portals(tile);
     nav_mesh.tiles[id] = tile;
 
     nav_mesh.tile_position_to_tile_id.set(position_key, id);

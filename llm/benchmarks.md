@@ -246,3 +246,13 @@ Obstacle avoidance runs about 435k samples per bench run, each against about 7 c
 | wall segments (100 polys) | 0.0030 / 0.0020 (0.67x) | 0.0027 / 0.0021 (0.78x) | 0.0031 / 0.0022 (0.71x) |
 | random point around circle (100) | 0.193 / 0.182 (0.94x) | 0.047 / 0.050 (1.05x) | 0.041 / 0.040 (0.99x) |
 | remove and add every tile | 0.032 / 0.021 (0.64x) | 0.59 / 0.33 (0.56x) | 0.97 / 0.60 (0.62x) |
+
+### Tile remove and add (2026-10-21)
+
+Counting instructions with pieces switched off showed external linking was 58% of a remove-and-add pass on game-level, more than Detour's whole pass. Every `connect_external_links` call (16 per added tile: 8 sides, both directions, most of them sides with no portals) rescanned every poly edge of the source tile looking for border edges facing that side. `add_tile` now indexes the tile's border edges once (`NavMeshTile::portals`, grouped by direction through `portal_starts`, with their end points and slab values precomputed), so each call walks only the portals facing its side, and each portal only checks the target's portals facing back. Within a direction the portals keep poly and edge order, and a target poly still connects through its first matching edge, so every link list comes out in the same order: hashed in order on all three levels after building and after re-adding every tile, identical to the previous commit. Also: `poly_nodes` is reserved up front, and disconnecting skips internal links (`side == 0xff`) without looking up their target node.
+
+| bench | nav-test | game-level | FPS map |
+|---|---|---|---|
+| remove and add every tile, roam / Detour (ms) | 0.017 / 0.020 (1.18x) | 0.30 / 0.33 (1.10x) | 0.44 / 0.60 (1.37x) |
+
+Before this change roam was at 0.56-0.64x. Tiled builds now run 1.14-1.37x faster than Detour's.

@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include "roam/math/box3.h"
+#include "roam/math/vec2.h"
 #include "roam/math/vec3.h"
 #include "roam/query/node.h"
 #include "roam/util/array.h"
@@ -116,6 +117,16 @@ struct NavMeshTileParams {
     float walkable_climb;
 };
 
+struct NavMeshTilePortal {
+    uint32_t poly_index;
+    uint8_t edge;
+    Vec3 start;
+    Vec3 end;
+    float position;
+    Vec2 bmin;
+    Vec2 bmax;
+};
+
 struct NavMeshTile {
     bool allocated;
     uint32_t id;
@@ -132,6 +143,8 @@ struct NavMeshTile {
     Array<float> detail_vertices;
     Array<uint8_t> detail_triangles;
     Array<uint32_t> poly_nodes;
+    Array<NavMeshTilePortal> portals;
+    uint32_t portal_starts[9];
     NavMeshTileBvTree bv_tree;
     float cell_size;
     float cell_height;

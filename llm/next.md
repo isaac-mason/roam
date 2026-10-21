@@ -19,7 +19,7 @@ A working checklist. Tick items as they land, and record findings and numbers in
 ## Performance
 
 - [ ] **The crowd's hottest phases.** Obstacle avoidance: three exact scalar rewrites measured and dropped; the remaining lever is SIMD over obstacles (deferred). Next: corners (`find_corners`).
-- [ ] **Tile add and remove** (0.6x of Detour).
+- [x] **Tile add and remove**: 0.6x → 1.10-1.37x of Detour by indexing border edges per tile.
 - [ ] **Move along surface** (0.6x) and **wall segments** (0.7x); both run every crowd frame.
 - [ ] **Query polygons and local neighbourhood** (about 0.93x).
 - [ ] **Parallel tiled builds.** Tiles are independent. Expose per-tile generation as a thread-safe public function, and show a threaded build in the bench and a demo. roam itself stays single-threaded.
