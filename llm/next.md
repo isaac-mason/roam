@@ -20,8 +20,8 @@ A working checklist. Tick items as they land, and record findings and numbers in
 
 - [ ] **The crowd's hottest phases.** Obstacle avoidance: three exact scalar rewrites measured and dropped; the remaining lever is SIMD over obstacles (deferred). Next: corners (`find_corners`).
 - [x] **Tile add and remove**: 0.6x → 1.10-1.37x of Detour by indexing border edges per tile.
-- [ ] **Move along surface** (0.6x) and **wall segments** (0.7x); both run every crowd frame.
-- [ ] **Query polygons and local neighbourhood** (about 0.93x).
+- [x] **Wall segments** (0.7x → 0.87-1.0x), **local neighbourhood** (→ 1.01-1.07x), **query polygons** (→ 0.94-1.02x): inline node lookups and a leaner wall segment loop.
+- [ ] **Move along surface** (0.73x with equal work): about 900 more instructions per move than Detour; the link walk and height snap are ruled out. Needs a profile.
 - [ ] **Parallel tiled builds.** Tiles are independent. Expose per-tile generation as a thread-safe public function, and show a threaded build in the bench and a demo. roam itself stays single-threaded.
 - [ ] **Regions (0.97x of Detour): a closer look.** Beyond the level stack allocation, profile flood, expand and merge at the instruction level, and compare the data layouts and loop structure with Detour.
 - [ ] **Mark walkable (0.95x of Detour): a closer look.** Check the generated code against Detour's loop: bounds checks, index widths, aliasing, and whether the area write blocks vectorization.

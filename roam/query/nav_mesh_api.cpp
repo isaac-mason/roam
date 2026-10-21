@@ -57,12 +57,6 @@ void release_nav_mesh(NavMesh &nav_mesh) {
     index_pool::release(nav_mesh.link_index_pool);
 }
 
-const NavMeshNode &get_node_by_ref(const NavMesh &nav_mesh, NodeRef node_ref) { return nav_mesh.nodes[node::get_node_ref_index(node_ref)]; }
-
-const NavMeshNode &get_node_by_tile_and_poly(const NavMesh &nav_mesh, const NavMeshTile &tile, int poly_index) {
-    return nav_mesh.nodes[tile.poly_nodes[(uint32_t)poly_index]];
-}
-
 static const NavMeshTile *tile_by_id(const NavMesh &nav_mesh, int32_t tile_id) {
     if (tile_id < 0 || (uint32_t)tile_id >= nav_mesh.tiles.length) return nullptr;
     const NavMeshTile &tile = nav_mesh.tiles[(uint32_t)tile_id];
@@ -167,26 +161,6 @@ static const Array<uint32_t> *neighbour_tile_column(const NavMesh &nav_mesh, int
 
 Vec2 world_to_tile_position(const NavMesh &nav_mesh, Vec3 world_position) {
     return {floorf((world_position.x - nav_mesh.origin.x) / nav_mesh.tile_width), floorf((world_position.z - nav_mesh.origin.z) / nav_mesh.tile_height)};
-}
-
-TileAndPoly get_tile_and_poly_by_ref(const NavMesh &nav_mesh, NodeRef ref) {
-    TileAndPoly result = {false, nullptr, nullptr, -1};
-
-    if (node::get_node_ref_type(ref) != NODE_TYPE_POLY) return result;
-
-    uint32_t node_index = node::get_node_ref_index(ref);
-    if (node_index >= nav_mesh.nodes.length) return result;
-    const NavMeshNode &node = nav_mesh.nodes[node_index];
-
-    const NavMeshTile *tile = tile_by_id(nav_mesh, node.tile_id);
-    if (!tile) return result;
-    if (node.poly_index < 0 || (uint32_t)node.poly_index >= tile->polys.length) return result;
-
-    result.success = true;
-    result.tile = tile;
-    result.poly = &tile->polys[(uint32_t)node.poly_index];
-    result.poly_index = node.poly_index;
-    return result;
 }
 
 static Vec3 tile_poly_vertex(const NavMeshTile &tile, const NavMeshPoly &poly, uint32_t i) {

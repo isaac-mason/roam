@@ -176,9 +176,13 @@ void get_poly_wall_segments(PolyWallSegmentsResult &result, const NavMesh &nav_m
     const NavMeshTile &tile = *tile_and_poly.tile;
     const NavMeshPoly &poly = *tile_and_poly.poly;
 
-    SegmentIntervals intervals = {};
+    SegmentIntervals intervals;
+    intervals.overflow = {};
     intervals.data = intervals.inline_values;
+    intervals.length = 0;
     intervals.capacity = INLINE_INTERVALS;
+
+    const NavMeshNode &node = nav_mesh_api::get_node_by_ref(nav_mesh, node_ref);
 
     for (uint32_t i = 0, j = poly.vertex_count - 1; i < poly.vertex_count; j = i++) {
         intervals.length = 0;
@@ -188,7 +192,6 @@ void get_poly_wall_segments(PolyWallSegmentsResult &result, const NavMesh &nav_m
         Vec3 vi = vec3::load(tile.vertices.data, tile.poly_vertices[poly.vertex_base + i] * 3);
 
         if (nei & POLY_NEIS_FLAG_EXT_LINK) {
-            const NavMeshNode &node = nav_mesh_api::get_node_by_ref(nav_mesh, node_ref);
             for (int32_t link_index = node.first_link; link_index != NULL_LINK; link_index = nav_mesh.links[(uint32_t)link_index].next) {
                 const NavMeshLink &link = nav_mesh.links[(uint32_t)link_index];
                 if ((uint32_t)link.edge != j) continue;
@@ -200,9 +203,7 @@ void get_poly_wall_segments(PolyWallSegmentsResult &result, const NavMesh &nav_m
             NodeRef neighbour_ref = INVALID_NODE_REF;
             if (nei) {
                 neighbour_ref = nav_mesh_api::get_node_by_tile_and_poly(nav_mesh, tile, nei - 1).ref;
-                if (nav_mesh_api::get_tile_and_poly_by_ref(nav_mesh, neighbour_ref).success && !nav_mesh_api::passes_filter(filter, neighbour_ref, nav_mesh)) {
-                    neighbour_ref = INVALID_NODE_REF;
-                }
+                if (!nav_mesh_api::passes_filter(filter, neighbour_ref, nav_mesh)) neighbour_ref = INVALID_NODE_REF;
             }
 
             if (neighbour_ref != INVALID_NODE_REF && !include_portals) continue;

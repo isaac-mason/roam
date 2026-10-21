@@ -96,15 +96,38 @@ QueryFilter create_default_query_filter();
 NavMesh create_nav_mesh();
 void release_nav_mesh(NavMesh &nav_mesh);
 
-const NavMeshNode &get_node_by_ref(const NavMesh &nav_mesh, NodeRef node_ref);
-const NavMeshNode &get_node_by_tile_and_poly(const NavMesh &nav_mesh, const NavMeshTile &tile, int poly_index);
+inline const NavMeshNode &get_node_by_ref(const NavMesh &nav_mesh, NodeRef node_ref) { return nav_mesh.nodes[node::get_node_ref_index(node_ref)]; }
+
+inline const NavMeshNode &get_node_by_tile_and_poly(const NavMesh &nav_mesh, const NavMeshTile &tile, int poly_index) {
+    return nav_mesh.nodes[tile.poly_nodes[(uint32_t)poly_index]];
+}
+
 bool is_valid_node_ref(const NavMesh &nav_mesh, NodeRef node_ref);
 
 const NavMeshTile *get_tile_at(const NavMesh &nav_mesh, int x, int y, int layer);
 Span<const uint32_t> get_tile_ids_at(const NavMesh &nav_mesh, int x, int y);
 Vec2 world_to_tile_position(const NavMesh &nav_mesh, Vec3 world_position);
 
-TileAndPoly get_tile_and_poly_by_ref(const NavMesh &nav_mesh, NodeRef ref);
+inline TileAndPoly get_tile_and_poly_by_ref(const NavMesh &nav_mesh, NodeRef ref) {
+    TileAndPoly result = {false, nullptr, nullptr, -1};
+
+    if (node::get_node_ref_type(ref) != NODE_TYPE_POLY) return result;
+
+    uint32_t node_index = node::get_node_ref_index(ref);
+    if (node_index >= nav_mesh.nodes.length) return result;
+    const NavMeshNode &node = nav_mesh.nodes[node_index];
+
+    if (node.tile_id < 0 || (uint32_t)node.tile_id >= nav_mesh.tiles.length) return result;
+    const NavMeshTile &tile = nav_mesh.tiles[(uint32_t)node.tile_id];
+    if (!tile.allocated) return result;
+    if (node.poly_index < 0 || (uint32_t)node.poly_index >= tile.polys.length) return result;
+
+    result.success = true;
+    result.tile = &tile;
+    result.poly = &tile.polys[(uint32_t)node.poly_index];
+    result.poly_index = node.poly_index;
+    return result;
+}
 
 uint32_t gather_poly_vertices(const NavMeshTile &tile, const NavMeshPoly &poly, PolyVertices &vertices);
 void release(PolyVertices &vertices);

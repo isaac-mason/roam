@@ -256,3 +256,23 @@ Counting instructions with pieces switched off showed external linking was 58% o
 | remove and add every tile, roam / Detour (ms) | 0.017 / 0.020 (1.18x) | 0.30 / 0.33 (1.10x) | 0.44 / 0.60 (1.37x) |
 
 Before this change roam was at 0.56-0.64x. Tiled builds now run 1.14-1.37x faster than Detour's.
+
+### Inline node lookups, leaner wall segments (2026-10-21)
+
+- `get_node_by_ref`, `get_node_by_tile_and_poly` and `get_tile_and_poly_by_ref` were defined in `nav_mesh_api.cpp`, so every query in another file paid a function call (and register spills) for a load or two. They are inline in the header now. Instructions per query on game-level, before → after: node path 91.8k → 87.5k, straight path 10.6k → 10.0k, local neighbourhood 8.5k → 8.0k, random point around circle 6.5k → 5.8k, smooth path 535k → 516k, raycast 1290 → 1242.
+- `get_poly_wall_segments` no longer zero-fills its 16 inline intervals on every call, looks up its own node once instead of per external edge, and checks an internal neighbour with the node it already has (an in-tile neighbour is always a valid poly, so the extra `get_tile_and_poly_by_ref` could never fail). 458 → 285 instructions per call on nav-test (Detour 248).
+- The Detour move-along-surface case now snaps the result height with `getPolyHeight`, as DetourCrowd does after every move and as roam (navcat) does inside the query, so both sides do the same work.
+
+Thread CPU time minimums, roam / Detour (ms), nav-test / game-level / FPS map:
+
+| bench | nav-test | game-level | FPS map |
+|---|---|---|---|
+| wall segments (100 polys) | 0.0023 / 0.0020 (0.87x) | 0.0022 / 0.0022 (1.00x) | 0.0022 / 0.0021 (0.95x) |
+| local neighbourhood (100 circles) | 0.258 / 0.266 (1.03x) | 0.052 / 0.055 (1.07x) | 0.030 / 0.030 (1.01x) |
+| query polygons (100 boxes) | 0.028 / 0.027 (0.94x) | 0.021 / 0.020 (0.96x) | 0.020 / 0.021 (1.02x) |
+| move along surface (100 moves) | 0.019 / 0.014 (0.73x) | 0.015 / 0.011 (0.74x) | 0.015 / 0.011 (0.72x) |
+| random point around circle (100) | 0.180 / 0.179 (0.99x) | 0.043 / 0.050 (1.15x) | 0.036 / 0.040 (1.10x) |
+| node paths (100 pairs) | 0.209 / 0.229 (1.10x) | 1.115 / 1.322 (1.19x) | 0.369 / 0.386 (1.05x) |
+| straight paths (100 node paths) | 0.023 / 0.027 (1.17x) | 0.061 / 0.076 (1.25x) | 0.070 / 0.090 (1.28x) |
+
+Move along surface is the remaining clear gap: about 2,950 instructions per move for the search against Detour's roughly 2,050, at the same IPC. Collecting each poly's links once instead of per edge, and dropping the height snap, were measured and are not the cause.
