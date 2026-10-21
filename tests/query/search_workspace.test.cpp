@@ -146,6 +146,15 @@ TEST(small_buffers_keep_the_start_of_the_path_and_report_its_full_length) {
     CHECK(truncated[0] == full[0]);
     CHECK(truncated[1] == full[1]);
 
+    NodeRef copied[MAX_REFS];
+    FindNodePathResult copied_path = truncated_path;
+    nav_mesh_search::copy_last_node_path(copied_path, workspace, copied);
+    CHECK(!copied_path.truncated);
+    REQUIRE(copied_path.path_count == full_path.path_count);
+    bool same_path = true;
+    for (uint32_t i = 0; i < full_path.path_count; i++) same_path = same_path && copied[i] == full[i];
+    CHECK(same_path);
+
     FindNodePathResult counted;
     nav_mesh_search::find_node_path(counted, workspace, nav_mesh, start.node_ref, end.node_ref, start.position, end.position, filter, {});
     CHECK(counted.path_count == 0);
@@ -179,6 +188,19 @@ TEST(small_buffers_keep_the_start_of_the_path_and_report_its_full_length) {
     CHECK(cut.point_count == all.point_count - 1);
     CHECK(cut.truncated);
     exact.release();
+
+    uint32_t seed = 7;
+    FindRandomPointResult random_point;
+    nav_mesh_search::find_random_point_around_circle(random_point, workspace, nav_mesh, start.node_ref, start.position, 2, filter,
+                                                     [](void *user_data) {
+                                                         uint32_t &state = *(uint32_t *)user_data;
+                                                         state = state * 1664525u + 1013904223u;
+                                                         return (float)(state >> 8) / (float)(1u << 24);
+                                                     },
+                                                     &seed);
+    FindNodePathResult after_other_search;
+    nav_mesh_search::copy_last_node_path(after_other_search, workspace, copied);
+    CHECK(after_other_search.path_total == 0);
 
     nav_mesh_search::release(workspace);
     nav_mesh_api::release_nav_mesh(nav_mesh);

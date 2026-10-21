@@ -61,8 +61,7 @@ static void update_path() {
         if (path.truncated) {
             state.node_path.resize(path.path_total);
             state.times_grown++;
-            nav_mesh_search::find_node_path(path, state.workspace, nav_mesh, start.node_ref, end.node_ref, start.position, end.position,
-                                            nav_mesh_api::DEFAULT_QUERY_FILTER, state.node_path);
+            nav_mesh_search::copy_last_node_path(path, state.workspace, state.node_path);
         }
         state.query_milliseconds = app::now_milliseconds() - begin;
         state.searched = true;

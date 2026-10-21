@@ -434,9 +434,14 @@ static int32_t search_node_path(FindNodePathResult &out, SearchWorkspace &worksp
 
 void find_node_path(FindNodePathResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref, NodeRef end_node_ref,
                     Vec3 start_position, Vec3 end_position, const QueryFilter &filter, Span<NodeRef> path, FindNodePathOptions options) {
-    int32_t last_node = search_node_path(out, workspace, nav_mesh, start_node_ref, end_node_ref, start_position, end_position, filter, options);
-    if (last_node == NULL_SEARCH_NODE) return;
-    set_counts(out.path_count, out.path_total, out.truncated, collect_path(workspace.nodes, last_node, path.data, path.capacity), path.capacity);
+    workspace.last_path_node = search_node_path(out, workspace, nav_mesh, start_node_ref, end_node_ref, start_position, end_position, filter, options);
+    copy_last_node_path(out, workspace, path);
+}
+
+void copy_last_node_path(FindNodePathResult &out, const SearchWorkspace &workspace, Span<NodeRef> path) {
+    int32_t last_node = workspace.last_path_node;
+    uint32_t total = last_node == NULL_SEARCH_NODE ? 0 : collect_path(workspace.nodes, last_node, path.data, path.capacity);
+    set_counts(out.path_count, out.path_total, out.truncated, total, path.capacity);
 }
 
 SlicedNodePathQuery create_sliced_node_path_query() {
@@ -1110,6 +1115,7 @@ void find_random_point_around_circle(FindRandomPointResult &out, SearchWorkspace
     SearchNodeQueue &open_list = workspace.open_list;
     clear(nodes);
     open_list.items.clear();
+    workspace.last_path_node = NULL_SEARCH_NODE;
 
     uint32_t start_index = add_search_node(nodes, make_search_node(start_node_ref, 0, NODE_FLAG_OPEN, position));
     push_node_to_queue(open_list, nodes, start_index);

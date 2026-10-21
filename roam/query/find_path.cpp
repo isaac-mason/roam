@@ -4,18 +4,6 @@ namespace roam {
 
 namespace find_path {
 
-static void find_node_path_into_workspace(FindNodePathResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
-                                          NodeRef end_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter,
-                                          FindNodePathOptions options) {
-    Array<NodeRef> &path = workspace.node_path;
-    nav_mesh_search::find_node_path(out, workspace, nav_mesh, start_node_ref, end_node_ref, start_position, end_position, filter, {path.data, path.capacity}, options);
-    if (out.truncated) {
-        path.reserve(out.path_total);
-        nav_mesh_search::find_node_path(out, workspace, nav_mesh, start_node_ref, end_node_ref, start_position, end_position, filter, {path.data, path.capacity}, options);
-    }
-    path.resize(out.path_count);
-}
-
 void find_path(FindPathResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 half_extents,
                const QueryFilter &filter, Span<StraightPathPoint> points, FindPathOptions options) {
     out = {};
@@ -38,9 +26,14 @@ void find_path(FindPathResult &out, SearchWorkspace &workspace, const NavMesh &n
     out.end_node_ref = end_nearest.node_ref;
 
     FindNodePathResult node_path;
-    find_node_path_into_workspace(node_path, workspace, nav_mesh, out.start_node_ref, out.end_node_ref, out.start_position, out.end_position, filter,
-                                  {options.raycast_distance});
-    const Array<NodeRef> &node_refs = workspace.node_path;
+    Array<NodeRef> &node_refs = workspace.node_path;
+    nav_mesh_search::find_node_path(node_path, workspace, nav_mesh, out.start_node_ref, out.end_node_ref, out.start_position, out.end_position, filter,
+                                    {node_refs.data, node_refs.capacity}, {options.raycast_distance});
+    if (node_path.truncated) {
+        node_refs.reserve(node_path.path_total);
+        nav_mesh_search::copy_last_node_path(node_path, workspace, {node_refs.data, node_refs.capacity});
+    }
+    node_refs.resize(node_path.path_count);
     out.node_path_flags = node_path.flags;
     out.node_path_total = node_refs.length;
     out.node_path_count = node_refs.length < options.node_path.capacity ? node_refs.length : options.node_path.capacity;

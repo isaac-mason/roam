@@ -132,6 +132,7 @@ struct SearchWorkspace {
     Array<NodeRef> visited;
     Array<NodeRef> raycast_path;
     Array<NodeRef> local_refs;
+    int32_t last_path_node = NULL_SEARCH_NODE;
 };
 
 struct FindRandomPointResult {
@@ -161,6 +162,7 @@ void release(SearchNodeQueue &queue);
 bool get_portal_points(const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref, Vec3 &out_left, Vec3 &out_right);
 bool get_edge_mid_point(const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref, Vec3 &out_mid_point);
 
+void copy_last_node_path(FindNodePathResult &out, const SearchWorkspace &workspace, Span<NodeRef> path);
 void find_node_path(FindNodePathResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref, NodeRef end_node_ref,
                     Vec3 start_position, Vec3 end_position, const QueryFilter &filter, Span<NodeRef> path, FindNodePathOptions options = {});
 

@@ -162,8 +162,7 @@ void find_smooth_path(FindSmoothPathResult &result, SearchWorkspace &workspace, 
                                     result.end_position, filter, {polys.data, polys.capacity}, {options.raycast_distance});
     if (node_path.truncated) {
         polys.reserve(node_path.path_total);
-        nav_mesh_search::find_node_path(node_path, workspace, nav_mesh, result.start_node_ref, result.end_node_ref, result.start_position,
-                                        result.end_position, filter, {polys.data, polys.capacity}, {options.raycast_distance});
+        nav_mesh_search::copy_last_node_path(node_path, workspace, {polys.data, polys.capacity});
     }
     polys.resize(node_path.path_count);
     result.node_path_flags = node_path.flags;
