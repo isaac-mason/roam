@@ -1,5 +1,7 @@
 #include "roam/generate/compact_heightfield_regions.h"
 
+#include <stddef.h>
+
 #include "roam/generate/common.h"
 #include "roam/math/scalar.h"
 
@@ -20,40 +22,47 @@ static uint32_t neighbor_index(const CompactHeightfield &compact_heightfield, in
     return compact_heightfield.cells[(uint32_t)(ax + ay * compact_heightfield.width)].index + (uint32_t)get_con(span, direction);
 }
 
-static void relax_distance(const CompactHeightfield &compact_heightfield, uint16_t *distances, int x, int y, uint32_t i, int direction,
+static size_t distance_neighbor(const CompactHeightfield &compact_heightfield, int x, int y, int direction, const CompactHeightfieldSpan &span) {
+    size_t cell = (size_t)(x + DIR_OFFSETS[direction][0]) + (size_t)(y + DIR_OFFSETS[direction][1]) * (size_t)compact_heightfield.width;
+    return (size_t)compact_heightfield.cells.data[cell].index + (size_t)get_con(span, direction);
+}
+
+static void relax_distance(const CompactHeightfield &compact_heightfield, uint16_t *distances, int x, int y, size_t i, int direction,
                            int diagonal_direction) {
-    const CompactHeightfieldSpan &span = compact_heightfield.spans[i];
+    const CompactHeightfieldSpan &span = compact_heightfield.spans.data[i];
     if (get_con(span, direction) == NOT_CONNECTED) return;
 
-    int ax = x + DIR_OFFSETS[direction][0];
-    int ay = y + DIR_OFFSETS[direction][1];
-    uint32_t ai = neighbor_index(compact_heightfield, x, y, direction, span);
+    size_t ai = distance_neighbor(compact_heightfield, x, y, direction, span);
     if (distances[ai] + 2 < distances[i]) distances[i] = (uint16_t)(distances[ai] + 2);
 
-    const CompactHeightfieldSpan &a_span = compact_heightfield.spans[ai];
+    const CompactHeightfieldSpan &a_span = compact_heightfield.spans.data[ai];
     if (get_con(a_span, diagonal_direction) == NOT_CONNECTED) return;
 
-    uint32_t aai = neighbor_index(compact_heightfield, ax, ay, diagonal_direction, a_span);
+    size_t aai = distance_neighbor(compact_heightfield, x + DIR_OFFSETS[direction][0], y + DIR_OFFSETS[direction][1], diagonal_direction, a_span);
     if (distances[aai] + 3 < distances[i]) distances[i] = (uint16_t)(distances[aai] + 3);
 }
 
 static int calculate_distance_field(const CompactHeightfield &compact_heightfield, uint16_t *distances) {
     int w = compact_heightfield.width;
     int h = compact_heightfield.height;
+    const CompactHeightfieldCell *cells = compact_heightfield.cells.data;
+    const CompactHeightfieldSpan *spans = compact_heightfield.spans.data;
+    const uint8_t *areas = compact_heightfield.areas.data;
+    size_t span_count = compact_heightfield.span_count;
 
-    for (uint32_t i = 0; i < compact_heightfield.span_count; i++) distances[i] = 0xffff;
+    for (size_t i = 0; i < span_count; i++) distances[i] = 0xffff;
 
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
-            CompactHeightfieldCell cell = compact_heightfield.cells[(uint32_t)(x + y * w)];
-            for (uint32_t i = cell.index; i < cell.index + cell.count; ++i) {
-                const CompactHeightfieldSpan &span = compact_heightfield.spans[i];
-                uint8_t area = compact_heightfield.areas[i];
+            CompactHeightfieldCell cell = cells[(size_t)x + (size_t)y * (size_t)w];
+            for (size_t i = cell.index, end = (size_t)cell.index + cell.count; i < end; ++i) {
+                const CompactHeightfieldSpan &span = spans[i];
+                uint8_t area = areas[i];
 
                 int neighbor_count = 0;
                 for (int direction = 0; direction < 4; ++direction) {
                     if (get_con(span, direction) == NOT_CONNECTED) continue;
-                    if (area == compact_heightfield.areas[neighbor_index(compact_heightfield, x, y, direction, span)]) neighbor_count++;
+                    if (area == areas[distance_neighbor(compact_heightfield, x, y, direction, span)]) neighbor_count++;
                 }
                 if (neighbor_count != 4) distances[i] = 0;
             }
@@ -62,8 +71,8 @@ static int calculate_distance_field(const CompactHeightfield &compact_heightfiel
 
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
-            CompactHeightfieldCell cell = compact_heightfield.cells[(uint32_t)(x + y * w)];
-            for (uint32_t i = cell.index; i < cell.index + cell.count; ++i) {
+            CompactHeightfieldCell cell = cells[(size_t)x + (size_t)y * (size_t)w];
+            for (size_t i = cell.index, end = (size_t)cell.index + cell.count; i < end; ++i) {
                 relax_distance(compact_heightfield, distances, x, y, i, 0, 3);
                 relax_distance(compact_heightfield, distances, x, y, i, 3, 2);
             }
@@ -72,8 +81,8 @@ static int calculate_distance_field(const CompactHeightfield &compact_heightfiel
 
     for (int y = h - 1; y >= 0; --y) {
         for (int x = w - 1; x >= 0; --x) {
-            CompactHeightfieldCell cell = compact_heightfield.cells[(uint32_t)(x + y * w)];
-            for (uint32_t i = cell.index; i < cell.index + cell.count; ++i) {
+            CompactHeightfieldCell cell = cells[(size_t)x + (size_t)y * (size_t)w];
+            for (size_t i = cell.index, end = (size_t)cell.index + cell.count; i < end; ++i) {
                 relax_distance(compact_heightfield, distances, x, y, i, 2, 1);
                 relax_distance(compact_heightfield, distances, x, y, i, 1, 0);
             }
@@ -81,7 +90,7 @@ static int calculate_distance_field(const CompactHeightfield &compact_heightfiel
     }
 
     int max_distance = 0;
-    for (uint32_t i = 0; i < compact_heightfield.span_count; ++i) max_distance = scalar::max((int)distances[i], max_distance);
+    for (size_t i = 0; i < span_count; ++i) max_distance = scalar::max((int)distances[i], max_distance);
 
     return max_distance;
 }
@@ -89,14 +98,16 @@ static int calculate_distance_field(const CompactHeightfield &compact_heightfiel
 static void box_blur(const CompactHeightfield &compact_heightfield, int threshold, const uint16_t *source_distances, uint16_t *destination_distances) {
     int w = compact_heightfield.width;
     int h = compact_heightfield.height;
+    const CompactHeightfieldCell *cells = compact_heightfield.cells.data;
+    const CompactHeightfieldSpan *spans = compact_heightfield.spans.data;
 
     int scaled_threshold = threshold * 2;
 
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
-            CompactHeightfieldCell cell = compact_heightfield.cells[(uint32_t)(x + y * w)];
-            for (uint32_t i = cell.index; i < cell.index + cell.count; ++i) {
-                const CompactHeightfieldSpan &span = compact_heightfield.spans[i];
+            CompactHeightfieldCell cell = cells[(size_t)x + (size_t)y * (size_t)w];
+            for (size_t i = cell.index, end = (size_t)cell.index + cell.count; i < end; ++i) {
+                const CompactHeightfieldSpan &span = spans[i];
                 int cd = source_distances[i];
 
                 if (cd <= scaled_threshold) {
@@ -111,15 +122,14 @@ static void box_blur(const CompactHeightfield &compact_heightfield, int threshol
                         continue;
                     }
 
-                    int ax = x + DIR_OFFSETS[direction][0];
-                    int ay = y + DIR_OFFSETS[direction][1];
-                    uint32_t ai = neighbor_index(compact_heightfield, x, y, direction, span);
+                    size_t ai = distance_neighbor(compact_heightfield, x, y, direction, span);
                     d += source_distances[ai];
 
-                    const CompactHeightfieldSpan &a_span = compact_heightfield.spans[ai];
+                    const CompactHeightfieldSpan &a_span = spans[ai];
                     int direction_2 = (direction + 1) & 0x3;
                     if (get_con(a_span, direction_2) != NOT_CONNECTED) {
-                        d += source_distances[neighbor_index(compact_heightfield, ax, ay, direction_2, a_span)];
+                        d += source_distances[distance_neighbor(compact_heightfield, x + DIR_OFFSETS[direction][0], y + DIR_OFFSETS[direction][1],
+                                                                direction_2, a_span)];
                     } else {
                         d += cd;
                     }
@@ -132,15 +142,15 @@ static void box_blur(const CompactHeightfield &compact_heightfield, int threshol
 
 void build_distance_field(CompactHeightfield &compact_heightfield) {
     Array<uint16_t> blurred = {};
-    blurred.resize(compact_heightfield.span_count, 0);
+    blurred.resize(compact_heightfield.span_count);
 
     compact_heightfield.max_distance = calculate_distance_field(compact_heightfield, compact_heightfield.distances.data);
 
     box_blur(compact_heightfield, 1, compact_heightfield.distances.data, blurred.data);
 
-    for (uint32_t i = 0; i < compact_heightfield.span_count; i++) compact_heightfield.distances[i] = blurred[i];
-
-    blurred.release();
+    Array<uint16_t> unblurred = compact_heightfield.distances;
+    compact_heightfield.distances = blurred;
+    unblurred.release();
 }
 
 struct LevelStackEntry {
