@@ -301,7 +301,7 @@ struct DirtyEntry {
 };
 
 static void expand_regions(int max_iterations, int level, const CompactHeightfield &compact_heightfield, int *source_regions,
-                           int *source_distances, LevelStack &stack, bool fill_stack) {
+                           int *source_distances, LevelStack &stack, bool fill_stack, Array<DirtyEntry> &dirty_entries) {
     int w = compact_heightfield.width;
     int h = compact_heightfield.height;
 
@@ -323,7 +323,7 @@ static void expand_regions(int max_iterations, int level, const CompactHeightfie
         }
     }
 
-    Array<DirtyEntry> dirty_entries = {};
+    dirty_entries.clear();
     int iteration = 0;
 
     while (stack.length > 0) {
@@ -380,8 +380,6 @@ static void expand_regions(int max_iterations, int level, const CompactHeightfie
             if (iteration >= max_iterations) break;
         }
     }
-
-    dirty_entries.release();
 }
 
 struct Region {
@@ -751,6 +749,7 @@ bool build_regions(BuildContext &context, CompactHeightfield &compact_heightfiel
 
     LevelStack level_stacks[NB_STACKS] = {};
     LevelStack stack = {};
+    Array<DirtyEntry> dirty_entries = {};
 
     region_id = paint_border_regions(border_size, region_id, compact_heightfield, source_regions.data);
     compact_heightfield.border_size = border_size;
@@ -767,7 +766,8 @@ bool build_regions(BuildContext &context, CompactHeightfield &compact_heightfiel
             append_stacks(level_stacks[stack_id - 1], level_stacks[stack_id], source_regions.data);
         }
 
-        expand_regions(EXPAND_ITERS, level, compact_heightfield, source_regions.data, source_distances.data, level_stacks[stack_id], false);
+        expand_regions(EXPAND_ITERS, level, compact_heightfield, source_regions.data, source_distances.data, level_stacks[stack_id], false,
+                       dirty_entries);
 
         for (uint32_t j = 0; j < level_stacks[stack_id].length; j++) {
             LevelStackEntry current = level_stacks[stack_id][j];
@@ -786,7 +786,7 @@ bool build_regions(BuildContext &context, CompactHeightfield &compact_heightfiel
     }
 
     if (ok) {
-        expand_regions(EXPAND_ITERS * 8, 0, compact_heightfield, source_regions.data, source_distances.data, stack, true);
+        expand_regions(EXPAND_ITERS * 8, 0, compact_heightfield, source_regions.data, source_distances.data, stack, true, dirty_entries);
 
         Array<int> overlaps = {};
         compact_heightfield.max_regions = region_id;
@@ -802,6 +802,7 @@ bool build_regions(BuildContext &context, CompactHeightfield &compact_heightfiel
 
     for (LevelStack &level_stack : level_stacks) level_stack.release();
     stack.release();
+    dirty_entries.release();
     source_regions.release();
     source_distances.release();
     return ok;
