@@ -163,6 +163,68 @@ static DividedPoly divide_poly(const float *in_vertices, int in_vertex_count, fl
     return {poly_1_vertex, poly_2_vertex};
 }
 
+struct CellPiece {
+    int vertex_count;
+    float min_y;
+    float max_y;
+};
+
+static void include_cell_height(CellPiece &piece, float y) {
+    if (piece.vertex_count == 0) {
+        piece.min_y = y;
+        piece.max_y = y;
+    } else {
+        piece.min_y = fminf(piece.min_y, y);
+        piece.max_y = fmaxf(piece.max_y, y);
+    }
+    piece.vertex_count++;
+}
+
+static CellPiece divide_cell(const float *in_vertices, int in_vertex_count, float *out_far_vertices, int &far_vertex_count, float axis_offset) {
+    float in_vertex_axis_delta[12];
+    for (int in_vertex = 0; in_vertex < in_vertex_count; ++in_vertex) in_vertex_axis_delta[in_vertex] = axis_offset - in_vertices[in_vertex * 3];
+
+    CellPiece piece = {0, 0, 0};
+    far_vertex_count = 0;
+
+    for (int in_vertex_a = 0, in_vertex_b = in_vertex_count - 1; in_vertex_a < in_vertex_count; in_vertex_b = in_vertex_a, ++in_vertex_a) {
+        float delta_a = in_vertex_axis_delta[in_vertex_a];
+        float delta_b = in_vertex_axis_delta[in_vertex_b];
+
+        float ax = in_vertices[in_vertex_a * 3];
+        float ay = in_vertices[in_vertex_a * 3 + 1];
+        float az = in_vertices[in_vertex_a * 3 + 2];
+
+        if ((delta_a >= 0) != (delta_b >= 0)) {
+            float bx = in_vertices[in_vertex_b * 3];
+            float by = in_vertices[in_vertex_b * 3 + 1];
+            float bz = in_vertices[in_vertex_b * 3 + 2];
+
+            float s = delta_b / (delta_b - delta_a);
+            float cx = bx + (ax - bx) * s;
+            float cy = by + (ay - by) * s;
+            float cz = bz + (az - bz) * s;
+
+            include_cell_height(piece, cy);
+            push_vertex(out_far_vertices, far_vertex_count, cx, cy, cz);
+
+            if (delta_a > 0) {
+                include_cell_height(piece, ay);
+            } else if (delta_a < 0) {
+                push_vertex(out_far_vertices, far_vertex_count, ax, ay, az);
+            }
+        } else {
+            if (delta_a >= 0) {
+                include_cell_height(piece, ay);
+                if (delta_a != 0) continue;
+            }
+            push_vertex(out_far_vertices, far_vertex_count, ax, ay, az);
+        }
+    }
+
+    return piece;
+}
+
 static bool all_on_near_side(const float *vertices, int vertex_count, float axis_offset, int axis) {
     for (int vertex = 0; vertex < vertex_count; ++vertex) {
         if (!(axis_offset - vertices[vertex * 3 + axis] >= 0)) return false;
@@ -244,32 +306,26 @@ static bool rasterize_triangle(Vec3 v0, Vec3 v1, Vec3 v2, uint8_t area_id, Heigh
 
         for (int x = x0; x <= x1; ++x) {
             float cx = heightfield.bounds.min.x + (float)x * cell_size;
-            int vertex_count = 0;
+            CellPiece piece;
             if (x == x1 && all_on_near_side(in_row, remaining_row_vertex_count, cx + cell_size, AXIS_X)) {
-                float *swap_cell = p1;
-                p1 = in_row;
-                in_row = swap_cell;
-                vertex_count = remaining_row_vertex_count;
+                piece = {0, 0, 0};
+                for (int vertex = 0; vertex < remaining_row_vertex_count; ++vertex) include_cell_height(piece, in_row[vertex * 3 + 1]);
                 remaining_row_vertex_count = 0;
             } else {
-                DividedPoly column = divide_poly(in_row, remaining_row_vertex_count, p1, p2, cx + cell_size, AXIS_X);
+                int far_vertex_count = 0;
+                piece = divide_cell(in_row, remaining_row_vertex_count, p2, far_vertex_count, cx + cell_size);
 
                 float *swap_row = in_row;
                 in_row = p2;
                 p2 = swap_row;
-                remaining_row_vertex_count = column.vertex_count_2;
-                vertex_count = column.vertex_count_1;
+                remaining_row_vertex_count = far_vertex_count;
             }
 
-            if (vertex_count < 3) continue;
+            if (piece.vertex_count < 3) continue;
             if (x < 0) continue;
 
-            float span_min = p1[1];
-            float span_max = p1[1];
-            for (int vertex = 1; vertex < vertex_count; ++vertex) {
-                span_min = fminf(span_min, p1[vertex * 3 + 1]);
-                span_max = fmaxf(span_max, p1[vertex * 3 + 1]);
-            }
+            float span_min = piece.min_y;
+            float span_max = piece.max_y;
             span_min -= heightfield.bounds.min.y;
             span_max -= heightfield.bounds.min.y;
 
