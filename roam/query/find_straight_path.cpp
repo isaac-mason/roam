@@ -294,10 +294,10 @@ static FindStraightPathResult find_straight_path_in(const NavMesh &nav_mesh, Vec
     return stopped(end_status, FIND_STRAIGHT_PATH_RESULT_SUCCESS, path);
 }
 
-void find_straight_path(FindStraightPathResult &out, const NavMesh &nav_mesh, Vec3 start, Vec3 end, const NodeRef *path_node_refs,
-                        uint32_t path_node_count, Span<StraightPathPoint> points, uint32_t straight_path_options) {
+void find_straight_path(FindStraightPathResult &out, const NavMesh &nav_mesh, Vec3 start, Vec3 end, Span<const NodeRef> node_path,
+                        Span<StraightPathPoint> points, uint32_t straight_path_options) {
     PointBuffer buffer = {points.data, points.capacity, 0};
-    out = find_straight_path_in(nav_mesh, start, end, path_node_refs, path_node_count, straight_path_options, buffer);
+    out = find_straight_path_in(nav_mesh, start, end, node_path.data, node_path.capacity, straight_path_options, buffer);
 }
 
 }

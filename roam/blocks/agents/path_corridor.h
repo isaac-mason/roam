@@ -37,7 +37,7 @@ PathCorridor create();
 void release(PathCorridor &corridor);
 
 void reset(PathCorridor &corridor, NodeRef ref, Vec3 position);
-void set_path(PathCorridor &corridor, Vec3 target, const NodeRef *path, uint32_t path_count);
+void set_path(PathCorridor &corridor, Vec3 target, Span<const NodeRef> path);
 
 void merge_start_moved(Array<NodeRef> &current_path, const Array<NodeRef> &visited);
 void merge_start_shortcut(Array<NodeRef> &current_path, const Array<NodeRef> &visited);

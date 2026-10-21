@@ -26,7 +26,7 @@ static SteerTarget get_steer_target(const NavMesh &nav_mesh, Vec3 start, Vec3 en
     const uint32_t max_straight_path_points = 3;
     StraightPathPoint points[max_straight_path_points];
     FindStraightPathResult straight_path;
-    find_straight_path::find_straight_path(straight_path, nav_mesh, start, end, path_polys.data, path_polys.length, points);
+    find_straight_path::find_straight_path(straight_path, nav_mesh, start, end, path_polys, points);
 
     if (straight_path.success && straight_path.point_count > 0) {
         uint32_t ns = 0;

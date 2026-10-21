@@ -86,7 +86,7 @@ static void update_path() {
         if (path.success) {
             begin = app::now_milliseconds();
             FindStraightPathResult straight = {};
-            find_straight_path::find_straight_path(straight, nav_mesh, start.position, end.position, state.node_path, path.path_count, state.points);
+            find_straight_path::find_straight_path(straight, nav_mesh, start.position, end.position, {state.node_path, path.path_count}, state.points);
             state.straight_milliseconds = app::now_milliseconds() - begin;
             state.straight_success = straight.success;
             state.straight_flags = straight.flags;

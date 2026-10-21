@@ -192,7 +192,7 @@ TEST(queries_match_navcat_on_nav_test) {
 
         if (path.success) {
             FindStraightPathResult crossing;
-            find_straight_path::find_straight_path(crossing, nav_mesh, path.start_position, path.end_position, node_path.data, path.node_path_count,
+            find_straight_path::find_straight_path(crossing, nav_mesh, path.start_position, path.end_position, {node_path.data, path.node_path_count},
                                                    other_points, FIND_STRAIGHT_PATH_ALL_CROSSINGS);
             crossing_paths.record(same_points(other_points.data, crossing.point_count, crossings, (uint32_t)crossings.count.data[pair]), pair);
         }

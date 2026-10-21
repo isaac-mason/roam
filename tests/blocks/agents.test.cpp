@@ -72,7 +72,7 @@ TEST(path_corridor_fix_path_start_keeps_the_end) {
     CHECK(corridor.position.x == 1);
 
     NodeRef long_path[] = {1, 2, 3, 4};
-    path_corridor::set_path(corridor, {0, 0, 0}, long_path, 4);
+    path_corridor::set_path(corridor, {0, 0, 0}, long_path);
     path_corridor::fix_path_start(corridor, 9, {1, 0, 1});
     CHECK_REFS(corridor.path, 9, INVALID_NODE_REF, 3, 4);
 
@@ -94,7 +94,7 @@ TEST(path_corridor_move_over_off_mesh_connection_lands_on_the_far_side) {
     PathCorridor corridor = path_corridor::create();
     NodeRef path[] = {attachment.start_poly_node, attachment.off_mesh_node, attachment.end_poly_node};
     path_corridor::reset(corridor, path[0], {1.5f, 0, 1});
-    path_corridor::set_path(corridor, {8, 0, 1}, path, 3);
+    path_corridor::set_path(corridor, {8, 0, 1}, path);
 
     MoveOverOffMeshConnectionResult result = {};
     path_corridor::move_over_off_mesh_connection(result, corridor, attachment.off_mesh_node, nav_mesh);

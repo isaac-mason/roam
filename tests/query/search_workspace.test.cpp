@@ -161,21 +161,21 @@ TEST(small_buffers_keep_the_start_of_the_path_and_report_its_full_length) {
 
     StraightPathPoint all_points[MAX_POINTS];
     FindStraightPathResult all;
-    find_straight_path::find_straight_path(all, nav_mesh, start.position, end.position, full, full_path.path_count, all_points);
+    find_straight_path::find_straight_path(all, nav_mesh, start.position, end.position, {full, full_path.path_count}, all_points);
     REQUIRE(all.success);
     CHECK(!all.truncated);
 
     Array<StraightPathPoint> exact = {};
     exact.resize(all.point_count);
     FindStraightPathResult exact_fit;
-    find_straight_path::find_straight_path(exact_fit, nav_mesh, start.position, end.position, full, full_path.path_count, exact);
+    find_straight_path::find_straight_path(exact_fit, nav_mesh, start.position, end.position, {full, full_path.path_count}, exact);
     CHECK(exact_fit.point_count == all.point_count);
     CHECK(!exact_fit.truncated);
 
     exact.resize(all.point_count - 1);
     Span<StraightPathPoint> short_buffer = {exact.data, exact.length};
     FindStraightPathResult cut;
-    find_straight_path::find_straight_path(cut, nav_mesh, start.position, end.position, full, full_path.path_count, short_buffer);
+    find_straight_path::find_straight_path(cut, nav_mesh, start.position, end.position, {full, full_path.path_count}, short_buffer);
     CHECK(cut.point_count == all.point_count - 1);
     CHECK(cut.truncated);
     exact.release();

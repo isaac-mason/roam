@@ -329,7 +329,7 @@ TEST(generate_tiled_nav_mesh_and_flood_fill_match_navcat_on_nav_test) {
     reachable.resize(result.nav_mesh.nodes.length);
     unreachable.resize(result.nav_mesh.nodes.length);
     FloodFillNavMeshResult flood;
-    flood_fill_nav_mesh::flood_fill_nav_mesh(flood, result.nav_mesh, seed_refs.data, seed_refs.length, reachable,
+    flood_fill_nav_mesh::flood_fill_nav_mesh(flood, result.nav_mesh, seed_refs, reachable,
                                              unreachable);
     check_refs("flood.reachable", reachable.data, flood.reachable_count, fixture::f64(expected, "flood.reachable"));
     check_refs("flood.unreachable", unreachable.data, flood.unreachable_count, fixture::f64(expected, "flood.unreachable"));

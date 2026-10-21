@@ -189,7 +189,7 @@ static void update_path(Vec3 position) {
     }
 
     FindStraightPathResult straight = {};
-    find_straight_path::find_straight_path(straight, nav_mesh, start.position, end.position, poly_path.data, poly_path.length, state.points);
+    find_straight_path::find_straight_path(straight, nav_mesh, start.position, end.position, poly_path, state.points);
 
     renderer::release(state.path_drawing);
     DrawList list = {};

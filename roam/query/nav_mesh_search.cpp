@@ -683,8 +683,8 @@ void finalize_sliced_find_node_path(SlicedFindNodePathResult &out, const NavMesh
     query.status = SLICED_FIND_NODE_PATH_NOT_INITIALIZED;
 }
 
-static int32_t furthest_existing_node(const SlicedNodePathQuery &query, const NodeRef *existing_path, uint32_t existing_path_count) {
-    for (uint32_t i = existing_path_count; i-- > 0;) {
+static int32_t furthest_existing_node(const SlicedNodePathQuery &query, Span<const NodeRef> existing_path) {
+    for (uint32_t i = existing_path.capacity; i-- > 0;) {
         int32_t first = get_first_search_node(query.nodes, existing_path[i]);
         if (first != NULL_SEARCH_NODE) return first;
     }
@@ -692,10 +692,10 @@ static int32_t furthest_existing_node(const SlicedNodePathQuery &query, const No
 }
 
 void finalize_sliced_find_node_path_partial(SlicedFindNodePathResult &out, const NavMesh &nav_mesh, SlicedNodePathQuery &query,
-                                            const NodeRef *existing_path, uint32_t existing_path_count, Span<NodeRef> path) {
+                                            Span<const NodeRef> existing_path, Span<NodeRef> path) {
     out = {SLICED_FIND_NODE_PATH_FAILURE, 0, 0, false};
 
-    int32_t furthest_node = furthest_existing_node(query, existing_path, existing_path_count);
+    int32_t furthest_node = furthest_existing_node(query, existing_path);
 
     if (furthest_node == NULL_SEARCH_NODE) {
         furthest_node = query.last_best_node;

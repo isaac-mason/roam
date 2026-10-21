@@ -18,8 +18,8 @@ struct FloodFillNavMeshResult {
 
 namespace flood_fill_nav_mesh {
 
-void flood_fill_nav_mesh(FloodFillNavMeshResult &out, const NavMesh &nav_mesh, const NodeRef *start_node_refs, uint32_t start_node_ref_count,
-                         Span<NodeRef> reachable = {}, Span<NodeRef> unreachable = {});
+void flood_fill_nav_mesh(FloodFillNavMeshResult &out, const NavMesh &nav_mesh, Span<const NodeRef> seeds, Span<NodeRef> reachable = {},
+                         Span<NodeRef> unreachable = {});
 
 }
 

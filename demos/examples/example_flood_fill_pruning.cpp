@@ -252,7 +252,7 @@ static void update(App &app, float) {
             Array<NodeRef> reachable = {};
             reachable.resize(nav_mesh_api::get_max_node_count(nav_mesh));
             FloodFillNavMeshResult flood = {};
-            flood_fill_nav_mesh::flood_fill_nav_mesh(flood, nav_mesh, &clicked_poly_ref, 1, reachable);
+            flood_fill_nav_mesh::flood_fill_nav_mesh(flood, nav_mesh, {&clicked_poly_ref, 1}, reachable);
             reachable.resize(flood.reachable_count);
             for (NodeRef ref : reachable) state.reachable.set(ref, 1);
             reachable.release();

@@ -101,7 +101,7 @@ static void init(App &app) {
         Array<NodeRef> unreachable = {};
         unreachable.resize(nav_mesh_api::get_max_node_count(nav_mesh));
         FloodFillNavMeshResult flood = {};
-        flood_fill_nav_mesh::flood_fill_nav_mesh(flood, nav_mesh, &seed.node_ref, 1, {}, unreachable);
+        flood_fill_nav_mesh::flood_fill_nav_mesh(flood, nav_mesh, {&seed.node_ref, 1}, {}, unreachable);
         unreachable.resize(flood.unreachable_count);
         for (NodeRef ref : unreachable) nav_mesh.nodes[node::get_node_ref_index(ref)].flags = 0;
         unreachable.release();

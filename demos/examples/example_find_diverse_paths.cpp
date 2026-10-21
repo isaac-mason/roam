@@ -263,7 +263,7 @@ static void update_path() {
         }
 
         FindStraightPathResult straight = {};
-        find_straight_path::find_straight_path(straight, nav_mesh, state.start, state.end, node_path.data, node_path.length, state.points);
+        find_straight_path::find_straight_path(straight, nav_mesh, state.start, state.end, node_path, state.points);
         if (straight.success) {
             const Vec3 lift = {0, 0.1f, 0};
             for (uint32_t i = 0; i < straight.point_count; i++) {

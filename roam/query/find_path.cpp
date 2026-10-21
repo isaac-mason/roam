@@ -53,7 +53,7 @@ void find_path(FindPathResult &out, SearchWorkspace &workspace, const NavMesh &n
     }
 
     FindStraightPathResult straight_path;
-    find_straight_path::find_straight_path(straight_path, nav_mesh, out.start_position, out.end_position, node_refs.data, node_refs.length, points);
+    find_straight_path::find_straight_path(straight_path, nav_mesh, out.start_position, out.end_position, node_refs, points);
 
     if (!straight_path.success) {
         out.flags = FIND_PATH_RESULT_FIND_STRAIGHT_PATH_FAILED;

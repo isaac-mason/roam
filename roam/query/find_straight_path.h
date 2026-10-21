@@ -43,8 +43,8 @@ struct FindStraightPathResult {
 
 namespace find_straight_path {
 
-void find_straight_path(FindStraightPathResult &out, const NavMesh &nav_mesh, Vec3 start, Vec3 end, const NodeRef *path_node_refs,
-                        uint32_t path_node_count, Span<StraightPathPoint> points, uint32_t straight_path_options = 0);
+void find_straight_path(FindStraightPathResult &out, const NavMesh &nav_mesh, Vec3 start, Vec3 end, Span<const NodeRef> node_path,
+                        Span<StraightPathPoint> points, uint32_t straight_path_options = 0);
 
 }
 

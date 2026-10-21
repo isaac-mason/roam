@@ -103,7 +103,7 @@ TEST(flood_fill_nav_mesh_splits_disconnected_islands) {
     NodeRef reachable[8];
     NodeRef unreachable[8];
     FloodFillNavMeshResult result;
-    flood_fill_nav_mesh::flood_fill_nav_mesh(result, nav_mesh, &seed, 1, reachable, unreachable);
+    flood_fill_nav_mesh::flood_fill_nav_mesh(result, nav_mesh, {&seed, 1}, reachable, unreachable);
     CHECK(result.reachable_count == 2);
     CHECK(result.unreachable_count == 2);
     CHECK(reachable[0] == seed);

@@ -21,10 +21,10 @@ void reset(PathCorridor &corridor, NodeRef ref, Vec3 position) {
     corridor.path.push(ref);
 }
 
-void set_path(PathCorridor &corridor, Vec3 target, const NodeRef *path, uint32_t path_count) {
+void set_path(PathCorridor &corridor, Vec3 target, Span<const NodeRef> path) {
     corridor.target = target;
     corridor.path.clear();
-    for (uint32_t i = 0; i < path_count; i++) corridor.path.push(path[i]);
+    for (NodeRef ref : path) corridor.path.push(ref);
 }
 
 static bool find_furthest_common(const Array<NodeRef> &current_path, const Array<NodeRef> &visited, int &furthest_path, int &furthest_visited) {
@@ -109,7 +109,7 @@ void find_corners(FindCornersResult &out, const PathCorridor &corridor, const Na
     if (corridor.path.length == 0) return;
 
     FindStraightPathResult straight_path;
-    find_straight_path::find_straight_path(straight_path, nav_mesh, corridor.position, corridor.target, corridor.path.data, corridor.path.length,
+    find_straight_path::find_straight_path(straight_path, nav_mesh, corridor.position, corridor.target, corridor.path,
                                            corner_buffer);
     if (!straight_path.success || straight_path.point_count == 0) return;
 
@@ -214,10 +214,10 @@ bool optimize_path_topology(PathCorridor &corridor, SlicedNodePathQuery &query, 
     nav_mesh_search::update_sliced_find_node_path(nav_mesh, query, MAX_ITERATIONS);
     SlicedFindNodePathResult result;
     Array<NodeRef> &path = workspace.node_path;
-    nav_mesh_search::finalize_sliced_find_node_path_partial(result, nav_mesh, query, corridor.path.data, corridor.path.length, {path.data, path.capacity});
+    nav_mesh_search::finalize_sliced_find_node_path_partial(result, nav_mesh, query, corridor.path, {path.data, path.capacity});
     if (result.truncated) {
         path.reserve(result.path_total);
-        nav_mesh_search::finalize_sliced_find_node_path_partial(result, nav_mesh, query, corridor.path.data, corridor.path.length, {path.data, path.capacity});
+        nav_mesh_search::finalize_sliced_find_node_path_partial(result, nav_mesh, query, corridor.path, {path.data, path.capacity});
     }
     path.resize(result.path_count);
 

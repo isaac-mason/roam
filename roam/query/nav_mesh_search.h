@@ -170,7 +170,7 @@ uint32_t init_sliced_find_node_path(const NavMesh &nav_mesh, SlicedNodePathQuery
 int update_sliced_find_node_path(const NavMesh &nav_mesh, SlicedNodePathQuery &query, int max_iterations);
 void finalize_sliced_find_node_path(SlicedFindNodePathResult &out, const NavMesh &nav_mesh, SlicedNodePathQuery &query, Span<NodeRef> path);
 void finalize_sliced_find_node_path_partial(SlicedFindNodePathResult &out, const NavMesh &nav_mesh, SlicedNodePathQuery &query,
-                                            const NodeRef *existing_path, uint32_t existing_path_count, Span<NodeRef> path);
+                                            Span<const NodeRef> existing_path, Span<NodeRef> path);
 void release(SlicedNodePathQuery &query);
 
 void move_along_surface(MoveAlongSurfaceResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,

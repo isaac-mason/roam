@@ -229,10 +229,10 @@ static void finalize_into(Array<NodeRef> &path, const NavMesh &nav_mesh, SlicedN
 
 static void finalize_partial_into(Array<NodeRef> &path, const NavMesh &nav_mesh, SlicedNodePathQuery &query, const Array<NodeRef> &existing) {
     SlicedFindNodePathResult result;
-    nav_mesh_search::finalize_sliced_find_node_path_partial(result, nav_mesh, query, existing.data, existing.length, {path.data, path.capacity});
+    nav_mesh_search::finalize_sliced_find_node_path_partial(result, nav_mesh, query, existing, {path.data, path.capacity});
     if (result.truncated) {
         path.reserve(result.path_total);
-        nav_mesh_search::finalize_sliced_find_node_path_partial(result, nav_mesh, query, existing.data, existing.length, {path.data, path.capacity});
+        nav_mesh_search::finalize_sliced_find_node_path_partial(result, nav_mesh, query, existing, {path.data, path.capacity});
     }
     path.resize(result.path_count);
 }
@@ -270,7 +270,7 @@ static void request_path(Crowd &crowd, const NavMesh &nav_mesh, Agent &agent) {
         request_path.push(first_corridor_ref(agent));
     }
 
-    path_corridor::set_path(agent.corridor, request_position, request_path.data, request_path.length);
+    path_corridor::set_path(agent.corridor, request_position, request_path);
     local_boundary::reset_local_boundary(agent.boundary);
     agent.target_path_is_partial = false;
 
@@ -338,7 +338,7 @@ static void complete_path(Crowd &crowd, const NavMesh &nav_mesh, Agent &agent) {
     }
 
     if (valid) {
-        path_corridor::set_path(agent.corridor, target_position, merged.data, merged.length);
+        path_corridor::set_path(agent.corridor, target_position, merged);
         local_boundary::reset_local_boundary(agent.boundary);
         agent.target_state = AGENT_TARGET_STATE_VALID;
         agent.target_pathfinding_time = 0;
