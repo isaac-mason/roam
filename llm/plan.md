@@ -101,6 +101,8 @@ Dated decisions and the reasoning behind them are in `llm/worklog.md`.
 
 ## After parity
 
+- navcat patch backlog (banked for later, not sent): `bv-tree-quantization`, `ref-zero-truthiness`, `smooth-path-zero-step`, `merge-positions-index-zero` and `contour-walk-cycle` are written in `llm/`; the poly merge value cache (see `benchmarks.md`, round 4) still needs writing as a navcat patch.
+
 - Performance: a reusable, generation-stamped search pool.
 - Large worlds: tile-local vertex storage.
 - A handoff from roam to navcat: roam writes a tile blob that navcat can import.

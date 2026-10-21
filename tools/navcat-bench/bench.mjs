@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
@@ -9,11 +10,12 @@ const { values: args } = parseArgs({
         roam: { type: 'string' },
         filter: { type: 'string' },
         fixture: { type: 'string' },
+        recast: { type: 'string' },
     },
 });
 
 if (!args.navcat) {
-    console.error('usage: node bench.mjs --navcat <navcat checkout> [--roam <roam_bench binary>] [--filter <name>] [--fixture <fixture.json>]');
+    console.error('usage: node bench.mjs --navcat <navcat checkout> [--roam <roam_bench binary>] [--filter <name>] [--fixture <fixture.json>] [--recast <recast_bench binary>]');
     process.exit(1);
 }
 
@@ -247,6 +249,19 @@ if (args.roam) {
     roamResults = parseRoam(execFileSync(resolve(args.roam), roamArgs, { encoding: 'utf8' }));
 }
 
+let recastResults = null;
+if (args.recast) {
+    if (!args.roam) {
+        console.error('--recast needs --roam, which provides the shared query points');
+        process.exit(1);
+    }
+    const pointsPath = join(mkdtempSync(join(tmpdir(), 'roam-bench-')), 'points.json');
+    execFileSync(resolve(args.roam), ['--fixture', fixturePath, '--dump-points', pointsPath]);
+    const recastArgs = ['--fixture', fixturePath, '--points', pointsPath];
+    if (args.filter) recastArgs.push(args.filter);
+    recastResults = parseRoam(execFileSync(resolve(args.recast), recastArgs, { encoding: 'utf8' }));
+}
+
 const rows = [];
 for (const benchCase of cases) {
     if (args.filter && !benchCase.name.includes(args.filter)) continue;
@@ -256,7 +271,17 @@ for (const benchCase of cases) {
     if (!roamResults) console.log(`${benchCase.name.padEnd(34)} ${result.median.toFixed(4).padStart(12)} ${result.min.toFixed(4).padStart(12)} ${String(result.samples).padStart(8)}`);
 }
 
-if (roamResults) {
+if (roamResults && recastResults) {
+    console.log('| bench | navcat ms | recast ms | roam ms | roam vs navcat | roam vs recast |');
+    console.log('|---|---:|---:|---:|---:|---:|');
+    for (const row of rows) {
+        const recast = recastResults.get(row.name);
+        const roam = row.roam ? row.roam.median.toFixed(4) : '-';
+        const vsNavcat = row.roam ? `${(row.navcat.median / row.roam.median).toFixed(1)}x` : '-';
+        const vsRecast = row.roam && recast ? `${(recast.median / row.roam.median).toFixed(2)}x` : '-';
+        console.log(`| ${row.name} | ${row.navcat.median.toFixed(4)} | ${recast ? recast.median.toFixed(4) : '-'} | ${roam} | ${vsNavcat} | ${vsRecast} |`);
+    }
+} else if (roamResults) {
     console.log('| bench | navcat median ms | roam median ms | speedup |');
     console.log('|---|---:|---:|---:|');
     for (const row of rows) {

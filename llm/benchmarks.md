@@ -118,3 +118,32 @@ Tiled builds are now about 2-2.7x the solo build on the big levels and are the n
 | nav-test | 5.37 | 5.31 |
 
 What's left in tiled builds is mostly rasterization (about 45% on game-level): large triangles are clipped once per tile they overlap, plus the tile border. That's inherent to tiling, and per-tile work is what callers can spread across threads.
+
+## Against recast/detour (2026-10-21)
+
+`tools/recast-bench` is a standalone CMake project that compiles recastnavigation's Recast, Detour and DetourCrowd sources (plus RecastDemo's chunky tri mesh) from `RECAST_DIR` (default `../recastnavigation`) into `recast_bench`. roam never links it. It runs the same workloads, names, settings (`-O3 -DNDEBUG`, same voxel and region parameters, detail sampling, 32-voxel tiles with a `walkableRadius + 3` border like `Sample_TileMesh`) and sampling rules as `roam_bench`. Queries use roam's query points (`roam_bench --dump-points`), since recast's poly order differs. Walkable polys get flag 1 so Detour's default filter passes them.
+
+```sh
+cmake -S tools/recast-bench -B build/recast-bench -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build/recast-bench
+node tools/navcat-bench/bench.mjs --navcat ../navcat --roam build/release/roam_bench --recast build/recast-bench/recast_bench [--fixture build/bench-fixtures/<level>.json]
+```
+
+The meshes are close but not identical, since navcat (and roam) carry fixes recast doesn't: solo poly counts are 132 vs 134 (nav-test), 1,058 vs 1,102 (game-level) and 1,414 vs 1,416 (FPS map).
+
+Median ms, M1 Pro:
+
+| bench | nav-test recast | nav-test roam | game-level recast | game-level roam | FPS map recast | FPS map roam |
+|---|---:|---:|---:|---:|---:|---:|
+| rasterize triangles | 1.44 | 1.09 | 20.13 | 14.99 | 24.32 | 18.96 |
+| build contours | 0.17 | 0.18 | 8.48 | 1.76 | 1.69 | 1.98 |
+| build poly mesh | 0.21 | 0.16 | 2.17 | 1.54 | 22.90 | 3.87 |
+| generate solo nav mesh | 3.60 | 3.39 | 46.23 | 34.04 | 71.27 | 46.45 |
+| generate tiled nav mesh | 5.94 | 5.82 | 89.97 | 68.10 | 92.16 | 79.67 |
+| find path (100 pairs) | 0.45 | 0.67 | 1.65 | 2.05 | 0.61 | 0.86 |
+| raycast (100 rays) | 0.0077 | 0.0175 | 0.0080 | 0.0170 | 0.0091 | 0.0176 |
+| find nearest poly (200 points) | 0.15 | 0.21 | 0.12 | 0.16 | 0.08 | 0.10 |
+| crowd (100 agents, 60 updates) | 31.2 | 41.4 | 27.1 | 26.3 | 25.3 | 24.2 |
+
+- Generation: on par with recast on nav-test (1.02-1.06x), 1.3-1.5x faster on the big levels. Rasterization is about 1.3x faster everywhere; the rest of the gap is recast having the same stuck contour walks (game-level contours 8.5 vs 1.8 ms) and cubic poly merging (FPS map 22.9 vs 3.9 ms) that roam fixed. Distance field and regions are 5-30% slower than recast.
+- Queries are where recast wins: find path 0.68-0.81x, nearest poly 0.72-0.81x, raycast about 0.45-0.5x (twice as slow). Detour writes into caller buffers and uses a fixed node pool; roam allocates result arrays and walks nodes through `get_node_by_ref`/links. These are the next targets.
+- Crowd: on par on the big levels (1.03-1.05x), slower on nav-test (0.75x). Detour caps neighbours at 6 by default; roam's default (navcat's) is unlimited.

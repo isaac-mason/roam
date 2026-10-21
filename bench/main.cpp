@@ -331,9 +331,12 @@ int main(int argc, char **argv) {
     const char *fixture = "../navcat/bench/fixtures/nav-test.json";
     const char *filter = nullptr;
     double min_total_milliseconds = 500;
+    const char *dump_points = nullptr;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--fixture") == 0 && i + 1 < argc) {
             fixture = argv[++i];
+        } else if (strcmp(argv[i], "--dump-points") == 0 && i + 1 < argc) {
+            dump_points = argv[++i];
         } else if (strcmp(argv[i], "--time") == 0 && i + 1 < argc) {
             min_total_milliseconds = atof(argv[++i]);
         } else {
@@ -348,6 +351,19 @@ int main(int argc, char **argv) {
     }
     state.options = solo_options();
     build_query_points();
+
+    if (dump_points) {
+        FILE *file = fopen(dump_points, "w");
+        if (!file) return 1;
+        fprintf(file, "[");
+        for (uint32_t i = 0; i < state.centers.length; i++) {
+            const Vec3 &p = state.centers[i];
+            fprintf(file, "%s%.9g,%.9g,%.9g", i ? "," : "", p.x, p.y, p.z);
+        }
+        fprintf(file, "]\n");
+        fclose(file);
+        return 0;
+    }
 
     static const char *const STAGE_NAMES[STAGE_COUNT] = {
         "mark walkable triangles", "rasterize triangles", "filter heightfield", "build compact heightfield", "erode walkable area",
