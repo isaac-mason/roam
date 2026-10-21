@@ -10,11 +10,13 @@
 namespace roam {
 
 struct CompactHeightfieldSpan {
-    int y;
-    int region;
-    uint32_t con;
-    int h;
+    uint16_t y;
+    uint16_t region;
+    uint32_t con : 24;
+    uint32_t h : 8;
 };
+
+static_assert(sizeof(CompactHeightfieldSpan) == 8);
 
 struct CompactHeightfieldCell {
     uint32_t index;

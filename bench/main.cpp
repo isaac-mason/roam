@@ -361,6 +361,8 @@ int main(int argc, char **argv) {
             min_total_milliseconds = atof(argv[++i]);
         } else if (strcmp(argv[i], "--cpu") == 0) {
             bench::measure_cpu_time(true);
+        } else if (strcmp(argv[i], "--samples") == 0 && i + 1 < argc) {
+            bench::use_fixed_samples(atoi(argv[++i]));
         } else {
             filter = argv[i];
         }

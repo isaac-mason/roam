@@ -57,9 +57,18 @@ static double sample(const BenchCase &bench_case) {
     return elapsed;
 }
 
+static int fixed_samples = -1;
+
 static void run_case(const BenchCase &bench_case, double min_total_milliseconds) {
-    for (int i = 0; i < 3; i++) sample(bench_case);
     std::vector<double> times;
+    if (fixed_samples >= 0) {
+        for (int i = 0; i < fixed_samples; i++) times.push_back(sample(bench_case));
+        if (times.empty()) return;
+        std::stable_sort(times.begin(), times.end());
+        printf("%-34s %12.4f %12.4f %8u\n", bench_case.name, times[times.size() / 2], times[0], (unsigned)times.size());
+        return;
+    }
+    for (int i = 0; i < 3; i++) sample(bench_case);
     double total = 0;
     while (times.size() < 2000 && (times.size() < 10 || total < min_total_milliseconds)) {
         double elapsed = sample(bench_case);
@@ -528,6 +537,8 @@ int main(int argc, char **argv) {
             min_total_milliseconds = atof(argv[++i]);
         } else if (strcmp(argv[i], "--cpu") == 0) {
             use_cpu_time = true;
+        } else if (strcmp(argv[i], "--samples") == 0 && i + 1 < argc) {
+            fixed_samples = atoi(argv[++i]);
         } else {
             filter = argv[i];
         }

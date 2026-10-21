@@ -17,8 +17,11 @@ using namespace roam;
 namespace bench {
 
 static bool use_cpu_time = false;
+static int fixed_samples = -1;
 
 void measure_cpu_time(bool enabled) { use_cpu_time = enabled; }
+
+void use_fixed_samples(int samples) { fixed_samples = samples; }
 
 static double cpu_milliseconds() {
 #if defined(_WIN32)
@@ -69,9 +72,18 @@ BenchResult run(const BenchCase &bench_case, double min_total_milliseconds) {
     const uint32_t MIN_SAMPLES = 10;
     const uint32_t MAX_SAMPLES = 2000;
 
+    Array<double> times = {};
+    if (fixed_samples >= 0) {
+        for (int i = 0; i < fixed_samples; i++) times.push(sample(bench_case));
+        if (times.length == 0) return {0, 0, 0};
+        sort::stable(times.data, times.length, [](double a, double b) { return a < b; });
+        BenchResult result = {times[times.length / 2], times[0], times.length};
+        times.release();
+        return result;
+    }
+
     for (uint32_t i = 0; i < WARMUP_SAMPLES; i++) sample(bench_case);
 
-    Array<double> times = {};
     double total = 0;
     while (times.length < MAX_SAMPLES && (times.length < MIN_SAMPLES || total < min_total_milliseconds)) {
         double elapsed = sample(bench_case);
