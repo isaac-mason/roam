@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 
+#include "roam/generate/input_triangle_mesh.h"
 #include "roam/generate/compact_heightfield.h"
 #include "roam/generate/contour_set.h"
 #include "roam/generate/heightfield.h"
@@ -40,7 +41,7 @@ namespace debug {
 
 void release(DebugPrimitives &primitives);
 
-DebugPrimitives create_triangle_area_ids_helper(const float *positions, const uint32_t *indices, uint32_t index_count, const uint8_t *tri_area_ids);
+DebugPrimitives create_triangle_area_ids_helper(const InputTriangleMesh &mesh, Span<const uint8_t> tri_area_ids);
 DebugPrimitives create_heightfield_helper(const Heightfield &heightfield);
 DebugPrimitives create_compact_heightfield_solid_helper(const CompactHeightfield &compact_heightfield);
 DebugPrimitives create_compact_heightfield_distances_helper(const CompactHeightfield &compact_heightfield);

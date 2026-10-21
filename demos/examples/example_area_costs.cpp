@@ -94,7 +94,7 @@ static Model create_floor() {
     return model;
 }
 
-static NavMesh generate_flat_nav_mesh(const float *positions, const uint32_t *indices, uint32_t index_count) {
+static NavMesh generate_flat_nav_mesh(const InputTriangleMesh &mesh) {
     const float cell_size = 0.5f;
     const float cell_height = 0.2f;
     const float walkable_radius_world = 0.3f;
@@ -117,14 +117,14 @@ static NavMesh generate_flat_nav_mesh(const float *positions, const uint32_t *in
     BuildContext context = {};
 
     Array<uint8_t> tri_area_ids = {};
-    tri_area_ids.resize(index_count / 3, 0);
-    input_triangle_mesh::mark_walkable_triangles(positions, indices, index_count, tri_area_ids.data, walkable_slope_angle_degrees);
+    tri_area_ids.resize(mesh.indices.capacity / 3, 0);
+    input_triangle_mesh::mark_walkable_triangles(tri_area_ids, mesh, walkable_slope_angle_degrees);
 
-    Box3 bounds = input_triangle_mesh::calculate_mesh_bounds(positions, indices, index_count);
+    Box3 bounds = input_triangle_mesh::calculate_mesh_bounds(mesh);
     GridSize grid_size = heightfield::calculate_grid_size(bounds, cell_size);
     Heightfield solid = heightfield::create(grid_size.width, grid_size.height, bounds, cell_size, cell_height);
 
-    heightfield::rasterize_triangles(context, solid, positions, indices, index_count, tri_area_ids.data, walkable_climb_voxels);
+    heightfield::rasterize_triangles(context, solid, mesh, tri_area_ids, walkable_climb_voxels);
 
     heightfield::filter_low_hanging_walkable_obstacles(solid, walkable_climb_voxels);
     heightfield::filter_ledge_spans(solid, walkable_height_voxels, walkable_climb_voxels);
@@ -258,7 +258,7 @@ static void init(App &app) {
     app.camera.pitch = asinf(16 / sqrtf(18 * 18 + 16 * 16 + 22 * 22));
 
     const Model &level = app.level;
-    state.nav_mesh = generate_flat_nav_mesh(level.walkable_positions.data, level.walkable_indices.data, level.walkable_indices.length);
+    state.nav_mesh = generate_flat_nav_mesh({level.walkable_positions, level.walkable_indices});
     state.generated = true;
 
     DrawList overlays = {};

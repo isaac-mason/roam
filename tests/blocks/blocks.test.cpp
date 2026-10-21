@@ -14,9 +14,9 @@ TEST(merge_positions_and_indices_shares_the_first_vertex) {
     const float positions[] = {0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1};
     const uint32_t first[] = {0, 1, 2};
     const uint32_t second[] = {0, 2, 3};
-    const MeshView meshes[] = {{positions, first, 3}, {positions, second, 3}};
+    const InputTriangleMesh meshes[] = {{positions, first}, {positions, second}};
 
-    MergedMesh merged = merge_positions_and_indices::merge_positions_and_indices(meshes, 2);
+    MergedMesh merged = merge_positions_and_indices::merge_positions_and_indices(meshes);
 
     CHECK(merged.positions.length == 12);
     REQUIRE(merged.indices.length == 6);
@@ -29,9 +29,9 @@ TEST(merge_positions_and_indices_shares_the_first_vertex) {
 TEST(merge_positions_and_indices_treats_negative_zero_as_zero) {
     const float positions[] = {0, 0, 0, -0.0f, 0, -0.0f};
     const uint32_t indices[] = {0, 1};
-    const MeshView mesh = {positions, indices, 2};
+    const InputTriangleMesh mesh = {positions, indices};
 
-    MergedMesh merged = merge_positions_and_indices::merge_positions_and_indices(&mesh, 1);
+    MergedMesh merged = merge_positions_and_indices::merge_positions_and_indices({&mesh, 1});
 
     CHECK(merged.positions.length == 3);
     REQUIRE(merged.indices.length == 2);
@@ -41,7 +41,7 @@ TEST(merge_positions_and_indices_treats_negative_zero_as_zero) {
 }
 
 TEST(chunky_tri_mesh_of_nothing_is_empty) {
-    ChunkyTriMesh mesh = chunky_tri_mesh::create(nullptr, nullptr, 0);
+    ChunkyTriMesh mesh = chunky_tri_mesh::create({});
     CHECK(mesh.nodes.length == 0);
     CHECK(mesh.max_tris_per_chunk == 0);
 
@@ -65,7 +65,7 @@ TEST(chunky_tri_mesh_finds_every_triangle_in_a_covering_rect) {
         }
     }
 
-    ChunkyTriMesh mesh = chunky_tri_mesh::create(positions.data, indices.data, indices.length, 16);
+    ChunkyTriMesh mesh = chunky_tri_mesh::create({positions, indices}, 16);
     CHECK(mesh.max_tris_per_chunk <= 16);
     CHECK(mesh.triangles.length == indices.length);
 
@@ -135,7 +135,7 @@ TEST(generate_solo_nav_mesh_covers_a_plane) {
         .detail_sample_max_error = 0.2f,
     };
 
-    SoloNavMeshResult result = generate_solo_nav_mesh::generate_solo_nav_mesh({PLANE_POSITIONS, PLANE_INDICES, 6}, options);
+    SoloNavMeshResult result = generate_solo_nav_mesh::generate_solo_nav_mesh({PLANE_POSITIONS, PLANE_INDICES}, options);
     CHECK(result.intermediates.poly_mesh.poly_count > 0);
 
     SearchWorkspace workspace = nav_mesh_search::create_search_workspace();
@@ -172,7 +172,7 @@ TEST(generate_tiled_nav_mesh_connects_tiles_across_a_plane) {
         .detail_sample_max_error = 0.2f,
     };
 
-    TiledNavMeshResult result = generate_tiled_nav_mesh::generate_tiled_nav_mesh({PLANE_POSITIONS, PLANE_INDICES, 6}, options);
+    TiledNavMeshResult result = generate_tiled_nav_mesh::generate_tiled_nav_mesh({PLANE_POSITIONS, PLANE_INDICES}, options);
     CHECK(result.intermediates.poly_mesh.length == 4);
 
     uint32_t tile_count = 0;

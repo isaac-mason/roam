@@ -15,17 +15,16 @@ static uint32_t position_bits(float value) {
     return bits;
 }
 
-MergedMesh merge_positions_and_indices(const MeshView *meshes, uint32_t mesh_count) {
+MergedMesh merge_positions_and_indices(Span<const InputTriangleMesh> meshes) {
     MergedMesh merged = {};
 
     Map<uint64_t, int32_t> first_by_hash = {};
     Array<int32_t> next_with_same_hash = {};
     Array<uint32_t> merged_bits = {};
 
-    for (uint32_t m = 0; m < mesh_count; m++) {
-        const MeshView &mesh = meshes[m];
-        for (uint32_t i = 0; i < mesh.index_count; i++) {
-            const float *position = &mesh.positions[mesh.indices[i] * 3];
+    for (const InputTriangleMesh &mesh : meshes) {
+        for (uint32_t i = 0; i < mesh.indices.capacity; i++) {
+            const float *position = &mesh.positions.data[mesh.indices[i] * 3];
             uint32_t x = position_bits(position[0]);
             uint32_t y = position_bits(position[1]);
             uint32_t z = position_bits(position[2]);

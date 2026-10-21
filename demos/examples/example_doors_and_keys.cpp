@@ -73,22 +73,20 @@ static bool pass_doors_filter(const QueryFilter &filter, NodeRef node_ref, const
     return false;
 }
 
-static SoloNavMeshResult generate_nav_mesh(const SoloNavMeshInput &input, const SoloNavMeshOptions &options, const Door *doors, int door_count) {
+static SoloNavMeshResult generate_nav_mesh(const InputTriangleMesh &input, const SoloNavMeshOptions &options, const Door *doors, int door_count) {
     SoloNavMeshResult result = {};
     SoloNavMeshIntermediates &intermediates = result.intermediates;
     BuildContext &context = intermediates.build_context;
     intermediates.input = input;
 
-    intermediates.tri_area_ids.resize(input.index_count / 3, 0);
-    input_triangle_mesh::mark_walkable_triangles(input.positions, input.indices, input.index_count, intermediates.tri_area_ids.data,
-                                                 options.walkable_slope_angle_degrees);
+    intermediates.tri_area_ids.resize(input.indices.capacity / 3, 0);
+    input_triangle_mesh::mark_walkable_triangles(intermediates.tri_area_ids, input, options.walkable_slope_angle_degrees);
 
-    Box3 bounds = input_triangle_mesh::calculate_mesh_bounds(input.positions, input.indices, input.index_count);
+    Box3 bounds = input_triangle_mesh::calculate_mesh_bounds(input);
     GridSize grid_size = heightfield::calculate_grid_size(bounds, options.cell_size);
     intermediates.heightfield = heightfield::create(grid_size.width, grid_size.height, bounds, options.cell_size, options.cell_height);
     Heightfield &solid = intermediates.heightfield;
-    heightfield::rasterize_triangles(context, solid, input.positions, input.indices, input.index_count, intermediates.tri_area_ids.data,
-                                     options.walkable_climb_voxels);
+    heightfield::rasterize_triangles(context, solid, input, intermediates.tri_area_ids, options.walkable_climb_voxels);
 
     heightfield::filter_low_hanging_walkable_obstacles(solid, options.walkable_climb_voxels);
     heightfield::filter_ledge_spans(solid, options.walkable_height_voxels, options.walkable_climb_voxels);
@@ -243,8 +241,8 @@ static void init(App &app) {
         }
     }
 
-    MeshView view = {level.positions.data, level_indices.data, level_indices.length};
-    state.level_mesh = merge_positions_and_indices::merge_positions_and_indices(&view, 1);
+    InputTriangleMesh view = {level.positions, level_indices};
+    state.level_mesh = merge_positions_and_indices::merge_positions_and_indices({&view, 1});
     level_indices.release();
 
     const float cell_size = 0.5f;
@@ -271,7 +269,7 @@ static void init(App &app) {
         .detail_sample_distance = cell_size * 6,
         .detail_sample_max_error = cell_height * 4,
     };
-    state.result = generate_nav_mesh({state.level_mesh.positions.data, state.level_mesh.indices.data, state.level_mesh.indices.length}, options,
+    state.result = generate_nav_mesh({state.level_mesh.positions, state.level_mesh.indices}, options,
                                      state.doors, state.door_count);
     state.generated = true;
 

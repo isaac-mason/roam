@@ -53,23 +53,21 @@ struct MarkCompactHeightfieldAreasExample {
 
 static MarkCompactHeightfieldAreasExample mark_areas;
 
-static SoloNavMeshResult generate_nav_mesh(const SoloNavMeshInput &input, const SoloNavMeshOptions &options) {
+static SoloNavMeshResult generate_nav_mesh(const InputTriangleMesh &input, const SoloNavMeshOptions &options) {
     SoloNavMeshResult result = {};
     SoloNavMeshIntermediates &intermediates = result.intermediates;
     BuildContext &context = intermediates.build_context;
     intermediates.input = input;
 
-    intermediates.tri_area_ids.resize(input.index_count / 3, 0);
-    input_triangle_mesh::mark_walkable_triangles(input.positions, input.indices, input.index_count, intermediates.tri_area_ids.data,
-                                                 options.walkable_slope_angle_degrees);
+    intermediates.tri_area_ids.resize(input.indices.capacity / 3, 0);
+    input_triangle_mesh::mark_walkable_triangles(intermediates.tri_area_ids, input, options.walkable_slope_angle_degrees);
 
-    Box3 bounds = input_triangle_mesh::calculate_mesh_bounds(input.positions, input.indices, input.index_count);
+    Box3 bounds = input_triangle_mesh::calculate_mesh_bounds(input);
     GridSize grid_size = heightfield::calculate_grid_size(bounds, options.cell_size);
     intermediates.heightfield = heightfield::create(grid_size.width, grid_size.height, bounds, options.cell_size, options.cell_height);
     Heightfield &solid = intermediates.heightfield;
 
-    heightfield::rasterize_triangles(context, solid, input.positions, input.indices, input.index_count, intermediates.tri_area_ids.data,
-                                     options.walkable_climb_voxels);
+    heightfield::rasterize_triangles(context, solid, input, intermediates.tri_area_ids, options.walkable_climb_voxels);
 
     heightfield::filter_low_hanging_walkable_obstacles(solid, options.walkable_climb_voxels);
     heightfield::filter_ledge_spans(solid, options.walkable_height_voxels, options.walkable_climb_voxels);
@@ -80,8 +78,7 @@ static SoloNavMeshResult generate_nav_mesh(const SoloNavMeshInput &input, const 
 
     compact_heightfield::mark_box_area(compact, WATER_BOX, NAV_MESH_AREA_TYPE_B);
     compact_heightfield::mark_cylinder_area(compact, GRASS_CYLINDER_CENTER, GRASS_CYLINDER_RADIUS, GRASS_CYLINDER_HEIGHT, NAV_MESH_AREA_TYPE_C);
-    compact_heightfield::mark_convex_poly_area(compact, ROAD_VERTS, sizeof(ROAD_VERTS) / sizeof(ROAD_VERTS[0]) / 3, ROAD_MIN_Y, ROAD_MAX_Y,
-                                               NAV_MESH_AREA_TYPE_D);
+    compact_heightfield::mark_convex_poly_area(compact, ROAD_VERTS, ROAD_MIN_Y, ROAD_MAX_Y, NAV_MESH_AREA_TYPE_D);
     compact_heightfield::mark_rotated_box_area(compact, ICE_RINK_CENTER, ICE_RINK_HALF_EXTENTS, ICE_RINK_ROTATION, NAV_MESH_AREA_TYPE_E);
 
     compact_heightfield::erode_walkable_area(compact, options.walkable_radius_voxels);
@@ -219,7 +216,7 @@ static void init(App &app) {
     };
 
     const Model &level = app.level;
-    state.result = generate_nav_mesh({level.walkable_positions.data, level.walkable_indices.data, level.walkable_indices.length}, options);
+    state.result = generate_nav_mesh({level.walkable_positions, level.walkable_indices}, options);
     state.generated = true;
 
     state.nav_mesh_drawing = lifted_drawing(debug::create_nav_mesh_helper(state.result.nav_mesh), 0.1f);

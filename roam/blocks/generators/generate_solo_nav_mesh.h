@@ -13,12 +13,6 @@
 
 namespace roam {
 
-struct SoloNavMeshInput {
-    const float *positions;
-    const uint32_t *indices;
-    uint32_t index_count;
-};
-
 struct SoloNavMeshOptions {
     float cell_size;
     float cell_height;
@@ -41,7 +35,7 @@ struct SoloNavMeshOptions {
 
 struct SoloNavMeshIntermediates {
     BuildContext build_context;
-    SoloNavMeshInput input;
+    InputTriangleMesh input;
     Array<uint8_t> tri_area_ids;
     Heightfield heightfield;
     CompactHeightfield compact_heightfield;
@@ -57,7 +51,7 @@ struct SoloNavMeshResult {
 
 namespace generate_solo_nav_mesh {
 
-SoloNavMeshResult generate_solo_nav_mesh(const SoloNavMeshInput &input, const SoloNavMeshOptions &options);
+SoloNavMeshResult generate_solo_nav_mesh(const InputTriangleMesh &input, const SoloNavMeshOptions &options);
 
 void release(SoloNavMeshIntermediates &intermediates);
 

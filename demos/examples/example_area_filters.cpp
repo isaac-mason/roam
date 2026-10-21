@@ -80,7 +80,7 @@ static void flag(DrawList &list, Vec3 position, Color color) {
     renderer::box(list, {position.x + 0.23f, position.y + 1.0f, position.z}, {0.16f, 0.11f, 0.02f}, color);
 }
 
-static AreaFiltersNavMesh generate_nav_mesh(const float *positions, const uint32_t *indices, uint32_t index_count) {
+static AreaFiltersNavMesh generate_nav_mesh(const InputTriangleMesh &mesh) {
     const float cell_size = 0.2f;
     const float cell_height = 0.15f;
     const float walkable_radius_world = 0.1f;
@@ -102,15 +102,15 @@ static AreaFiltersNavMesh generate_nav_mesh(const float *positions, const uint32
     AreaFiltersNavMesh result = {};
     BuildContext &context = result.build_context;
 
-    result.tri_area_ids.resize(index_count / 3, 0);
-    input_triangle_mesh::mark_walkable_triangles(positions, indices, index_count, result.tri_area_ids.data, walkable_slope_angle_degrees);
+    result.tri_area_ids.resize(mesh.indices.capacity / 3, 0);
+    input_triangle_mesh::mark_walkable_triangles(result.tri_area_ids, mesh, walkable_slope_angle_degrees);
 
-    Box3 bounds = input_triangle_mesh::calculate_mesh_bounds(positions, indices, index_count);
+    Box3 bounds = input_triangle_mesh::calculate_mesh_bounds(mesh);
     GridSize grid_size = heightfield::calculate_grid_size(bounds, cell_size);
     result.heightfield = heightfield::create(grid_size.width, grid_size.height, bounds, cell_size, cell_height);
     Heightfield &solid = result.heightfield;
 
-    heightfield::rasterize_triangles(context, solid, positions, indices, index_count, result.tri_area_ids.data, walkable_climb_voxels);
+    heightfield::rasterize_triangles(context, solid, mesh, result.tri_area_ids, walkable_climb_voxels);
 
     heightfield::filter_low_hanging_walkable_obstacles(solid, walkable_climb_voxels);
     heightfield::filter_ledge_spans(solid, walkable_height_voxels, walkable_climb_voxels);
@@ -250,7 +250,7 @@ static void init(App &app) {
     app::load_level(app, "bridges.glb", {.skip_unwalkable_nodes = true});
 
     const Model &level = app.level;
-    state.result = generate_nav_mesh(level.walkable_positions.data, level.walkable_indices.data, level.walkable_indices.length);
+    state.result = generate_nav_mesh({level.walkable_positions, level.walkable_indices});
     state.generated = true;
 
     state.nav_mesh_drawing = lifted_static(debug::create_nav_mesh_helper(state.result.nav_mesh), 0.1f);

@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include "roam/math/vec2.h"
+#include "roam/generate/input_triangle_mesh.h"
 #include "roam/util/array.h"
 
 namespace roam {
@@ -22,7 +23,7 @@ struct ChunkyTriMesh {
 
 namespace chunky_tri_mesh {
 
-ChunkyTriMesh create(const float *vertices, const uint32_t *indices, uint32_t index_count, uint32_t tris_per_chunk = 256);
+ChunkyTriMesh create(const InputTriangleMesh &input, uint32_t tris_per_chunk = 256);
 
 void release(ChunkyTriMesh &mesh);
 

@@ -22,7 +22,7 @@ struct NavMeshTileBuild {
     PolyMeshDetail poly_mesh_detail;
 };
 
-static NavMeshTileBuild build_nav_mesh_tile(BuildContext &context, const float *positions, const ChunkyTriMesh &chunky_tri_mesh, Box3 tile_bounds,
+static NavMeshTileBuild build_nav_mesh_tile(BuildContext &context, Span<const float> positions, const ChunkyTriMesh &chunky_tri_mesh, Box3 tile_bounds,
                                             const TiledNavMeshOptions &options) {
     NavMeshTileBuild build = {};
 
@@ -46,12 +46,11 @@ static NavMeshTileBuild build_nav_mesh_tile(BuildContext &context, const float *
         const ChunkyTriMeshNode &node = chunky_tri_mesh.nodes[chunk];
         const uint32_t *chunk_triangles = &chunky_tri_mesh.triangles.data[(uint32_t)node.index * 3];
         uint32_t chunk_index_count = node.count * 3;
+        InputTriangleMesh chunk_mesh = {positions, {chunk_triangles, chunk_index_count}};
 
         memset(build.tri_area_ids.data, 0, build.tri_area_ids.length);
-        input_triangle_mesh::mark_walkable_triangles(positions, chunk_triangles, chunk_index_count, build.tri_area_ids.data,
-                                                     options.walkable_slope_angle_degrees);
-        heightfield::rasterize_triangles(context, solid, positions, chunk_triangles, chunk_index_count, build.tri_area_ids.data,
-                                         options.walkable_climb_voxels);
+        input_triangle_mesh::mark_walkable_triangles(build.tri_area_ids, chunk_mesh, options.walkable_slope_angle_degrees);
+        heightfield::rasterize_triangles(context, solid, chunk_mesh, build.tri_area_ids, options.walkable_climb_voxels);
     }
     chunks.release();
 
@@ -92,13 +91,13 @@ static void release(NavMeshTileBuild &build) {
     poly_mesh_detail::release(build.poly_mesh_detail);
 }
 
-TiledNavMeshResult generate_tiled_nav_mesh(const TiledNavMeshInput &input, const TiledNavMeshOptions &options) {
+TiledNavMeshResult generate_tiled_nav_mesh(const InputTriangleMesh &input, const TiledNavMeshOptions &options) {
     TiledNavMeshResult result = {};
     TiledNavMeshIntermediates &intermediates = result.intermediates;
     BuildContext &context = intermediates.build_context;
     intermediates.input = input;
 
-    Box3 mesh_bounds = input_triangle_mesh::calculate_mesh_bounds(input.positions, input.indices, input.index_count);
+    Box3 mesh_bounds = input_triangle_mesh::calculate_mesh_bounds(input);
     GridSize grid_size = heightfield::calculate_grid_size(mesh_bounds, options.cell_size);
     intermediates.input_bounds = mesh_bounds;
 
@@ -108,7 +107,7 @@ TiledNavMeshResult generate_tiled_nav_mesh(const TiledNavMeshInput &input, const
     nav_mesh.tile_height = options.tile_size_world;
     nav_mesh.origin = mesh_bounds.min;
 
-    intermediates.chunky_tri_mesh = chunky_tri_mesh::create(input.positions, input.indices, input.index_count);
+    intermediates.chunky_tri_mesh = chunky_tri_mesh::create(input);
 
     int tile_count_x = (grid_size.width + options.tile_size_voxels - 1) / options.tile_size_voxels;
     int tile_count_y = (grid_size.height + options.tile_size_voxels - 1) / options.tile_size_voxels;

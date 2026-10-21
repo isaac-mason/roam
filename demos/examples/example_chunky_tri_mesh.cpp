@@ -143,8 +143,7 @@ static void init(App &app) {
     camera::look_at(app.camera, {6, 750, -41.9f}, {6, 0, -42});
 
     double start = app::now_milliseconds();
-    chunky.chunky_tri_mesh = chunky_tri_mesh::create(app.level.walkable_positions.data, app.level.walkable_indices.data,
-                                                     app.level.walkable_indices.length, 256);
+    chunky.chunky_tri_mesh = chunky_tri_mesh::create({app.level.walkable_positions, app.level.walkable_indices}, 256);
     chunky.create_milliseconds = app::now_milliseconds() - start;
     for (const ChunkyTriMeshNode &node : chunky.chunky_tri_mesh.nodes) {
         if (chunky_tri_mesh::is_leaf(node)) chunky.leaf_count++;

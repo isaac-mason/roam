@@ -91,7 +91,7 @@ static void init(App &app) {
 
     const Model &level = app.level;
     state.result = generate_tiled_nav_mesh::generate_tiled_nav_mesh(
-        {level.walkable_positions.data, level.walkable_indices.data, level.walkable_indices.length}, options);
+        {level.walkable_positions, level.walkable_indices}, options);
     state.generated = true;
     NavMesh &nav_mesh = state.result.nav_mesh;
 

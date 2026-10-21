@@ -13,15 +13,13 @@ inline roam::Heightfield build_filtered_heightfield(roam::BuildContext &context,
 
     Array<uint8_t> tri_area_ids = {};
     tri_area_ids.resize(input.indices.length / 3, NULL_AREA);
-    input_triangle_mesh::mark_walkable_triangles(input.positions.data, input.indices.data, input.indices.length, tri_area_ids.data,
-                                                 options.walkable_slope_angle);
+    input_triangle_mesh::mark_walkable_triangles(tri_area_ids, {input.positions, input.indices}, options.walkable_slope_angle);
 
-    Box3 bounds = input_triangle_mesh::calculate_mesh_bounds(input.positions.data, input.indices.data, input.indices.length);
+    Box3 bounds = input_triangle_mesh::calculate_mesh_bounds({input.positions, input.indices});
     GridSize grid_size = heightfield::calculate_grid_size(bounds, options.cell_size);
 
     Heightfield heightfield = heightfield::create(grid_size.width, grid_size.height, bounds, options.cell_size, options.cell_height);
-    heightfield::rasterize_triangles(context, heightfield, input.positions.data, input.indices.data, input.indices.length, tri_area_ids.data,
-                                     options.walkable_climb);
+    heightfield::rasterize_triangles(context, heightfield, {input.positions, input.indices}, tri_area_ids, options.walkable_climb);
     heightfield::filter_low_hanging_walkable_obstacles(heightfield, options.walkable_climb);
     heightfield::filter_ledge_spans(heightfield, options.walkable_height, options.walkable_climb);
     heightfield::filter_walkable_low_height_spans(heightfield, options.walkable_height);

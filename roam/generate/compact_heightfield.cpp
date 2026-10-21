@@ -221,12 +221,12 @@ void erode_walkable_area(CompactHeightfield &compact_heightfield, int walkable_r
     distance_to_boundary.release();
 }
 
-void erode_and_mark_walkable_areas(CompactHeightfield &compact_heightfield, int base_walkable_radius_voxels, const WalkableAreaThreshold *thresholds,
-                                   uint32_t threshold_count) {
+void erode_and_mark_walkable_areas(CompactHeightfield &compact_heightfield, int base_walkable_radius_voxels,
+                                   Span<const WalkableAreaThreshold> thresholds) {
     Array<uint8_t> distance_to_boundary = compute_distance_to_boundary(compact_heightfield);
 
     Array<WalkableAreaThreshold> sorted_thresholds = {};
-    for (uint32_t i = 0; i < threshold_count; i++) sorted_thresholds.push(thresholds[i]);
+    for (const WalkableAreaThreshold &threshold : thresholds) sorted_thresholds.push(threshold);
     sort::stable(sorted_thresholds.data, sorted_thresholds.length, [](const WalkableAreaThreshold &a, const WalkableAreaThreshold &b) {
         return a.walkable_radius_voxels < b.walkable_radius_voxels;
     });
@@ -345,8 +345,9 @@ void mark_rotated_box_area(CompactHeightfield &compact_heightfield, Vec3 center,
     }
 }
 
-void mark_convex_poly_area(CompactHeightfield &compact_heightfield, const float *vertices, uint32_t vertex_count, float min_y, float max_y,
-                           uint8_t area_id) {
+void mark_convex_poly_area(CompactHeightfield &compact_heightfield, Span<const float> polygon, float min_y, float max_y, uint8_t area_id) {
+    const float *vertices = polygon.data;
+    uint32_t vertex_count = polygon.capacity / 3;
     Vec3 min = {vertices[0], min_y, vertices[2]};
     Vec3 max = {vertices[0], max_y, vertices[2]};
     for (uint32_t i = 1; i < vertex_count; ++i) {

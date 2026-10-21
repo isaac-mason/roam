@@ -44,8 +44,7 @@ static DebugPrimitives create_helper(int helper) {
     const NavMesh &nav_mesh = solo.result.nav_mesh;
     switch (helper) {
         case SOLO_HELPER_TRIANGLE_AREA_IDS:
-            return debug::create_triangle_area_ids_helper(intermediates.input.positions, intermediates.input.indices, intermediates.input.index_count,
-                                                          intermediates.tri_area_ids.data);
+            return debug::create_triangle_area_ids_helper(intermediates.input, intermediates.tri_area_ids);
         case SOLO_HELPER_HEIGHTFIELD: return debug::create_heightfield_helper(intermediates.heightfield);
         case SOLO_HELPER_COMPACT_HEIGHTFIELD_SOLID: return debug::create_compact_heightfield_solid_helper(intermediates.compact_heightfield);
         case SOLO_HELPER_COMPACT_HEIGHTFIELD_DISTANCES: return debug::create_compact_heightfield_distances_helper(intermediates.compact_heightfield);
@@ -85,7 +84,7 @@ static void generate(App &app) {
     const Model &level = app.level;
     double start = app::now_milliseconds();
     solo.result = generate_solo_nav_mesh::generate_solo_nav_mesh(
-        {level.walkable_positions.data, level.walkable_indices.data, level.walkable_indices.length}, nav_mesh_config::solo_options(solo.config));
+        {level.walkable_positions, level.walkable_indices}, nav_mesh_config::solo_options(solo.config));
     solo.generation_milliseconds = app::now_milliseconds() - start;
     solo.generated = true;
     for (int i = 0; i < SOLO_HELPER_COUNT; i++) update_drawing(i);

@@ -39,8 +39,12 @@ static float triangle_normal_y(const float *vertices, const uint32_t *indices, s
     return ny * (1.0f / scalar::sqrt(length_sqr));
 }
 
-void mark_walkable_triangles(const float *vertices, const uint32_t *indices, uint32_t index_count, uint8_t *out_tri_area_ids,
-                             float walkable_slope_angle) {
+void mark_walkable_triangles(Span<uint8_t> tri_area_ids, const InputTriangleMesh &mesh, float walkable_slope_angle) {
+    const float *vertices = mesh.positions.data;
+    const uint32_t *indices = mesh.indices.data;
+    uint32_t index_count = mesh.indices.capacity;
+    ROAM_ASSERT(tri_area_ids.capacity >= index_count / 3);
+    uint8_t *out_tri_area_ids = tri_area_ids.data;
     float threshold = walkable_threshold(walkable_slope_angle);
     size_t triangle_count = index_count / 3;
     float length_sqr;
@@ -56,8 +60,12 @@ void mark_walkable_triangles(const float *vertices, const uint32_t *indices, uin
     }
 }
 
-void clear_unwalkable_triangles(const float *vertices, const uint32_t *indices, uint32_t index_count, uint8_t *tri_area_ids,
-                                float walkable_slope_angle) {
+void clear_unwalkable_triangles(Span<uint8_t> tri_area_id_buffer, const InputTriangleMesh &mesh, float walkable_slope_angle) {
+    const float *vertices = mesh.positions.data;
+    const uint32_t *indices = mesh.indices.data;
+    uint32_t index_count = mesh.indices.capacity;
+    ROAM_ASSERT(tri_area_id_buffer.capacity >= index_count / 3);
+    uint8_t *tri_area_ids = tri_area_id_buffer.data;
     float threshold = walkable_threshold(walkable_slope_angle);
     uint32_t triangle_count = index_count / 3;
     for (uint32_t i = 0; i < triangle_count; ++i) {
@@ -65,7 +73,10 @@ void clear_unwalkable_triangles(const float *vertices, const uint32_t *indices, 
     }
 }
 
-Box3 calculate_mesh_bounds(const float *vertices, const uint32_t *indices, uint32_t index_count) {
+Box3 calculate_mesh_bounds(const InputTriangleMesh &mesh) {
+    const float *vertices = mesh.positions.data;
+    const uint32_t *indices = mesh.indices.data;
+    uint32_t index_count = mesh.indices.capacity;
     Box3 bounds = {{INFINITY, INFINITY, INFINITY}, {-INFINITY, -INFINITY, -INFINITY}};
     for (uint32_t i = 0; i < index_count; ++i) bounds = box3::expand_by_point(bounds, vec3::load(vertices, indices[i] * 3));
     return bounds;

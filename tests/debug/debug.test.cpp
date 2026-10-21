@@ -51,13 +51,13 @@ TEST(debug_helpers_draw_a_generated_nav_mesh) {
         .detail_sample_max_error = 0.2f,
     };
 
-    SoloNavMeshResult result = generate_solo_nav_mesh::generate_solo_nav_mesh({positions, indices, 12}, options);
+    SoloNavMeshResult result = generate_solo_nav_mesh::generate_solo_nav_mesh({positions, indices}, options);
     const SoloNavMeshIntermediates &intermediates = result.intermediates;
     NavMesh &nav_mesh = result.nav_mesh;
 
     nav_mesh_api::add_off_mesh_connection(nav_mesh, {{1, 0, 1}, {9, 0, 9}, 0.5f, OFF_MESH_CONNECTION_DIRECTION_START_TO_END, 1, 0});
 
-    check_helper(debug::create_triangle_area_ids_helper(positions, indices, 12, intermediates.tri_area_ids.data), "triangle area ids");
+    check_helper(debug::create_triangle_area_ids_helper({positions, indices}, intermediates.tri_area_ids), "triangle area ids");
     check_helper(debug::create_heightfield_helper(intermediates.heightfield), "heightfield");
     check_helper(debug::create_compact_heightfield_solid_helper(intermediates.compact_heightfield), "compact heightfield solid");
     check_helper(debug::create_compact_heightfield_distances_helper(intermediates.compact_heightfield), "compact heightfield distances");

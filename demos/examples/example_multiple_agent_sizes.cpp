@@ -95,23 +95,21 @@ static bool pass_not_narrow(const QueryFilter &, NodeRef node_ref, const NavMesh
     return nav_mesh_api::get_node_by_ref(nav_mesh, node_ref).area != AREA_WALKABLE_NARROW;
 }
 
-static SoloNavMeshResult generate_nav_mesh(const SoloNavMeshInput &input, const SoloNavMeshOptions &options, const WalkableAreaThreshold *thresholds,
-                                           uint32_t threshold_count) {
+static SoloNavMeshResult generate_nav_mesh(const InputTriangleMesh &input, const SoloNavMeshOptions &options,
+                                           Span<const WalkableAreaThreshold> thresholds) {
     SoloNavMeshResult result = {};
     SoloNavMeshIntermediates &intermediates = result.intermediates;
     BuildContext &context = intermediates.build_context;
     intermediates.input = input;
 
-    intermediates.tri_area_ids.resize(input.index_count / 3, 0);
-    input_triangle_mesh::mark_walkable_triangles(input.positions, input.indices, input.index_count, intermediates.tri_area_ids.data,
-                                                 options.walkable_slope_angle_degrees);
+    intermediates.tri_area_ids.resize(input.indices.capacity / 3, 0);
+    input_triangle_mesh::mark_walkable_triangles(intermediates.tri_area_ids, input, options.walkable_slope_angle_degrees);
 
-    Box3 bounds = input_triangle_mesh::calculate_mesh_bounds(input.positions, input.indices, input.index_count);
+    Box3 bounds = input_triangle_mesh::calculate_mesh_bounds(input);
     GridSize grid_size = heightfield::calculate_grid_size(bounds, options.cell_size);
     intermediates.heightfield = heightfield::create(grid_size.width, grid_size.height, bounds, options.cell_size, options.cell_height);
     Heightfield &solid = intermediates.heightfield;
-    heightfield::rasterize_triangles(context, solid, input.positions, input.indices, input.index_count, intermediates.tri_area_ids.data,
-                                     options.walkable_climb_voxels);
+    heightfield::rasterize_triangles(context, solid, input, intermediates.tri_area_ids, options.walkable_climb_voxels);
 
     heightfield::filter_low_hanging_walkable_obstacles(solid, options.walkable_climb_voxels);
     heightfield::filter_ledge_spans(solid, options.walkable_height_voxels, options.walkable_climb_voxels);
@@ -120,7 +118,7 @@ static SoloNavMeshResult generate_nav_mesh(const SoloNavMeshInput &input, const 
     intermediates.compact_heightfield = compact_heightfield::build(context, solid, options.walkable_height_voxels, options.walkable_climb_voxels);
     CompactHeightfield &compact = intermediates.compact_heightfield;
 
-    compact_heightfield::erode_and_mark_walkable_areas(compact, options.walkable_radius_voxels, thresholds, threshold_count);
+    compact_heightfield::erode_and_mark_walkable_areas(compact, options.walkable_radius_voxels, thresholds);
     compact_heightfield::median_filter_walkable_area(compact);
     compact_heightfield_regions::build_distance_field(compact);
     compact_heightfield_regions::build_regions_monotone(context, compact, options.border_size, options.min_region_area, options.merge_region_area);
@@ -177,8 +175,7 @@ static DebugPrimitives create_helper(int helper) {
     const NavMesh &nav_mesh = state.result.nav_mesh;
     switch (helper) {
         case HELPER_TRIANGLE_AREA_IDS:
-            return debug::create_triangle_area_ids_helper(intermediates.input.positions, intermediates.input.indices, intermediates.input.index_count,
-                                                          intermediates.tri_area_ids.data);
+            return debug::create_triangle_area_ids_helper(intermediates.input, intermediates.tri_area_ids);
         case HELPER_HEIGHTFIELD: return debug::create_heightfield_helper(intermediates.heightfield);
         case HELPER_COMPACT_HEIGHTFIELD_SOLID: return debug::create_compact_heightfield_solid_helper(intermediates.compact_heightfield);
         case HELPER_COMPACT_HEIGHTFIELD_DISTANCES: return debug::create_compact_heightfield_distances_helper(intermediates.compact_heightfield);
@@ -258,8 +255,7 @@ static void init(App &app) {
     const WalkableAreaThreshold thresholds[] = {{AREA_WALKABLE_NARROW, (int)ceilf(LARGE_AGENT_RADIUS / CELL_SIZE)}};
 
     const Model &level = app.level;
-    state.result = generate_nav_mesh({level.walkable_positions.data, level.walkable_indices.data, level.walkable_indices.length}, options, thresholds,
-                                     sizeof(thresholds) / sizeof(thresholds[0]));
+    state.result = generate_nav_mesh({level.walkable_positions, level.walkable_indices}, options, thresholds);
     state.generated = true;
     NavMesh &nav_mesh = state.result.nav_mesh;
 

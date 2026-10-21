@@ -123,32 +123,29 @@ static void rasterize_volume(Heightfield &heightfield, const Volume &volume) {
         }
         case VOLUME_SHAPE_CONVEX: {
             Array<float> vertices = dodecahedron_world_vertices(volume);
-            heightfield::rasterize_convex(heightfield, vertices.data, vertices.length, DODECAHEDRON_INDICES,
-                                          sizeof(DODECAHEDRON_INDICES) / sizeof(DODECAHEDRON_INDICES[0]), volume.area, 1);
+            heightfield::rasterize_convex(heightfield, {vertices, DODECAHEDRON_INDICES}, volume.area, 1);
             vertices.release();
             break;
         }
     }
 }
 
-static SoloNavMeshResult generate_nav_mesh(const SoloNavMeshInput &input, const Volume *volumes, uint32_t volume_count,
+static SoloNavMeshResult generate_nav_mesh(const InputTriangleMesh &input, const Volume *volumes, uint32_t volume_count,
                                            const SoloNavMeshOptions &options) {
     SoloNavMeshResult result = {};
     SoloNavMeshIntermediates &intermediates = result.intermediates;
     BuildContext &context = intermediates.build_context;
     intermediates.input = input;
 
-    intermediates.tri_area_ids.resize(input.index_count / 3, 0);
-    input_triangle_mesh::mark_walkable_triangles(input.positions, input.indices, input.index_count, intermediates.tri_area_ids.data,
-                                                 options.walkable_slope_angle_degrees);
+    intermediates.tri_area_ids.resize(input.indices.capacity / 3, 0);
+    input_triangle_mesh::mark_walkable_triangles(intermediates.tri_area_ids, input, options.walkable_slope_angle_degrees);
 
-    Box3 bounds = input_triangle_mesh::calculate_mesh_bounds(input.positions, input.indices, input.index_count);
+    Box3 bounds = input_triangle_mesh::calculate_mesh_bounds(input);
     GridSize grid_size = heightfield::calculate_grid_size(bounds, options.cell_size);
     intermediates.heightfield = heightfield::create(grid_size.width, grid_size.height, bounds, options.cell_size, options.cell_height);
     Heightfield &solid = intermediates.heightfield;
 
-    heightfield::rasterize_triangles(context, solid, input.positions, input.indices, input.index_count, intermediates.tri_area_ids.data,
-                                     options.walkable_climb_voxels);
+    heightfield::rasterize_triangles(context, solid, input, intermediates.tri_area_ids, options.walkable_climb_voxels);
 
     for (uint32_t i = 0; i < volume_count; i++) rasterize_volume(solid, volumes[i]);
 
@@ -217,8 +214,7 @@ static DebugPrimitives create_helper(int helper) {
     const NavMesh &nav_mesh = filled_volume.result.nav_mesh;
     switch (helper) {
         case FILLED_VOLUME_HELPER_TRIANGLE_AREA_IDS:
-            return debug::create_triangle_area_ids_helper(intermediates.input.positions, intermediates.input.indices, intermediates.input.index_count,
-                                                          intermediates.tri_area_ids.data);
+            return debug::create_triangle_area_ids_helper(intermediates.input, intermediates.tri_area_ids);
         case FILLED_VOLUME_HELPER_HEIGHTFIELD: return debug::create_heightfield_helper(intermediates.heightfield);
         case FILLED_VOLUME_HELPER_COMPACT_HEIGHTFIELD_SOLID: return debug::create_compact_heightfield_solid_helper(intermediates.compact_heightfield);
         case FILLED_VOLUME_HELPER_COMPACT_HEIGHTFIELD_DISTANCES:
@@ -265,7 +261,7 @@ static void generate(App &app) {
 
     const Model &level = app.level;
     double start = app::now_milliseconds();
-    state.result = generate_nav_mesh({level.walkable_positions.data, level.walkable_indices.data, level.walkable_indices.length}, volumes,
+    state.result = generate_nav_mesh({level.walkable_positions, level.walkable_indices}, volumes,
                                      VOLUME_COUNT, options);
     state.generation_milliseconds = app::now_milliseconds() - start;
     state.generated = true;

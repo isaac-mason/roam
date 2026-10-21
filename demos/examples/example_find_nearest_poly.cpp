@@ -52,7 +52,7 @@ static void init(App &app) {
     config.tile_size_voxels = 64;
     const Model &level = app.level;
     state.result = generate_tiled_nav_mesh::generate_tiled_nav_mesh(
-        {level.walkable_positions.data, level.walkable_indices.data, level.walkable_indices.length}, nav_mesh_config::tiled_options(config));
+        {level.walkable_positions, level.walkable_indices}, nav_mesh_config::tiled_options(config));
     state.generated = true;
 
     DebugPrimitives nav_mesh = debug::create_nav_mesh_helper(state.result.nav_mesh);

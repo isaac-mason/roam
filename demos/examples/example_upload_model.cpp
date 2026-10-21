@@ -110,8 +110,7 @@ static DebugPrimitives create_stage_helper(int helper, const Array<uint8_t> *tri
     switch (helper) {
         case UPLOAD_HELPER_TRIANGLE_AREA_IDS:
             if (!tri_area_ids) return {};
-            return debug::create_triangle_area_ids_helper(app.level.walkable_positions.data, app.level.walkable_indices.data,
-                                                          app.level.walkable_indices.length, tri_area_ids->data);
+            return debug::create_triangle_area_ids_helper({app.level.walkable_positions, app.level.walkable_indices}, *tri_area_ids);
         case UPLOAD_HELPER_HEIGHTFIELD: return debug::create_heightfield_helper(solid);
         case UPLOAD_HELPER_COMPACT_HEIGHTFIELD_SOLID: return debug::create_compact_heightfield_solid_helper(compact);
         case UPLOAD_HELPER_COMPACT_HEIGHTFIELD_DISTANCES: return debug::create_compact_heightfield_distances_helper(compact);
@@ -143,11 +142,9 @@ static void update_drawing(const App &app, int helper) {
         if (helper == UPLOAD_HELPER_TRIANGLE_AREA_IDS) {
             Array<uint8_t> tri_area_ids = {};
             tri_area_ids.resize(app.level.walkable_indices.length / 3, 0);
-            input_triangle_mesh::mark_walkable_triangles(app.level.walkable_positions.data, app.level.walkable_indices.data,
-                                                         app.level.walkable_indices.length, tri_area_ids.data, upload.config.walkable_slope_angle_degrees);
+            input_triangle_mesh::mark_walkable_triangles(tri_area_ids, {app.level.walkable_positions, app.level.walkable_indices}, upload.config.walkable_slope_angle_degrees);
             add_helper(list,
-                       debug::create_triangle_area_ids_helper(app.level.walkable_positions.data, app.level.walkable_indices.data,
-                                                              app.level.walkable_indices.length, tri_area_ids.data),
+                       debug::create_triangle_area_ids_helper({app.level.walkable_positions, app.level.walkable_indices}, tri_area_ids),
                        0);
             tri_area_ids.release();
         } else {
@@ -270,10 +267,10 @@ static void generate(App &app) {
     upload.generated_tiled = upload.tiled;
     if (upload.tiled) {
         upload.tiled_result = generate_tiled_nav_mesh::generate_tiled_nav_mesh(
-            {level.walkable_positions.data, level.walkable_indices.data, level.walkable_indices.length}, nav_mesh_config::tiled_options(upload.config));
+            {level.walkable_positions, level.walkable_indices}, nav_mesh_config::tiled_options(upload.config));
     } else {
         upload.solo = generate_solo_nav_mesh::generate_solo_nav_mesh(
-            {level.walkable_positions.data, level.walkable_indices.data, level.walkable_indices.length}, nav_mesh_config::solo_options(upload.config));
+            {level.walkable_positions, level.walkable_indices}, nav_mesh_config::solo_options(upload.config));
     }
     upload.generation_milliseconds = app::now_milliseconds() - begin;
     upload.generated = true;

@@ -167,15 +167,13 @@ static void advance(Pipeline &pipeline, int stage) {
     switch (stage) {
         case STAGE_MARK:
             pipeline.tri_area_ids.resize(input.indices.length / 3, 0);
-            input_triangle_mesh::mark_walkable_triangles(input.positions.data, input.indices.data, input.indices.length, pipeline.tri_area_ids.data,
-                                                         options.walkable_slope_angle_degrees);
+            input_triangle_mesh::mark_walkable_triangles(pipeline.tri_area_ids, {input.positions, input.indices}, options.walkable_slope_angle_degrees);
             break;
         case STAGE_RASTERIZE: {
-            Box3 bounds = input_triangle_mesh::calculate_mesh_bounds(input.positions.data, input.indices.data, input.indices.length);
+            Box3 bounds = input_triangle_mesh::calculate_mesh_bounds({input.positions, input.indices});
             GridSize grid = heightfield::calculate_grid_size(bounds, options.cell_size);
             pipeline.heightfield = heightfield::create(grid.width, grid.height, bounds, options.cell_size, options.cell_height);
-            heightfield::rasterize_triangles(pipeline.context, pipeline.heightfield, input.positions.data, input.indices.data, input.indices.length,
-                                             pipeline.tri_area_ids.data, options.walkable_climb_voxels);
+            heightfield::rasterize_triangles(pipeline.context, pipeline.heightfield, {input.positions, input.indices}, pipeline.tri_area_ids, options.walkable_climb_voxels);
             break;
         }
         case STAGE_FILTER:
@@ -230,14 +228,14 @@ static void finish_stage() { release(state.pipeline); }
 
 static void run_solo() {
     SoloNavMeshResult result =
-        generate_solo_nav_mesh::generate_solo_nav_mesh({state.input.positions.data, state.input.indices.data, state.input.indices.length}, state.options);
+        generate_solo_nav_mesh::generate_solo_nav_mesh({state.input.positions, state.input.indices}, state.options);
     generate_solo_nav_mesh::release(result.intermediates);
     nav_mesh_api::release(result.nav_mesh);
 }
 
 static void run_tiled() {
     TiledNavMeshResult result =
-        generate_tiled_nav_mesh::generate_tiled_nav_mesh({state.input.positions.data, state.input.indices.data, state.input.indices.length}, tiled_options());
+        generate_tiled_nav_mesh::generate_tiled_nav_mesh({state.input.positions, state.input.indices}, tiled_options());
     generate_tiled_nav_mesh::release(result.intermediates);
     nav_mesh_api::release(result.nav_mesh);
 }
@@ -468,7 +466,7 @@ static void finish_crowd() { crowd::release(state.crowd); }
 
 static void build_query_points() {
     SoloNavMeshResult result =
-        generate_solo_nav_mesh::generate_solo_nav_mesh({state.input.positions.data, state.input.indices.data, state.input.indices.length}, state.options);
+        generate_solo_nav_mesh::generate_solo_nav_mesh({state.input.positions, state.input.indices}, state.options);
     generate_solo_nav_mesh::release(result.intermediates);
     state.nav_mesh = result.nav_mesh;
 
@@ -517,7 +515,7 @@ int main(int argc, char **argv) {
     build_node_paths();
     {
         TiledNavMeshResult tiled = generate_tiled_nav_mesh::generate_tiled_nav_mesh(
-            {state.input.positions.data, state.input.indices.data, state.input.indices.length}, tiled_options());
+            {state.input.positions, state.input.indices}, tiled_options());
         generate_tiled_nav_mesh::release(tiled.intermediates);
         state.tiled_nav_mesh = tiled.nav_mesh;
     }

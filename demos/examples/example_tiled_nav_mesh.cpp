@@ -103,7 +103,7 @@ static void generate(App &app) {
     const Model &level = app.level;
     double start = app::now_milliseconds();
     tiled.result = generate_tiled_nav_mesh::generate_tiled_nav_mesh(
-        {level.walkable_positions.data, level.walkable_indices.data, level.walkable_indices.length}, nav_mesh_config::tiled_options(tiled.config));
+        {level.walkable_positions, level.walkable_indices}, nav_mesh_config::tiled_options(tiled.config));
     tiled.generation_milliseconds = app::now_milliseconds() - start;
     tiled.generated = true;
 

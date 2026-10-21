@@ -14,7 +14,7 @@ using namespace roam;
 
 namespace model {
 
-static void append_primitive(Model &model, Array<MeshView> &views, Array<Array<float>> &owned_positions, Array<Array<uint32_t>> &owned_indices,
+static void append_primitive(Model &model, Array<InputTriangleMesh> &views, Array<Array<float>> &owned_positions, Array<Array<uint32_t>> &owned_indices,
                              const cgltf_primitive &primitive, const float *world, bool walkable) {
     if (primitive.type != cgltf_primitive_type_triangles) return;
 
@@ -66,7 +66,7 @@ static void append_primitive(Model &model, Array<MeshView> &views, Array<Array<f
 
     owned_positions.push(world_positions);
     owned_indices.push(indices);
-    if (walkable) views.push({world_positions.data, indices.data, index_count});
+    if (walkable) views.push({world_positions, {indices.data, index_count}});
 }
 
 static bool is_unwalkable(const cgltf_extras &extras) {
@@ -78,7 +78,7 @@ static bool is_unwalkable(const cgltf_extras &extras) {
     return strncmp(value, "false", 5) == 0;
 }
 
-static void append_node(Model &model, Array<MeshView> &views, Array<Array<float>> &owned_positions, Array<Array<uint32_t>> &owned_indices,
+static void append_node(Model &model, Array<InputTriangleMesh> &views, Array<Array<float>> &owned_positions, Array<Array<uint32_t>> &owned_indices,
                         const cgltf_node &node, const ModelLoadOptions &options, bool included, int32_t parent) {
     included = included || !options.node_name || (node.name && strcmp(node.name, options.node_name) == 0);
 
@@ -108,7 +108,7 @@ static Model build(cgltf_data *data, const ModelLoadOptions &options) {
     Model model = {};
     model.bounds = box3::empty();
 
-    Array<MeshView> views = {};
+    Array<InputTriangleMesh> views = {};
     Array<Array<float>> owned_positions = {};
     Array<Array<uint32_t>> owned_indices = {};
 
@@ -117,7 +117,7 @@ static Model build(cgltf_data *data, const ModelLoadOptions &options) {
         for (cgltf_size i = 0; i < scene->nodes_count; i++) append_node(model, views, owned_positions, owned_indices, *scene->nodes[i], options, false, -1);
     }
 
-    MergedMesh merged = merge_positions_and_indices::merge_positions_and_indices(views.data, views.length);
+    MergedMesh merged = merge_positions_and_indices::merge_positions_and_indices(views);
     model.walkable_positions = merged.positions;
     model.walkable_indices = merged.indices;
     model.loaded = model.indices.length > 0;

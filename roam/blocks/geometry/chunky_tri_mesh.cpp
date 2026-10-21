@@ -108,7 +108,10 @@ static void subdivide(Array<BoundsItem> &items, uint32_t min, uint32_t max, uint
     mesh.nodes[node_index].index = -(int32_t)(mesh.nodes.length - node_index);
 }
 
-ChunkyTriMesh create(const float *vertices, const uint32_t *indices, uint32_t index_count, uint32_t tris_per_chunk) {
+ChunkyTriMesh create(const InputTriangleMesh &input, uint32_t tris_per_chunk) {
+    const float *vertices = input.positions.data;
+    const uint32_t *indices = input.indices.data;
+    uint32_t index_count = input.indices.capacity;
     ChunkyTriMesh mesh = {};
     uint32_t triangle_count = index_count / 3;
     if (triangle_count == 0) return mesh;

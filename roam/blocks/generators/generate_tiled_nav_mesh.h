@@ -9,17 +9,12 @@
 #include "roam/generate/heightfield.h"
 #include "roam/generate/poly_mesh.h"
 #include "roam/generate/poly_mesh_detail.h"
+#include "roam/generate/input_triangle_mesh.h"
 #include "roam/math/box3.h"
 #include "roam/query/nav_mesh.h"
 #include "roam/util/array.h"
 
 namespace roam {
-
-struct TiledNavMeshInput {
-    const float *positions;
-    const uint32_t *indices;
-    uint32_t index_count;
-};
 
 struct TiledNavMeshOptions {
     float cell_size;
@@ -45,7 +40,7 @@ struct TiledNavMeshOptions {
 
 struct TiledNavMeshIntermediates {
     BuildContext build_context;
-    TiledNavMeshInput input;
+    InputTriangleMesh input;
     Box3 input_bounds;
     ChunkyTriMesh chunky_tri_mesh;
     Array<Array<uint8_t>> tri_area_ids;
@@ -63,7 +58,7 @@ struct TiledNavMeshResult {
 
 namespace generate_tiled_nav_mesh {
 
-TiledNavMeshResult generate_tiled_nav_mesh(const TiledNavMeshInput &input, const TiledNavMeshOptions &options);
+TiledNavMeshResult generate_tiled_nav_mesh(const InputTriangleMesh &input, const TiledNavMeshOptions &options);
 
 void release(TiledNavMeshIntermediates &intermediates);
 

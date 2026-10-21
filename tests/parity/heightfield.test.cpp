@@ -67,14 +67,13 @@ TEST(heightfield_matches_navcat_on_nav_test) {
 
     Array<uint8_t> tri_area_ids = {};
     tri_area_ids.resize(input.indices.length / 3, NULL_AREA);
-    input_triangle_mesh::mark_walkable_triangles(input.positions.data, input.indices.data, input.indices.length, tri_area_ids.data,
-                                                 walkable_slope_angle);
+    input_triangle_mesh::mark_walkable_triangles(tri_area_ids, {input.positions, input.indices}, walkable_slope_angle);
 
     Array<int32_t> tri_area_ids_wide = {};
     for (uint8_t area : tri_area_ids) tri_area_ids_wide.push(area);
     CHECK_I32_ARRAY("tri_area_ids", tri_area_ids_wide.data, tri_area_ids_wide.length, fixture::i32(nav_test, "tri_area_ids"));
 
-    Box3 bounds = input_triangle_mesh::calculate_mesh_bounds(input.positions.data, input.indices.data, input.indices.length);
+    Box3 bounds = input_triangle_mesh::calculate_mesh_bounds({input.positions, input.indices});
     float bounds_values[6] = {bounds.min.x, bounds.min.y, bounds.min.z, bounds.max.x, bounds.max.y, bounds.max.z};
     CHECK_F64_ARRAY("mesh_bounds", bounds_values, 6, fixture::f64(nav_test, "mesh_bounds"), 1e-5);
 
@@ -85,8 +84,7 @@ TEST(heightfield_matches_navcat_on_nav_test) {
     BuildContext context = {};
     Heightfield heightfield = heightfield::create(grid_size.width, grid_size.height, bounds, cell_size, cell_height);
 
-    heightfield::rasterize_triangles(context, heightfield, input.positions.data, input.indices.data, input.indices.length, tri_area_ids.data,
-                                     walkable_climb);
+    heightfield::rasterize_triangles(context, heightfield, {input.positions, input.indices}, tri_area_ids, walkable_climb);
     check_heightfield_stage(nav_test, "rasterized", heightfield);
 
     heightfield::filter_low_hanging_walkable_obstacles(heightfield, walkable_climb);

@@ -187,12 +187,12 @@ TEST(merge_positions_and_indices_matches_navcat_on_nav_test) {
     REQUIRE(test.expected.loaded);
 
     uint32_t split = (uint32_t)fixture::i32(test.expected, "merge.split").data[0];
-    const MeshView meshes[] = {
-        {test.input.positions.data, test.input.indices.data, split},
-        {test.input.positions.data, test.input.indices.data + split, test.input.indices.length - split},
-        {test.input.positions.data, test.input.indices.data, 30},
+    const InputTriangleMesh meshes[] = {
+        {test.input.positions, {test.input.indices.data, split}},
+        {test.input.positions, {test.input.indices.data + split, test.input.indices.length - split}},
+        {test.input.positions, {test.input.indices.data, 30}},
     };
-    MergedMesh merged = merge_positions_and_indices::merge_positions_and_indices(meshes, 3);
+    MergedMesh merged = merge_positions_and_indices::merge_positions_and_indices(meshes);
 
     CHECK_F64_ARRAY("merge.positions", merged.positions.data, merged.positions.length, fixture::f64(test.expected, "merge.positions"), 0);
     Array<int32_t> indices = to_i32(merged.indices.data, merged.indices.length);
@@ -208,7 +208,7 @@ TEST(chunky_tri_mesh_matches_navcat_on_nav_test) {
     REQUIRE(test.expected.loaded);
     const fixture::Fixture &expected = test.expected;
 
-    ChunkyTriMesh mesh = chunky_tri_mesh::create(test.input.positions.data, test.input.indices.data, test.input.indices.length, 64);
+    ChunkyTriMesh mesh = chunky_tri_mesh::create({test.input.positions, test.input.indices}, 64);
 
     Array<float> bounds = {};
     Array<int32_t> index = {};
@@ -278,7 +278,7 @@ TEST(generate_solo_nav_mesh_matches_navcat_on_nav_test) {
     REQUIRE(test.expected.loaded);
 
     SoloNavMeshResult result = generate_solo_nav_mesh::generate_solo_nav_mesh(
-        {test.input.positions.data, test.input.indices.data, test.input.indices.length}, solo_options(test));
+        {test.input.positions, test.input.indices}, solo_options(test));
     check_tiles("solo", result.nav_mesh, test.expected);
 
     generate_solo_nav_mesh::release(result.intermediates);
@@ -311,7 +311,7 @@ static TiledNavMeshResult generate_tiled(const BlocksTest &test) {
         .detail_sample_max_error = solo.detail_sample_max_error,
     };
 
-    return generate_tiled_nav_mesh::generate_tiled_nav_mesh({test.input.positions.data, test.input.indices.data, test.input.indices.length}, options);
+    return generate_tiled_nav_mesh::generate_tiled_nav_mesh({test.input.positions, test.input.indices}, options);
 }
 
 struct LinkKey {
@@ -634,7 +634,7 @@ TEST(crowd_matches_navcat_on_a_flat_scene) {
         .detail_sample_distance = 1.2f,
         .detail_sample_max_error = 0.2f,
     };
-    TiledNavMeshResult tiled = generate_tiled_nav_mesh::generate_tiled_nav_mesh({positions.data, indices.data, indices.length}, options);
+    TiledNavMeshResult tiled = generate_tiled_nav_mesh::generate_tiled_nav_mesh({positions, indices}, options);
 
     uint32_t agent_count = (uint32_t)fixture::i32(expected, "flat.agent_count").data[0];
     Crowd crowd = crowd::create(0.6f);

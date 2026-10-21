@@ -71,7 +71,7 @@ static void generate_nav_mesh(const Model &level) {
         .detail_sample_max_error = 1,
     };
     state.result = generate_solo_nav_mesh::generate_solo_nav_mesh(
-        {level.walkable_positions.data, level.walkable_indices.data, level.walkable_indices.length}, options);
+        {level.walkable_positions, level.walkable_indices}, options);
     state.generated = true;
 
     DebugPrimitives helper = debug::create_nav_mesh_helper(state.result.nav_mesh);
