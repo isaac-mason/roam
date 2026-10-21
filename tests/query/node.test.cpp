@@ -41,6 +41,10 @@ TEST_CASE("node ref type bit is isolated") {
     CHECK(node::get_node_ref_type(offmesh) == NODE_TYPE_OFFMESH);
 }
 
+TEST_CASE("node ref 32 bit boundary operations") { check_roundtrip(NODE_TYPE_POLY, 0x7fffffff, 0xfffff); }
+
+TEST_CASE("node ref invalid equals minus one") { CHECK((int64_t)INVALID_NODE_REF == -1); }
+
 TEST_CASE("node ref invalid is distinct from valid refs") {
     CHECK(node::ser_node_ref(NODE_TYPE_POLY, 0, 0) != INVALID_NODE_REF);
     CHECK(node::ser_node_ref(NODE_TYPE_POLY, 1, 1) != INVALID_NODE_REF);

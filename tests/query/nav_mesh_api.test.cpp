@@ -79,6 +79,29 @@ TEST_CASE("get tile ids at returns empty for missing position") {
     nav_mesh_api::release(nav_mesh);
 }
 
+TEST_CASE("get tile ids at returns single tile when only one layer exists") {
+    NavMesh nav_mesh = nav_mesh_api::create_nav_mesh();
+    nav_mesh_api::add_tile(nav_mesh, mock_tile(0, 0, 0));
+
+    Span<const uint32_t> tile_ids = nav_mesh_api::get_tile_ids_at(nav_mesh, 0, 0);
+    REQUIRE(tile_ids.capacity == 1);
+    CHECK(nav_mesh.tiles[tile_ids[0]].tile_layer == 0);
+
+    nav_mesh_api::release(nav_mesh);
+}
+
+TEST_CASE("get tile ids at does not return tiles from different x y positions") {
+    NavMesh nav_mesh = nav_mesh_api::create_nav_mesh();
+    nav_mesh_api::add_tile(nav_mesh, mock_tile(0, 0, 0));
+    nav_mesh_api::add_tile(nav_mesh, mock_tile(1, 0, 0));
+
+    Span<const uint32_t> tile_ids = nav_mesh_api::get_tile_ids_at(nav_mesh, 0, 0);
+    REQUIRE(tile_ids.capacity == 1);
+    CHECK(nav_mesh.tiles[tile_ids[0]].tile_x == 0);
+
+    nav_mesh_api::release(nav_mesh);
+}
+
 TEST_CASE("get tile ids at handles negative coordinates and ignores other columns") {
     NavMesh nav_mesh = nav_mesh_api::create_nav_mesh();
     nav_mesh_api::add_tile(nav_mesh, mock_tile(-10, -5, 0));
