@@ -108,3 +108,13 @@ Both are verified bit-identical beyond the parity tests: a hash of every contour
 | nav-test | 3.36 | 3.40 | 5.37 |
 
 Tiled builds are now about 2-2.7x the solo build on the big levels and are the next thing to look at.
+
+**Tiled: chunky tri mesh sort.** On game-level, building the chunky tri mesh was 23% of the tiled build: every subdivision level stable-sorted its whole range of 24-byte items with merge sort (O(n log^2 n) overall, with a lot of copying). The comparator is a float `<` on one coordinate, so `sort_by_min` uses a stable 4-pass LSD radix sort on order-preserving integer keys (with `-0` mapped to `+0`, since `<` treats them as equal) over compact (key, index) pairs, then permutes the items once. Verified identical by hashing chunky meshes (64 and 256 triangles per chunk) on all three levels.
+
+| level | tiled before | tiled after |
+|---|---:|---:|
+| game-level | 91.3 | 68.0 |
+| lowpoly FPS map | 93.1 | 81.1 |
+| nav-test | 5.37 | 5.31 |
+
+What's left in tiled builds is mostly rasterization (about 45% on game-level): large triangles are clipped once per tile they overlap, plus the tile border. That's inherent to tiling, and per-tile work is what callers can spread across threads.

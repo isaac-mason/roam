@@ -1,9 +1,9 @@
 #include "roam/blocks/geometry/chunky_tri_mesh.h"
 
 #include <math.h>
+#include <string.h>
 
 #include "roam/math/scalar.h"
-#include "roam/util/sort.h"
 
 namespace roam {
 
@@ -38,8 +38,46 @@ static void calculate_extents(const Array<BoundsItem> &items, uint32_t min, uint
     }
 }
 
+struct SortKey {
+    uint32_t key;
+    uint32_t item;
+};
+
+struct SortScratch {
+    Array<BoundsItem> items;
+    Array<SortKey> keys;
+    Array<SortKey> swap;
+};
+
+static uint32_t sortable_key(float value) {
+    if (value == 0.0f) value = 0.0f;
+    uint32_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return (bits & 0x80000000u) ? ~bits : bits | 0x80000000u;
+}
+
+static void sort_by_min(BoundsItem *items, uint32_t count, bool split_on_y, SortScratch &scratch) {
+    SortKey *keys = scratch.keys.data;
+    SortKey *swap = scratch.swap.data;
+    for (uint32_t i = 0; i < count; i++) keys[i] = {sortable_key(split_on_y ? items[i].min.y : items[i].min.x), i};
+
+    for (uint32_t shift = 0; shift < 32; shift += 8) {
+        uint32_t counts[257] = {};
+        for (uint32_t i = 0; i < count; i++) counts[((keys[i].key >> shift) & 0xff) + 1]++;
+        for (uint32_t digit = 0; digit < 256; digit++) counts[digit + 1] += counts[digit];
+        for (uint32_t i = 0; i < count; i++) swap[counts[(keys[i].key >> shift) & 0xff]++] = keys[i];
+        SortKey *sorted = swap;
+        swap = keys;
+        keys = sorted;
+    }
+
+    BoundsItem *ordered = scratch.items.data;
+    for (uint32_t i = 0; i < count; i++) ordered[i] = items[keys[i].item];
+    memcpy(items, ordered, count * sizeof(BoundsItem));
+}
+
 static void subdivide(Array<BoundsItem> &items, uint32_t min, uint32_t max, uint32_t tris_per_chunk, ChunkyTriMesh &mesh,
-                      const uint32_t *indices, BoundsItem *scratch) {
+                      const uint32_t *indices, SortScratch &scratch) {
     uint32_t node_index = mesh.nodes.length;
     uint32_t count = max - min;
 
@@ -61,9 +99,7 @@ static void subdivide(Array<BoundsItem> &items, uint32_t min, uint32_t max, uint
     }
 
     bool split_on_y = node.max.y - node.min.y > node.max.x - node.min.x;
-    sort::stable_with_scratch(&items[min], count, scratch, [split_on_y](const BoundsItem &a, const BoundsItem &b) {
-        return split_on_y ? a.min.y < b.min.y : a.min.x < b.min.x;
-    });
+    sort_by_min(&items[min], count, split_on_y, scratch);
 
     uint32_t split = min + count / 2;
     subdivide(items, min, split, tris_per_chunk, mesh, indices, scratch);
@@ -81,10 +117,14 @@ ChunkyTriMesh create(const float *vertices, const uint32_t *indices, uint32_t in
     items.reserve(triangle_count);
     for (uint32_t i = 0; i < triangle_count; i++) items.push(calculate_triangle_bounds(vertices, indices, i));
 
-    Array<BoundsItem> scratch = {};
-    scratch.resize(triangle_count);
-    subdivide(items, 0, triangle_count, tris_per_chunk, mesh, indices, scratch.data);
-    scratch.release();
+    SortScratch scratch = {};
+    scratch.items.resize(triangle_count);
+    scratch.keys.resize(triangle_count);
+    scratch.swap.resize(triangle_count);
+    subdivide(items, 0, triangle_count, tris_per_chunk, mesh, indices, scratch);
+    scratch.items.release();
+    scratch.keys.release();
+    scratch.swap.release();
     items.release();
 
     for (const ChunkyTriMeshNode &node : mesh.nodes) {
