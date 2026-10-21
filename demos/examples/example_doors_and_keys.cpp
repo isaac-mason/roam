@@ -94,14 +94,14 @@ static SoloNavMeshResult generate_nav_mesh(const SoloNavMeshInput &input, const 
     heightfield::filter_ledge_spans(solid, options.walkable_height_voxels, options.walkable_climb_voxels);
     heightfield::filter_walkable_low_height_spans(solid, options.walkable_height_voxels);
 
-    intermediates.compact_heightfield = compact_heightfield::build(context, options.walkable_height_voxels, options.walkable_climb_voxels, solid);
+    intermediates.compact_heightfield = compact_heightfield::build(context, solid, options.walkable_height_voxels, options.walkable_climb_voxels);
     CompactHeightfield &compact = intermediates.compact_heightfield;
 
     for (int i = 0; i < door_count; i++) {
-        compact_heightfield::mark_box_area(doors[i].box, (uint8_t)(DOORS_AREA_START + doors[i].door_id), compact);
+        compact_heightfield::mark_box_area(compact, doors[i].box, (uint8_t)(DOORS_AREA_START + doors[i].door_id));
     }
 
-    compact_heightfield::erode_walkable_area(options.walkable_radius_voxels, compact);
+    compact_heightfield::erode_walkable_area(compact, options.walkable_radius_voxels);
     compact_heightfield_regions::build_distance_field(compact);
     compact_heightfield_regions::build_regions(context, compact, options.border_size, options.min_region_area, options.merge_region_area);
 

@@ -58,8 +58,8 @@ inline void release(NavTest &nav_test) {
 inline roam::CompactHeightfield build_eroded_with_distances(NavTest &nav_test) {
     using namespace roam;
     CompactHeightfield compact_heightfield =
-        compact_heightfield::build(nav_test.context, nav_test.options.walkable_height, nav_test.options.walkable_climb, nav_test.heightfield);
-    compact_heightfield::erode_walkable_area(nav_test.options.walkable_radius, compact_heightfield);
+        compact_heightfield::build(nav_test.context, nav_test.heightfield, nav_test.options.walkable_height, nav_test.options.walkable_climb);
+    compact_heightfield::erode_walkable_area(compact_heightfield, nav_test.options.walkable_radius);
     compact_heightfield_regions::build_distance_field(compact_heightfield);
     return compact_heightfield;
 }

@@ -185,9 +185,9 @@ static void advance(Pipeline &pipeline, int stage) {
             break;
         case STAGE_COMPACT:
             pipeline.compact_heightfield =
-                compact_heightfield::build(pipeline.context, options.walkable_height_voxels, options.walkable_climb_voxels, pipeline.heightfield);
+                compact_heightfield::build(pipeline.context, pipeline.heightfield, options.walkable_height_voxels, options.walkable_climb_voxels);
             break;
-        case STAGE_ERODE: compact_heightfield::erode_walkable_area(options.walkable_radius_voxels, pipeline.compact_heightfield); break;
+        case STAGE_ERODE: compact_heightfield::erode_walkable_area(pipeline.compact_heightfield, options.walkable_radius_voxels); break;
         case STAGE_DISTANCE_FIELD: compact_heightfield_regions::build_distance_field(pipeline.compact_heightfield); break;
         case STAGE_REGIONS:
             compact_heightfield_regions::build_regions(pipeline.context, pipeline.compact_heightfield, options.border_size, options.min_region_area,

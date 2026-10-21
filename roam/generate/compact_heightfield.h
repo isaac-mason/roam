@@ -56,18 +56,18 @@ inline void set_con(CompactHeightfieldSpan &span, int direction, int layer_index
 
 inline int get_con(const CompactHeightfieldSpan &span, int direction) { return (int)((span.con >> ((uint32_t)direction * 6)) & 0x3f); }
 
-CompactHeightfield build(BuildContext &context, int walkable_height_voxels, int walkable_climb_voxels, const Heightfield &heightfield);
+CompactHeightfield build(BuildContext &context, const Heightfield &heightfield, int walkable_height_voxels, int walkable_climb_voxels);
 void release(CompactHeightfield &compact_heightfield);
 
-void erode_walkable_area(int walkable_radius_voxels, CompactHeightfield &compact_heightfield);
-void erode_and_mark_walkable_areas(int base_walkable_radius_voxels, const WalkableAreaThreshold *thresholds, uint32_t threshold_count,
-                                   CompactHeightfield &compact_heightfield);
+void erode_walkable_area(CompactHeightfield &compact_heightfield, int walkable_radius_voxels);
+void erode_and_mark_walkable_areas(CompactHeightfield &compact_heightfield, int base_walkable_radius_voxels, const WalkableAreaThreshold *thresholds,
+                                   uint32_t threshold_count);
 
-void mark_box_area(Box3 bounds, uint8_t area_id, CompactHeightfield &compact_heightfield);
-void mark_rotated_box_area(Vec3 center, Vec3 half_extents, float angle_radians, uint8_t area_id, CompactHeightfield &compact_heightfield);
-void mark_convex_poly_area(const float *vertices, uint32_t vertex_count, float min_y, float max_y, uint8_t area_id,
-                           CompactHeightfield &compact_heightfield);
-void mark_cylinder_area(Vec3 position, float radius, float height, uint8_t area_id, CompactHeightfield &compact_heightfield);
+void mark_box_area(CompactHeightfield &compact_heightfield, Box3 bounds, uint8_t area_id);
+void mark_rotated_box_area(CompactHeightfield &compact_heightfield, Vec3 center, Vec3 half_extents, float angle_radians, uint8_t area_id);
+void mark_convex_poly_area(CompactHeightfield &compact_heightfield, const float *vertices, uint32_t vertex_count, float min_y, float max_y,
+                           uint8_t area_id);
+void mark_cylinder_area(CompactHeightfield &compact_heightfield, Vec3 position, float radius, float height, uint8_t area_id);
 
 bool median_filter_walkable_area(CompactHeightfield &compact_heightfield);
 

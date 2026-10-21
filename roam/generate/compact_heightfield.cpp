@@ -21,7 +21,7 @@ static uint32_t get_heightfield_span_count(const Heightfield &heightfield) {
     return span_count;
 }
 
-CompactHeightfield build(BuildContext &context, int walkable_height_voxels, int walkable_climb_voxels, const Heightfield &heightfield) {
+CompactHeightfield build(BuildContext &context, const Heightfield &heightfield, int walkable_height_voxels, int walkable_climb_voxels) {
     int x_size = heightfield.width;
     int z_size = heightfield.height;
     uint32_t span_count = get_heightfield_span_count(heightfield);
@@ -210,7 +210,7 @@ static Array<uint8_t> compute_distance_to_boundary(const CompactHeightfield &com
     return distance_to_boundary;
 }
 
-void erode_walkable_area(int walkable_radius_voxels, CompactHeightfield &compact_heightfield) {
+void erode_walkable_area(CompactHeightfield &compact_heightfield, int walkable_radius_voxels) {
     Array<uint8_t> distance_to_boundary = compute_distance_to_boundary(compact_heightfield);
 
     int min_boundary_distance = walkable_radius_voxels * 2;
@@ -221,8 +221,8 @@ void erode_walkable_area(int walkable_radius_voxels, CompactHeightfield &compact
     distance_to_boundary.release();
 }
 
-void erode_and_mark_walkable_areas(int base_walkable_radius_voxels, const WalkableAreaThreshold *thresholds, uint32_t threshold_count,
-                                   CompactHeightfield &compact_heightfield) {
+void erode_and_mark_walkable_areas(CompactHeightfield &compact_heightfield, int base_walkable_radius_voxels, const WalkableAreaThreshold *thresholds,
+                                   uint32_t threshold_count) {
     Array<uint8_t> distance_to_boundary = compute_distance_to_boundary(compact_heightfield);
 
     Array<WalkableAreaThreshold> sorted_thresholds = {};
@@ -298,7 +298,7 @@ static void mark_column(CompactHeightfield &compact_heightfield, int x, int z, i
     }
 }
 
-void mark_box_area(Box3 bounds, uint8_t area_id, CompactHeightfield &compact_heightfield) {
+void mark_box_area(CompactHeightfield &compact_heightfield, Box3 bounds, uint8_t area_id) {
     GridFootprint footprint = grid_footprint(compact_heightfield, bounds.min, bounds.max);
     if (!footprint.inside) return;
 
@@ -307,7 +307,7 @@ void mark_box_area(Box3 bounds, uint8_t area_id, CompactHeightfield &compact_hei
     }
 }
 
-void mark_rotated_box_area(Vec3 center, Vec3 half_extents, float angle_radians, uint8_t area_id, CompactHeightfield &compact_heightfield) {
+void mark_rotated_box_area(CompactHeightfield &compact_heightfield, Vec3 center, Vec3 half_extents, float angle_radians, uint8_t area_id) {
     float cos_angle = cosf(angle_radians);
     float sin_angle = sinf(angle_radians);
 
@@ -345,8 +345,8 @@ void mark_rotated_box_area(Vec3 center, Vec3 half_extents, float angle_radians, 
     }
 }
 
-void mark_convex_poly_area(const float *vertices, uint32_t vertex_count, float min_y, float max_y, uint8_t area_id,
-                           CompactHeightfield &compact_heightfield) {
+void mark_convex_poly_area(CompactHeightfield &compact_heightfield, const float *vertices, uint32_t vertex_count, float min_y, float max_y,
+                           uint8_t area_id) {
     Vec3 min = {vertices[0], min_y, vertices[2]};
     Vec3 max = {vertices[0], max_y, vertices[2]};
     for (uint32_t i = 1; i < vertex_count; ++i) {
@@ -376,7 +376,7 @@ void mark_convex_poly_area(const float *vertices, uint32_t vertex_count, float m
     }
 }
 
-void mark_cylinder_area(Vec3 position, float radius, float height, uint8_t area_id, CompactHeightfield &compact_heightfield) {
+void mark_cylinder_area(CompactHeightfield &compact_heightfield, Vec3 position, float radius, float height, uint8_t area_id) {
     Vec3 min = {position.x - radius, position.y, position.z - radius};
     Vec3 max = {position.x + radius, position.y + height, position.z + radius};
 

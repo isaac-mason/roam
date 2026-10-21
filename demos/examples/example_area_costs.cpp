@@ -130,14 +130,14 @@ static NavMesh generate_flat_nav_mesh(const float *positions, const uint32_t *in
     heightfield::filter_ledge_spans(solid, walkable_height_voxels, walkable_climb_voxels);
     heightfield::filter_walkable_low_height_spans(solid, walkable_height_voxels);
 
-    CompactHeightfield compact = compact_heightfield::build(context, walkable_height_voxels, walkable_climb_voxels, solid);
+    CompactHeightfield compact = compact_heightfield::build(context, solid, walkable_height_voxels, walkable_climb_voxels);
 
-    compact_heightfield::mark_box_area(RED_ZONE_BOUNDS, AREA_COSTS_RED, compact);
-    compact_heightfield::mark_box_area(GREEN_ENTRY_BOUNDS, AREA_COSTS_GREEN, compact);
-    compact_heightfield::mark_box_area(GREEN_LANE_BOUNDS, AREA_COSTS_GREEN, compact);
-    compact_heightfield::mark_box_area(GREEN_EXIT_BOUNDS, AREA_COSTS_GREEN, compact);
+    compact_heightfield::mark_box_area(compact, RED_ZONE_BOUNDS, AREA_COSTS_RED);
+    compact_heightfield::mark_box_area(compact, GREEN_ENTRY_BOUNDS, AREA_COSTS_GREEN);
+    compact_heightfield::mark_box_area(compact, GREEN_LANE_BOUNDS, AREA_COSTS_GREEN);
+    compact_heightfield::mark_box_area(compact, GREEN_EXIT_BOUNDS, AREA_COSTS_GREEN);
 
-    compact_heightfield::erode_walkable_area(walkable_radius_voxels, compact);
+    compact_heightfield::erode_walkable_area(compact, walkable_radius_voxels);
 
     compact_heightfield_regions::build_distance_field(compact);
     compact_heightfield_regions::build_regions(context, compact, border_size, min_region_area, merge_region_area);

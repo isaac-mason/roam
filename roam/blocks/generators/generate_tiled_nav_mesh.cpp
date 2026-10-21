@@ -59,10 +59,10 @@ static NavMeshTileBuild build_nav_mesh_tile(BuildContext &context, const float *
     heightfield::filter_ledge_spans(solid, options.walkable_height_voxels, options.walkable_climb_voxels);
     heightfield::filter_walkable_low_height_spans(solid, options.walkable_height_voxels);
 
-    build.compact_heightfield = compact_heightfield::build(context, options.walkable_height_voxels, options.walkable_climb_voxels, solid);
+    build.compact_heightfield = compact_heightfield::build(context, solid, options.walkable_height_voxels, options.walkable_climb_voxels);
     CompactHeightfield &compact = build.compact_heightfield;
 
-    compact_heightfield::erode_walkable_area(options.walkable_radius_voxels, compact);
+    compact_heightfield::erode_walkable_area(compact, options.walkable_radius_voxels);
     compact_heightfield_regions::build_distance_field(compact);
     compact_heightfield_regions::build_regions(context, compact, options.border_size, options.min_region_area, options.merge_region_area);
 

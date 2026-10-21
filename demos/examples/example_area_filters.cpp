@@ -116,12 +116,12 @@ static AreaFiltersNavMesh generate_nav_mesh(const float *positions, const uint32
     heightfield::filter_ledge_spans(solid, walkable_height_voxels, walkable_climb_voxels);
     heightfield::filter_walkable_low_height_spans(solid, walkable_height_voxels);
 
-    result.compact_heightfield = compact_heightfield::build(context, walkable_height_voxels, walkable_climb_voxels, solid);
+    result.compact_heightfield = compact_heightfield::build(context, solid, walkable_height_voxels, walkable_climb_voxels);
     CompactHeightfield &compact = result.compact_heightfield;
 
-    compact_heightfield::mark_box_area(WATER_BOUNDS, AREA_FILTERS_WATER, compact);
+    compact_heightfield::mark_box_area(compact, WATER_BOUNDS, AREA_FILTERS_WATER);
 
-    compact_heightfield::erode_walkable_area(walkable_radius_voxels, compact);
+    compact_heightfield::erode_walkable_area(compact, walkable_radius_voxels);
 
     compact_heightfield_regions::build_distance_field(compact);
     compact_heightfield_regions::build_regions(context, compact, border_size, min_region_area, merge_region_area);

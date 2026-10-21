@@ -19,7 +19,7 @@ TEST(compact_heightfield_matches_navcat_on_nav_test) {
     const fixture::Fixture &expected = nav_test.fixture;
 
     CompactHeightfield compact_heightfield =
-        compact_heightfield::build(nav_test.context, nav_test.options.walkable_height, nav_test.options.walkable_climb, nav_test.heightfield);
+        compact_heightfield::build(nav_test.context, nav_test.heightfield, nav_test.options.walkable_height, nav_test.options.walkable_climb);
     CHECK(compact_heightfield.span_count > 1000);
 
     int32_t span_count = (int32_t)compact_heightfield.span_count;
@@ -39,7 +39,7 @@ TEST(compact_heightfield_matches_navcat_on_nav_test) {
                    expected);
     CHECK_EXPECTED("compact_heightfield.built.areas", widen(compact_heightfield.areas, [](uint8_t area) { return area; }), expected);
 
-    compact_heightfield::erode_walkable_area(nav_test.options.walkable_radius, compact_heightfield);
+    compact_heightfield::erode_walkable_area(compact_heightfield, nav_test.options.walkable_radius);
     CHECK_EXPECTED("compact_heightfield.eroded.areas", widen(compact_heightfield.areas, [](uint8_t area) { return area; }), expected);
 
     compact_heightfield_regions::build_distance_field(compact_heightfield);

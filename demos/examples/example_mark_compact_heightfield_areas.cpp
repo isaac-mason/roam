@@ -75,16 +75,16 @@ static SoloNavMeshResult generate_nav_mesh(const SoloNavMeshInput &input, const 
     heightfield::filter_ledge_spans(solid, options.walkable_height_voxels, options.walkable_climb_voxels);
     heightfield::filter_walkable_low_height_spans(solid, options.walkable_height_voxels);
 
-    intermediates.compact_heightfield = compact_heightfield::build(context, options.walkable_height_voxels, options.walkable_climb_voxels, solid);
+    intermediates.compact_heightfield = compact_heightfield::build(context, solid, options.walkable_height_voxels, options.walkable_climb_voxels);
     CompactHeightfield &compact = intermediates.compact_heightfield;
 
-    compact_heightfield::mark_box_area(WATER_BOX, NAV_MESH_AREA_TYPE_B, compact);
-    compact_heightfield::mark_cylinder_area(GRASS_CYLINDER_CENTER, GRASS_CYLINDER_RADIUS, GRASS_CYLINDER_HEIGHT, NAV_MESH_AREA_TYPE_C, compact);
-    compact_heightfield::mark_convex_poly_area(ROAD_VERTS, sizeof(ROAD_VERTS) / sizeof(ROAD_VERTS[0]) / 3, ROAD_MIN_Y, ROAD_MAX_Y,
-                                               NAV_MESH_AREA_TYPE_D, compact);
-    compact_heightfield::mark_rotated_box_area(ICE_RINK_CENTER, ICE_RINK_HALF_EXTENTS, ICE_RINK_ROTATION, NAV_MESH_AREA_TYPE_E, compact);
+    compact_heightfield::mark_box_area(compact, WATER_BOX, NAV_MESH_AREA_TYPE_B);
+    compact_heightfield::mark_cylinder_area(compact, GRASS_CYLINDER_CENTER, GRASS_CYLINDER_RADIUS, GRASS_CYLINDER_HEIGHT, NAV_MESH_AREA_TYPE_C);
+    compact_heightfield::mark_convex_poly_area(compact, ROAD_VERTS, sizeof(ROAD_VERTS) / sizeof(ROAD_VERTS[0]) / 3, ROAD_MIN_Y, ROAD_MAX_Y,
+                                               NAV_MESH_AREA_TYPE_D);
+    compact_heightfield::mark_rotated_box_area(compact, ICE_RINK_CENTER, ICE_RINK_HALF_EXTENTS, ICE_RINK_ROTATION, NAV_MESH_AREA_TYPE_E);
 
-    compact_heightfield::erode_walkable_area(options.walkable_radius_voxels, compact);
+    compact_heightfield::erode_walkable_area(compact, options.walkable_radius_voxels);
     compact_heightfield_regions::build_distance_field(compact);
     compact_heightfield_regions::build_regions(context, compact, options.border_size, options.min_region_area, options.merge_region_area);
 
