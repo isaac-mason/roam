@@ -4,7 +4,7 @@
 #include <stdlib.h>
 
 #if defined(NDEBUG) && !defined(ROAM_ENABLE_ASSERTS)
-#define ROAM_ASSERT(condition) ((void)0)
+#define ROAM_ASSERT(condition) ((void)sizeof(!(condition)))
 #else
 #define ROAM_ASSERT(condition)                                                              \
     do {                                                                                    \

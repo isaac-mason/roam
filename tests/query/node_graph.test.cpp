@@ -65,9 +65,7 @@ TEST(node_graph_tile_polys) {
     for (uint32_t i = 0; i < ref_count; i++) CHECK(!nav_mesh_api::is_valid_node_ref(nav_mesh, refs[i]));
     CHECK(nav_mesh.nodes.length == 2);
 
-    uint32_t allocated_links = 0;
-    for (const NavMeshLink &link : nav_mesh.links) allocated_links += link.allocated ? 1 : 0;
-    CHECK(allocated_links == 0);
+    CHECK(nav_mesh.link_index_pool.counter == nav_mesh.link_index_pool.free.length);
     CHECK(nav_mesh.links.length == 2);
 
     nav_mesh_api::release_nav_mesh(nav_mesh);

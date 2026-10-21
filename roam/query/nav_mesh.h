@@ -12,6 +12,7 @@
 namespace roam {
 
 constexpr int32_t NULL_LINK = -1;
+constexpr uint32_t MAX_POLY_VERTICES = 0xff;
 
 struct NavMeshPoly {
     uint32_t vertex_base;
@@ -42,18 +43,15 @@ struct NavMeshNode {
 };
 
 struct NavMeshLink {
-    bool allocated;
-    uint32_t index;
-    int32_t next;
-    uint32_t from_node_index;
-    NodeRef from_node_ref;
-    uint32_t to_node_index;
     NodeRef to_node_ref;
-    int edge;
-    int side;
-    int bmin;
-    int bmax;
+    int32_t next;
+    uint8_t edge;
+    uint8_t side;
+    uint8_t bmin;
+    uint8_t bmax;
 };
+
+static_assert(sizeof(NavMeshLink) == 16);
 
 enum OffMeshConnectionDirection : uint32_t {
     OFF_MESH_CONNECTION_DIRECTION_START_TO_END = 0,

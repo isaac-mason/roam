@@ -644,55 +644,58 @@ DebugPrimitives create_nav_mesh_links_helper(const NavMesh &nav_mesh) {
     lines.line_width = 3.0f;
     const Vec3 link_color = {1, 1, 0};
 
-    for (const NavMeshLink &link : nav_mesh.links) {
-        if (!link.allocated) continue;
+    for (uint32_t node_index = 0; node_index < nav_mesh.nodes.length; node_index++) {
+        if (!nav_mesh.nodes[node_index].allocated) continue;
+        for (int32_t link_index = nav_mesh.nodes[node_index].first_link; link_index != NULL_LINK; link_index = nav_mesh.links[(uint32_t)link_index].next) {
+            const NavMeshLink &link = nav_mesh.links[(uint32_t)link_index];
 
-        const NavMeshTile *source_tile = nullptr;
-        const NavMeshTile *target_tile = nullptr;
-        const NavMeshPoly *source_poly = node_poly(nav_mesh, link.from_node_index, &source_tile);
-        const NavMeshPoly *target_poly = node_poly(nav_mesh, link.to_node_index, &target_tile);
-        if (!source_poly || !target_poly) continue;
+            const NavMeshTile *source_tile = nullptr;
+            const NavMeshTile *target_tile = nullptr;
+            const NavMeshPoly *source_poly = node_poly(nav_mesh, node_index, &source_tile);
+            const NavMeshPoly *target_poly = node_poly(nav_mesh, node::get_node_ref_index(link.to_node_ref), &target_tile);
+            if (!source_poly || !target_poly) continue;
 
-        Vec3 source_center = poly_center(*source_tile, *source_poly);
-        Vec3 target_center = poly_center(*target_tile, *target_poly);
+            Vec3 source_center = poly_center(*source_tile, *source_poly);
+            Vec3 target_center = poly_center(*target_tile, *target_poly);
 
-        uint32_t edge = link.edge;
-        uint32_t next_edge = (edge + 1) % source_poly->vertex_count;
-        Vec3 edge_start = tile_vertex(*source_tile, source_tile->poly_vertices[source_poly->vertex_base + edge]);
-        Vec3 edge_end = tile_vertex(*source_tile, source_tile->poly_vertices[source_poly->vertex_base + next_edge]);
-        Vec3 edge_midpoint = vec3::scale(vec3::add(edge_start, edge_end), 0.5f);
+            uint32_t edge = link.edge;
+            uint32_t next_edge = (edge + 1) % source_poly->vertex_count;
+            Vec3 edge_start = tile_vertex(*source_tile, source_tile->poly_vertices[source_poly->vertex_base + edge]);
+            Vec3 edge_end = tile_vertex(*source_tile, source_tile->poly_vertices[source_poly->vertex_base + next_edge]);
+            Vec3 edge_midpoint = vec3::scale(vec3::add(edge_start, edge_end), 0.5f);
 
-        Vec3 source_point = vec3::lerp(edge_midpoint, source_center, 0.1f);
-        source_point.y += 0.05f;
-        Vec3 target_point = target_center;
-        target_point.y += 0.05f;
+            Vec3 source_point = vec3::lerp(edge_midpoint, source_center, 0.1f);
+            source_point.y += 0.05f;
+            Vec3 target_point = target_center;
+            target_point.y += 0.05f;
 
-        const int segment_count = 12;
-        const float arc_height = 0.3f;
-        for (int i = 0; i < segment_count; i++) {
-            push3(lines.positions, arc_point(source_point, target_point, (float)i / segment_count, arc_height));
-            push3(lines.positions, arc_point(source_point, target_point, (float)(i + 1) / segment_count, arc_height));
-            push3(lines.colors, link_color);
-            push3(lines.colors, link_color);
+            const int segment_count = 12;
+            const float arc_height = 0.3f;
+            for (int i = 0; i < segment_count; i++) {
+                push3(lines.positions, arc_point(source_point, target_point, (float)i / segment_count, arc_height));
+                push3(lines.positions, arc_point(source_point, target_point, (float)(i + 1) / segment_count, arc_height));
+                push3(lines.colors, link_color);
+                push3(lines.colors, link_color);
+            }
+
+            Vec3 arrow = arc_point(source_point, target_point, 0.85f, arc_height);
+            Vec3 next = arc_point(source_point, target_point, 0.95f, arc_height);
+            Vec3 direction = vec3::subtract(next, arrow);
+            float length = vec3::length(direction);
+            if (length == 0) length = 1;
+            direction = vec3::scale(direction, 1.0f / length);
+
+            const float arrow_length = 0.15f;
+            const float arrow_width = 0.08f;
+            Vec3 perpendicular = {-direction.z, 0, direction.x};
+            Vec3 back = vec3::scale(direction, -arrow_length);
+
+            push3(lines.positions, arrow);
+            push3(lines.positions, vec3::scale_and_add(vec3::add(arrow, back), perpendicular, arrow_width));
+            push3(lines.positions, arrow);
+            push3(lines.positions, vec3::scale_and_add(vec3::add(arrow, back), perpendicular, -arrow_width));
+            for (int k = 0; k < 4; k++) push3(lines.colors, link_color);
         }
-
-        Vec3 arrow = arc_point(source_point, target_point, 0.85f, arc_height);
-        Vec3 next = arc_point(source_point, target_point, 0.95f, arc_height);
-        Vec3 direction = vec3::subtract(next, arrow);
-        float length = vec3::length(direction);
-        if (length == 0) length = 1;
-        direction = vec3::scale(direction, 1.0f / length);
-
-        const float arrow_length = 0.15f;
-        const float arrow_width = 0.08f;
-        Vec3 perpendicular = {-direction.z, 0, direction.x};
-        Vec3 back = vec3::scale(direction, -arrow_length);
-
-        push3(lines.positions, arrow);
-        push3(lines.positions, vec3::scale_and_add(vec3::add(arrow, back), perpendicular, arrow_width));
-        push3(lines.positions, arrow);
-        push3(lines.positions, vec3::scale_and_add(vec3::add(arrow, back), perpendicular, -arrow_width));
-        for (int k = 0; k < 4; k++) push3(lines.colors, link_color);
     }
 
     finish(primitives, lines);

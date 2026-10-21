@@ -543,21 +543,16 @@ static uint32_t allocate_link(NavMesh &nav_mesh) {
 
     NavMeshLink &link = nav_mesh.links[link_index];
     link = {};
-    link.allocated = true;
-    link.index = link_index;
     link.next = NULL_LINK;
     link.to_node_ref = INVALID_NODE_REF;
-    link.from_node_ref = INVALID_NODE_REF;
     return link_index;
 }
 
 static void release_link(NavMesh &nav_mesh, uint32_t index) {
     NavMeshLink &link = nav_mesh.links[index];
     link = {};
-    link.index = index;
     link.next = NULL_LINK;
     link.to_node_ref = INVALID_NODE_REF;
-    link.from_node_ref = INVALID_NODE_REF;
     index_pool::release_index(nav_mesh.link_index_pool, index);
 }
 
@@ -589,13 +584,9 @@ static void release_links_where(NavMesh &nav_mesh, uint32_t node_index, ShouldRe
     }
 }
 
-static void add_link(NavMesh &nav_mesh, uint32_t from_node_index, uint32_t to_node_index, NodeRef to_node_ref, int edge, int side, int bmin,
-                     int bmax) {
+static void add_link(NavMesh &nav_mesh, uint32_t from_node_index, NodeRef to_node_ref, uint8_t edge, uint8_t side, uint8_t bmin, uint8_t bmax) {
     uint32_t link_index = allocate_link(nav_mesh);
     NavMeshLink &link = nav_mesh.links[link_index];
-    link.from_node_index = from_node_index;
-    link.from_node_ref = nav_mesh.nodes[from_node_index].ref;
-    link.to_node_index = to_node_index;
     link.to_node_ref = to_node_ref;
     link.edge = edge;
     link.side = side;
@@ -617,7 +608,7 @@ static void connect_internal_links(NavMesh &nav_mesh, const NavMeshTile &tile) {
             if (neighbour_poly_index < 0 || (uint32_t)neighbour_poly_index >= tile.polys.length) continue;
 
             uint32_t neighbour_node_index = tile.poly_nodes[(uint32_t)neighbour_poly_index];
-            add_link(nav_mesh, node_index, neighbour_node_index, nav_mesh.nodes[neighbour_node_index].ref, (int)edge_index, 0xff, 0, 0);
+            add_link(nav_mesh, node_index, nav_mesh.nodes[neighbour_node_index].ref, (uint8_t)edge_index, 0xff, 0, 0);
         }
     }
 }
@@ -709,7 +700,7 @@ static void find_connecting_polys(Array<ConnectingPoly> &results, const NavMesh 
     }
 }
 
-static int round_to_int(float value) { return (int)floorf(value + 0.5f); }
+static uint8_t portal_fraction(float t) { return (uint8_t)floorf(t * 255 + 0.5f); }
 
 static void connect_external_links(NavMesh &nav_mesh, const NavMeshTile &tile, const NavMeshTile &target, int side) {
     Array<ConnectingPoly> overlaps = {};
@@ -751,8 +742,7 @@ static void connect_external_links(NavMesh &nav_mesh, const NavMeshTile &tile, c
                 tmin = fmaxf(0, fminf(1, tmin));
                 tmax = fmaxf(0, fminf(1, tmax));
 
-                add_link(nav_mesh, node_index, node::get_node_ref_index(overlap.node_ref), overlap.node_ref, (int)j, direction, round_to_int(tmin * 255),
-                         round_to_int(tmax * 255));
+                add_link(nav_mesh, node_index, overlap.node_ref, (uint8_t)j, (uint8_t)direction, portal_fraction(tmin), portal_fraction(tmax));
             }
         }
     }
@@ -796,12 +786,12 @@ static bool connect_off_mesh_connection(NavMesh &nav_mesh, uint32_t id) {
 
     nav_mesh.off_mesh_connection_attachments[id] = {true, off_mesh_node_ref, start.node_ref, end.node_ref};
 
-    add_link(nav_mesh, start_node_index, off_mesh_node_index, off_mesh_node_ref, 0, 0, 0, 0);
-    add_link(nav_mesh, off_mesh_node_index, end_node_index, end.node_ref, 1, 0, 0, 0);
+    add_link(nav_mesh, start_node_index, off_mesh_node_ref, 0, 0, 0, 0);
+    add_link(nav_mesh, off_mesh_node_index, end.node_ref, 1, 0, 0, 0);
 
     if (connection.direction == OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL) {
-        add_link(nav_mesh, end_node_index, off_mesh_node_index, off_mesh_node_ref, 1, 0, 0, 0);
-        add_link(nav_mesh, off_mesh_node_index, start_node_index, start.node_ref, 0, 0, 0, 0);
+        add_link(nav_mesh, end_node_index, off_mesh_node_ref, 1, 0, 0, 0);
+        add_link(nav_mesh, off_mesh_node_index, start.node_ref, 0, 0, 0, 0);
     }
 
     return true;
@@ -863,6 +853,7 @@ NavMeshTile build_tile(const NavMeshTileParams &params) {
     tile.bounds = params.bounds;
     tile.vertices = copy_array(params.vertices);
     tile.polys = copy_array(params.polys);
+    for (const NavMeshPoly &poly : tile.polys) ROAM_ASSERT(poly.vertex_count <= MAX_POLY_VERTICES);
     tile.poly_vertices = copy_array(params.poly_vertices);
     tile.poly_neis = copy_array(params.poly_neis);
     tile.detail_meshes = copy_array(params.detail_meshes);
