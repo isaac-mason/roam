@@ -218,3 +218,31 @@ Parity and unit tests pass, plus a new test that removing and re-adding a tile r
 | crowd (100 agents, 60 updates) | 33.5 → 31.8 | 26.4 → 25.1 | 23.1 → 22.5 |
 
 The crowd with navcat's unlimited neighbours is now about level with Detour's capped crowd on nav-test (31.4 ms).
+
+### Crowd phases and the unmeasured queries (2026-10-21)
+
+**Crowd phases.** Timed with throwaway per-phase timers (thread CPU time, 10 runs of 100 agents x 60 updates), share of the update:
+
+| phase | nav-test | game-level | FPS map |
+|---|---:|---:|---:|
+| velocity planning (obstacle avoidance) | 73% | 69% | 63% |
+| corners | 10% | 12% | 24% |
+| local boundaries | 5% | 3% | 2% |
+| neighbours | 4% | 3% | 2% |
+| corridors (move position) | 3% | 4% | 4% |
+| move requests | 1% | 6% | 3% |
+| everything else | 4% | 3% | 2% |
+
+Obstacle avoidance runs about 435k samples per bench run, each against about 7 circles and 5 segments (nav-test). 24-39% exit on the penalty threshold before any obstacle, 26-44% on a circle, 8-22% on a segment, and about 20% evaluate everything. The compiled loop is tight: about 20 instructions per circle miss and 35 per hit, about 350 per sample, at 2.1 instructions per cycle. Three exact rewrites were measured and dropped: computing the side penalty only for samples that survive (no change), checking the obstacle that rejected the previous sample first (it catches 32-44% of rejections but costs 1-8% overall), and branchless circle hit times (2-5% slower). The rejection test is order-independent and `t_min` is a plain minimum, so evaluating 4 obstacles at a time with SIMD stays exact; that is the remaining lever, and it is deferred with the rest of SIMD.
+
+**New cases**, in both `roam_bench` and `recast_bench`: straight paths on precomputed node paths, short moves along the surface (1.5 m toward the pair end), polygon queries (6 x 4 x 6 m boxes), local neighbourhoods (2 m), wall segments, random points around a circle (3 m, the same LCG on both sides) and removing then re-adding every tile of the tiled mesh (roam rebuilds the tiles with `build_tile` in an untimed prepare; Detour re-adds its tile blobs). roam also times smooth paths, which Detour doesn't have. Thread CPU time minimums over 3 alternating runs of 30 samples (ms), roam / Detour:
+
+| bench | nav-test | game-level | FPS map |
+|---|---|---|---|
+| straight paths (100 node paths) | 0.024 / 0.029 (1.22x) | 0.063 / 0.077 (1.21x) | 0.075 / 0.089 (1.18x) |
+| move along surface (100 moves) | 0.020 / 0.012 (0.61x) | 0.016 / 0.009 (0.57x) | 0.016 / 0.010 (0.61x) |
+| query polygons (100 boxes) | 0.028 / 0.026 (0.90x) | 0.021 / 0.020 (0.95x) | 0.020 / 0.020 (0.97x) |
+| local neighbourhood (100 circles) | 0.273 / 0.271 (0.99x) | 0.055 / 0.051 (0.94x) | 0.033 / 0.030 (0.90x) |
+| wall segments (100 polys) | 0.0030 / 0.0020 (0.67x) | 0.0027 / 0.0021 (0.78x) | 0.0031 / 0.0022 (0.71x) |
+| random point around circle (100) | 0.193 / 0.182 (0.94x) | 0.047 / 0.050 (1.05x) | 0.041 / 0.040 (0.99x) |
+| remove and add every tile | 0.032 / 0.021 (0.64x) | 0.59 / 0.33 (0.56x) | 0.97 / 0.60 (0.62x) |

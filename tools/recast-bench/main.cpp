@@ -144,6 +144,9 @@ struct State {
     std::vector<float> centers;
     std::vector<dtPolyRef> center_refs;
     dtCrowd *crowd;
+    dtNavMesh *tiled_nav_mesh;
+    std::vector<dtPolyRef> node_paths;
+    std::vector<int> node_path_starts;
 };
 
 static State state;
@@ -312,7 +315,7 @@ static unsigned int ilog2(unsigned int v) {
     return r;
 }
 
-static void run_tiled() {
+static dtNavMesh *build_tiled(int tile_flags) {
     rcContext *ctx = &state.context;
     rcConfig base = solo_config();
     int grid_width = base.width;
@@ -390,7 +393,7 @@ static void run_tiled() {
             if (pmesh->nverts > 0) {
                 int size = 0;
                 unsigned char *data = create_tile_data(*pmesh, *dmesh, tx, ty, &size);
-                if (data && dtStatusFailed(nav_mesh->addTile(data, size, DT_TILE_FREE_DATA, 0, nullptr))) dtFree(data);
+                if (data && dtStatusFailed(nav_mesh->addTile(data, size, tile_flags, 0, nullptr))) dtFree(data);
             }
 
             rcFreeCompactHeightfield(chf);
@@ -400,8 +403,10 @@ static void run_tiled() {
         }
     }
 
-    dtFreeNavMesh(nav_mesh);
+    return nav_mesh;
 }
+
+static void run_tiled() { dtFreeNavMesh(build_tiled(DT_TILE_FREE_DATA)); }
 
 static const int QUERY_COUNT = 100;
 static const int MAX_PATH = 256;
@@ -474,6 +479,116 @@ static void run_find_nearest_poly() {
         dtPolyRef ref = 0;
         float nearest[3];
         state.query->findNearestPoly(point, half_extents, &state.filter, &ref, nearest);
+    }
+}
+
+static void short_move_end(int i, float *end) {
+    const float *start = center(i);
+    const float *target = center(pair_end(i));
+    float dx = target[0] - start[0];
+    float dz = target[2] - start[2];
+    float length = sqrtf(dx * dx + dz * dz);
+    end[0] = start[0];
+    end[1] = start[1];
+    end[2] = start[2];
+    if (length == 0) return;
+    end[0] = start[0] + dx / length * 1.5f;
+    end[2] = start[2] + dz / length * 1.5f;
+}
+
+static void build_node_paths() {
+    dtPolyRef path[MAX_PATH];
+    state.node_path_starts.push_back(0);
+    for (int i = 0; i < QUERY_COUNT; i++) {
+        int a = i % center_count();
+        int b = pair_end(i);
+        int path_count = 0;
+        state.query->findPath(state.center_refs[(size_t)a], state.center_refs[(size_t)b], center(a), center(b), &state.filter, path, &path_count, MAX_PATH);
+        for (int j = 0; j < path_count; j++) state.node_paths.push_back(path[j]);
+        state.node_path_starts.push_back((int)state.node_paths.size());
+    }
+}
+
+static void run_straight_paths() {
+    float straight[MAX_PATH * 3];
+    unsigned char straight_flags[MAX_PATH];
+    dtPolyRef straight_refs[MAX_PATH];
+    for (int i = 0; i < QUERY_COUNT; i++) {
+        int first = state.node_path_starts[(size_t)i];
+        int count = state.node_path_starts[(size_t)i + 1] - first;
+        if (count == 0) continue;
+        int straight_count = 0;
+        state.query->findStraightPath(center(i), center(pair_end(i)), &state.node_paths[(size_t)first], count, straight, straight_flags, straight_refs,
+                                      &straight_count, MAX_PATH);
+    }
+}
+
+static void run_move_along_surface() {
+    dtPolyRef visited[16];
+    for (int i = 0; i < QUERY_COUNT; i++) {
+        int a = i % center_count();
+        float end[3];
+        short_move_end(i, end);
+        float result[3];
+        int visited_count = 0;
+        state.query->moveAlongSurface(state.center_refs[(size_t)a], center(a), end, &state.filter, result, visited, &visited_count, 16);
+    }
+}
+
+static void run_query_polygons() {
+    const float half_extents[3] = {3, 2, 3};
+    dtPolyRef polys[MAX_PATH];
+    for (int i = 0; i < QUERY_COUNT; i++) {
+        int poly_count = 0;
+        state.query->queryPolygons(center(i), half_extents, &state.filter, polys, &poly_count, MAX_PATH);
+    }
+}
+
+static void run_local_neighbourhood() {
+    dtPolyRef polys[MAX_PATH];
+    dtPolyRef parents[MAX_PATH];
+    for (int i = 0; i < QUERY_COUNT; i++) {
+        int a = i % center_count();
+        int poly_count = 0;
+        state.query->findLocalNeighbourhood(state.center_refs[(size_t)a], center(a), 2, &state.filter, polys, parents, &poly_count, MAX_PATH);
+    }
+}
+
+static void run_wall_segments() {
+    float segments[64 * 6];
+    for (int i = 0; i < QUERY_COUNT; i++) {
+        int segment_count = 0;
+        state.query->getPolyWallSegments(state.center_refs[(size_t)(i % center_count())], &state.filter, segments, nullptr, &segment_count, 64);
+    }
+}
+
+static unsigned int random_seed = 1;
+
+static float next_random() {
+    random_seed = random_seed * 1664525u + 1013904223u;
+    return (float)(random_seed >> 8) / 16777216.0f;
+}
+
+static void run_random_points() {
+    random_seed = 1;
+    for (int i = 0; i < QUERY_COUNT; i++) {
+        int a = i % center_count();
+        dtPolyRef ref = 0;
+        float point[3];
+        state.query->findRandomPointAroundCircle(state.center_refs[(size_t)a], center(a), 3, &state.filter, next_random, &ref, point);
+    }
+}
+
+static void run_tiles() {
+    dtNavMesh *nav_mesh = state.tiled_nav_mesh;
+    const dtNavMesh *const_nav_mesh = nav_mesh;
+    for (int i = 0; i < nav_mesh->getMaxTiles(); i++) {
+        const dtMeshTile *tile = const_nav_mesh->getTile(i);
+        if (!tile || !tile->header) continue;
+        unsigned char *data = nullptr;
+        int size = 0;
+        nav_mesh->removeTile(nav_mesh->getTileRef(tile), &data, &size);
+        nav_mesh->addTile(data, size, 0, 0, nullptr);
     }
 }
 
@@ -586,6 +701,9 @@ int main(int argc, char **argv) {
         state.center_refs.push_back(ref);
     }
 
+    build_node_paths();
+    state.tiled_nav_mesh = build_tiled(0);
+
     static const char *const STAGE_NAMES[10] = {
         "mark walkable triangles", "rasterize triangles", "filter heightfield", "build compact heightfield", "erode walkable area",
         "build distance field",    "build regions",       "build contours",     "build poly mesh",          "build poly mesh detail",
@@ -600,6 +718,13 @@ int main(int argc, char **argv) {
     cases.push_back({"node paths (100 pairs)", nullptr, run_node_paths, nullptr});
     cases.push_back({"raycast (100 rays)", nullptr, run_raycast, nullptr});
     cases.push_back({"find nearest poly (200 points)", nullptr, run_find_nearest_poly, nullptr});
+    cases.push_back({"straight paths (100 node paths)", nullptr, run_straight_paths, nullptr});
+    cases.push_back({"move along surface (100 moves)", nullptr, run_move_along_surface, nullptr});
+    cases.push_back({"query polygons (100 boxes)", nullptr, run_query_polygons, nullptr});
+    cases.push_back({"local neighbourhood (100 circles)", nullptr, run_local_neighbourhood, nullptr});
+    cases.push_back({"wall segments (100 polys)", nullptr, run_wall_segments, nullptr});
+    cases.push_back({"random point around circle (100)", nullptr, run_random_points, nullptr});
+    cases.push_back({"remove and add every tile", nullptr, run_tiles, nullptr});
     cases.push_back({"crowd (100 agents, 60 updates)", prepare_crowd, run_crowd, finish_crowd});
 
     printf("%-34s %12s %12s %8s\n", "bench", "median ms", "min ms", "samples");
@@ -611,5 +736,13 @@ int main(int argc, char **argv) {
 
     dtFreeNavMeshQuery(state.query);
     dtFreeNavMesh(state.nav_mesh);
+    const dtNavMesh *tiled = state.tiled_nav_mesh;
+    std::vector<unsigned char *> tile_data;
+    for (int i = 0; i < tiled->getMaxTiles(); i++) {
+        const dtMeshTile *tile = tiled->getTile(i);
+        if (tile && tile->header) tile_data.push_back(tile->data);
+    }
+    dtFreeNavMesh(state.tiled_nav_mesh);
+    for (unsigned char *data : tile_data) dtFree(data);
     return 0;
 }

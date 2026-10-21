@@ -10,6 +10,9 @@
 #include "roam/generate/compact_heightfield_regions.h"
 #include "roam/generate/input_triangle_mesh.h"
 #include "roam/query/find_path.h"
+#include "roam/query/find_smooth_path.h"
+#include "roam/query/find_straight_path.h"
+#include "roam/query/local_neighbourhood.h"
 #include "roam/query/nav_mesh_api.h"
 
 using namespace roam;
@@ -150,6 +153,10 @@ struct BenchState {
     Array<Vec3> centers;
     Array<NodeRef> center_refs;
     Crowd crowd;
+    NavMesh tiled_nav_mesh;
+    Array<NavMeshTile> rebuilt_tiles;
+    Array<NodeRef> node_paths;
+    Array<uint32_t> node_path_starts;
 };
 
 static BenchState state;
@@ -294,6 +301,138 @@ static void run_find_nearest_poly() {
     }
 }
 
+static Vec3 short_move_end(uint32_t i) {
+    Vec3 start = state.centers[i % state.centers.length];
+    Vec3 delta = vec3::subtract(state.centers[pair_end(i)], start);
+    float length = sqrtf(delta.x * delta.x + delta.z * delta.z);
+    if (length == 0) return start;
+    return {start.x + delta.x / length * 1.5f, start.y, start.z + delta.z / length * 1.5f};
+}
+
+static void build_node_paths() {
+    NodeRef path[MAX_PATH];
+    state.node_path_starts.push(0);
+    for (uint32_t i = 0; i < QUERY_COUNT; i++) {
+        uint32_t a = i % state.centers.length;
+        uint32_t b = pair_end(i);
+        FindNodePathResult result;
+        nav_mesh_search::find_node_path(result, query_workspace, state.nav_mesh, state.center_refs[a], state.center_refs[b], state.centers[a],
+                                        state.centers[b], nav_mesh_api::DEFAULT_QUERY_FILTER, path);
+        for (uint32_t j = 0; j < result.path_count; j++) state.node_paths.push(path[j]);
+        state.node_path_starts.push(state.node_paths.length);
+    }
+}
+
+static void run_straight_paths() {
+    StraightPathPoint points[MAX_PATH];
+    for (uint32_t i = 0; i < QUERY_COUNT; i++) {
+        uint32_t first = state.node_path_starts[i];
+        uint32_t count = state.node_path_starts[i + 1] - first;
+        if (count == 0) continue;
+        FindStraightPathResult result;
+        find_straight_path::find_straight_path(result, state.nav_mesh, state.centers[i % state.centers.length], state.centers[pair_end(i)],
+                                               {state.node_paths.data + first, count}, points);
+    }
+}
+
+static void run_smooth_paths() {
+    SmoothPathPoint points[MAX_PATH];
+    for (uint32_t i = 0; i < QUERY_COUNT; i++) {
+        FindSmoothPathResult result;
+        find_smooth_path::find_smooth_path(result, query_workspace, state.nav_mesh, state.centers[i % state.centers.length], state.centers[pair_end(i)],
+                                           {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER, points, {.step_size = 0.5f, .slop = 0.01f});
+    }
+}
+
+static void run_move_along_surface() {
+    NodeRef visited[16];
+    for (uint32_t i = 0; i < QUERY_COUNT; i++) {
+        uint32_t a = i % state.centers.length;
+        MoveAlongSurfaceResult result;
+        nav_mesh_search::move_along_surface(result, query_workspace, state.nav_mesh, state.center_refs[a], state.centers[a], short_move_end(i),
+                                            nav_mesh_api::DEFAULT_QUERY_FILTER, visited);
+    }
+}
+
+static void run_query_polygons() {
+    NodeRef polys[MAX_PATH];
+    for (uint32_t i = 0; i < QUERY_COUNT; i++) {
+        Vec3 center = state.centers[i % state.centers.length];
+        QueryPolygonsResult result;
+        nav_mesh_api::query_polygons(result, state.nav_mesh, {{center.x - 3, center.y - 2, center.z - 3}, {center.x + 3, center.y + 2, center.z + 3}},
+                                     nav_mesh_api::DEFAULT_QUERY_FILTER, polys);
+    }
+}
+
+static void run_local_neighbourhood() {
+    NodeRef polys[MAX_PATH];
+    for (uint32_t i = 0; i < QUERY_COUNT; i++) {
+        uint32_t a = i % state.centers.length;
+        FindLocalNeighbourhoodResult result;
+        local_neighbourhood::find_local_neighbourhood(result, query_workspace, state.nav_mesh, state.center_refs[a], state.centers[a], 2,
+                                                      nav_mesh_api::DEFAULT_QUERY_FILTER, polys);
+    }
+}
+
+static void run_wall_segments() {
+    WallSegment segments[64];
+    for (uint32_t i = 0; i < QUERY_COUNT; i++) {
+        PolyWallSegmentsResult result;
+        local_neighbourhood::get_poly_wall_segments(result, state.nav_mesh, state.center_refs[i % state.centers.length], nav_mesh_api::DEFAULT_QUERY_FILTER,
+                                                    false, segments);
+    }
+}
+
+static float next_random(void *user_data) {
+    uint32_t &seed = *(uint32_t *)user_data;
+    seed = seed * 1664525u + 1013904223u;
+    return (float)(seed >> 8) / 16777216.0f;
+}
+
+static void run_random_points() {
+    uint32_t seed = 1;
+    for (uint32_t i = 0; i < QUERY_COUNT; i++) {
+        uint32_t a = i % state.centers.length;
+        FindRandomPointResult result;
+        nav_mesh_search::find_random_point_around_circle(result, query_workspace, state.nav_mesh, state.center_refs[a], state.centers[a], 3,
+                                                         nav_mesh_api::DEFAULT_QUERY_FILTER, next_random, &seed);
+    }
+}
+
+static void prepare_tiles() {
+    for (const NavMeshTile &tile : state.tiled_nav_mesh.tiles) {
+        if (!tile.allocated) continue;
+        NavMeshTileParams params = {
+            .bounds = tile.bounds,
+            .vertices = tile.vertices,
+            .polys = tile.polys,
+            .poly_vertices = tile.poly_vertices,
+            .poly_neis = tile.poly_neis,
+            .detail_meshes = tile.detail_meshes,
+            .detail_vertices = tile.detail_vertices,
+            .detail_triangles = tile.detail_triangles,
+            .tile_x = tile.tile_x,
+            .tile_y = tile.tile_y,
+            .tile_layer = tile.tile_layer,
+            .cell_size = tile.cell_size,
+            .cell_height = tile.cell_height,
+            .walkable_height = tile.walkable_height,
+            .walkable_radius = tile.walkable_radius,
+            .walkable_climb = tile.walkable_climb,
+        };
+        state.rebuilt_tiles.push(nav_mesh_api::build_tile(params));
+    }
+}
+
+static void run_tiles() {
+    for (const NavMeshTile &tile : state.rebuilt_tiles) {
+        nav_mesh_api::remove_tile(state.tiled_nav_mesh, tile.tile_x, tile.tile_y, tile.tile_layer);
+        nav_mesh_api::add_tile(state.tiled_nav_mesh, tile);
+    }
+}
+
+static void finish_tiles() { state.rebuilt_tiles.clear(); }
+
 static const uint32_t CROWD_AGENTS = 100;
 static const uint32_t CROWD_FRAMES = 60;
 
@@ -375,6 +514,13 @@ int main(int argc, char **argv) {
     }
     state.options = solo_options();
     build_query_points();
+    build_node_paths();
+    {
+        TiledNavMeshResult tiled = generate_tiled_nav_mesh::generate_tiled_nav_mesh(
+            {state.input.positions.data, state.input.indices.data, state.input.indices.length}, tiled_options());
+        generate_tiled_nav_mesh::release(tiled.intermediates);
+        state.tiled_nav_mesh = tiled.nav_mesh;
+    }
 
     if (dump_points) {
         FILE *file = fopen(dump_points, "w");
@@ -394,7 +540,7 @@ int main(int argc, char **argv) {
         "build distance field",    "build regions",       "build contours",     "build poly mesh",          "build poly mesh detail",
     };
 
-    BenchCase cases[STAGE_COUNT + 9] = {};
+    BenchCase cases[STAGE_COUNT + 20] = {};
     uint32_t case_count = 0;
     for (int stage = 0; stage < STAGE_COUNT; stage++) cases[case_count++] = {STAGE_NAMES[stage], prepare_stage, run_stage, finish_stage};
     cases[case_count++] = {"generate solo nav mesh", nullptr, run_solo, nullptr};
@@ -404,6 +550,14 @@ int main(int argc, char **argv) {
     cases[case_count++] = {"node paths (100 pairs)", nullptr, run_node_paths, nullptr};
     cases[case_count++] = {"raycast (100 rays)", nullptr, run_raycast, nullptr};
     cases[case_count++] = {"find nearest poly (200 points)", nullptr, run_find_nearest_poly, nullptr};
+    cases[case_count++] = {"straight paths (100 node paths)", nullptr, run_straight_paths, nullptr};
+    cases[case_count++] = {"smooth paths (100 pairs)", nullptr, run_smooth_paths, nullptr};
+    cases[case_count++] = {"move along surface (100 moves)", nullptr, run_move_along_surface, nullptr};
+    cases[case_count++] = {"query polygons (100 boxes)", nullptr, run_query_polygons, nullptr};
+    cases[case_count++] = {"local neighbourhood (100 circles)", nullptr, run_local_neighbourhood, nullptr};
+    cases[case_count++] = {"wall segments (100 polys)", nullptr, run_wall_segments, nullptr};
+    cases[case_count++] = {"random point around circle (100)", nullptr, run_random_points, nullptr};
+    cases[case_count++] = {"remove and add every tile", prepare_tiles, run_tiles, finish_tiles};
     cases[case_count++] = {"crowd (100 agents, 60 updates)", prepare_crowd, run_crowd, finish_crowd};
     cases[case_count++] = {"crowd (100 agents, 60 updates, 6 neighbours)", prepare_capped_crowd, run_crowd, finish_crowd};
 
@@ -418,6 +572,10 @@ int main(int argc, char **argv) {
 
     nav_mesh_search::release(query_workspace);
     nav_mesh_api::release_nav_mesh(state.nav_mesh);
+    nav_mesh_api::release_nav_mesh(state.tiled_nav_mesh);
+    state.rebuilt_tiles.release();
+    state.node_paths.release();
+    state.node_path_starts.release();
     state.centers.release();
     state.center_refs.release();
     state.input.positions.release();

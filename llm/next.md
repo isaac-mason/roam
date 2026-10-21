@@ -12,14 +12,16 @@ A working checklist. Tick items as they land, and record findings and numbers in
 
 ## Measure what isn't measured
 
-- [ ] **Crowd phase timing.** The crowd is the biggest number in the bench (25-32 ms for 100 agents x 60 updates, about 5 us per agent update). Time each phase: neighbours, local boundary, corridor and topology, corners, steering, obstacle avoidance, integration, collisions, and moving along the surface.
-- [ ] **Tile add and remove**, in roam_bench and recast_bench. Rebuilding tiles at runtime is a main reason to use tiled meshes, and linking now walks each node's list to append.
-- [ ] **Standalone queries:** `move_along_surface`, `query_polygons`, `find_local_neighbourhood`, `find_straight_path`, `find_smooth_path`, `find_random_point_around_circle`.
+- [x] **Crowd phase timing.** Obstacle avoidance is 63-73% of the update, corners 10-24% (see `benchmarks.md`). The crowd is the biggest number in the bench (25-32 ms for 100 agents x 60 updates, about 5 us per agent update). Time each phase: neighbours, local boundary, corridor and topology, corners, steering, obstacle avoidance, integration, collisions, and moving along the surface.
+- [x] **Tile add and remove**, in roam_bench and recast_bench: 0.56-0.64x of Detour. Rebuilding tiles at runtime is a main reason to use tiled meshes, and linking now walks each node's list to append.
+- [x] **Standalone queries** (move along surface 0.6x, wall segments 0.7x, query polygons and local neighbourhood about 0.93x, straight paths 1.2x): `move_along_surface`, `query_polygons`, `find_local_neighbourhood`, `find_straight_path`, `find_smooth_path`, `find_random_point_around_circle`.
 
 ## Performance
 
-- [ ] **The crowd's hottest phases**, once they are measured. Obstacle avoidance sampling is the likely first target, and the clearest SIMD candidate.
-- [ ] **Tile add and remove**, depending on what the benchmark shows.
+- [ ] **The crowd's hottest phases.** Obstacle avoidance: three exact scalar rewrites measured and dropped; the remaining lever is SIMD over obstacles (deferred). Next: corners (`find_corners`).
+- [ ] **Tile add and remove** (0.6x of Detour).
+- [ ] **Move along surface** (0.6x) and **wall segments** (0.7x); both run every crowd frame.
+- [ ] **Query polygons and local neighbourhood** (about 0.93x).
 - [ ] **Parallel tiled builds.** Tiles are independent. Expose per-tile generation as a thread-safe public function, and show a threaded build in the bench and a demo. roam itself stays single-threaded.
 - [ ] **Regions (0.97x of Detour): a closer look.** Beyond the level stack allocation, profile flood, expand and merge at the instruction level, and compare the data layouts and loop structure with Detour.
 - [ ] **Mark walkable (0.95x of Detour): a closer look.** Check the generated code against Detour's loop: bounds checks, index widths, aliasing, and whether the area write blocks vectorization.
