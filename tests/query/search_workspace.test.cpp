@@ -19,7 +19,7 @@ static SearchNode node_for(NodeRef ref, int state) {
 
 static NodeRef poly_ref(uint32_t index) { return node::ser_node_ref(NODE_TYPE_POLY, index, 1); }
 
-TEST(search_node_pool_finds_every_node_after_growing) {
+TEST_CASE("search node pool finds every node after growing") {
     SearchNodePool pool = {};
     for (uint32_t i = 0; i < 1000; i++) nav_mesh_search::add_search_node(pool, node_for(poly_ref(i * 37), (int)(i % 3)));
 
@@ -32,7 +32,7 @@ TEST(search_node_pool_finds_every_node_after_growing) {
     nav_mesh_search::release(pool);
 }
 
-TEST(search_node_pool_clear_keeps_memory_and_forgets_nodes) {
+TEST_CASE("search node pool clear keeps memory and forgets nodes") {
     SearchNodePool pool = {};
     for (uint32_t i = 0; i < 300; i++) nav_mesh_search::add_search_node(pool, node_for(poly_ref(i), 0));
     uint32_t node_capacity = pool.nodes.capacity;
@@ -50,7 +50,7 @@ TEST(search_node_pool_clear_keeps_memory_and_forgets_nodes) {
     nav_mesh_search::release(pool);
 }
 
-TEST(search_node_pool_first_node_is_the_earliest_added_for_a_ref) {
+TEST_CASE("search node pool first node is the earliest added for a ref") {
     SearchNodePool pool = {};
     nav_mesh_search::add_search_node(pool, node_for(poly_ref(42), 2));
     for (uint32_t i = 0; i < 200; i++) nav_mesh_search::add_search_node(pool, node_for(poly_ref(i + 100), 0));
@@ -72,7 +72,7 @@ static NavMesh create_strip_nav_mesh() {
 static const uint32_t MAX_REFS = 64;
 static const uint32_t MAX_POINTS = 64;
 
-TEST(search_workspace_reuse_matches_fresh_queries) {
+TEST_CASE("search workspace reuse matches fresh queries") {
     NavMesh nav_mesh = create_strip_nav_mesh();
     const QueryFilter &filter = nav_mesh_api::DEFAULT_QUERY_FILTER;
 
@@ -90,7 +90,7 @@ TEST(search_workspace_reuse_matches_fresh_queries) {
         FindPathResult reused_path;
         find_path::find_path(reused_path, reused, nav_mesh, {0.5f, 0, 0.5f}, {5.5f, 0, 1.5f}, {1, 1, 1}, filter, reused_points,
                              {.node_path = reused_refs});
-        REQUIRE(fresh_path.success && reused_path.success);
+        REQUIRE((fresh_path.success && reused_path.success));
         CHECK(fresh_path.node_path_count == reused_path.node_path_count);
         CHECK(fresh_path.point_count == reused_path.point_count);
         for (uint32_t i = 0; i < fresh_path.node_path_count; i++) CHECK(fresh_refs[i] == reused_refs[i]);
@@ -118,7 +118,7 @@ TEST(search_workspace_reuse_matches_fresh_queries) {
     nav_mesh_api::release(nav_mesh);
 }
 
-TEST(small_buffers_keep_the_start_of_the_path_and_report_its_full_length) {
+TEST_CASE("small buffers keep the start of the path and report its full length") {
     NavMesh nav_mesh = create_strip_nav_mesh();
     const QueryFilter &filter = nav_mesh_api::DEFAULT_QUERY_FILTER;
     SearchWorkspace workspace = nav_mesh_search::create_search_workspace();
@@ -206,7 +206,7 @@ TEST(small_buffers_keep_the_start_of_the_path_and_report_its_full_length) {
     nav_mesh_api::release(nav_mesh);
 }
 
-TEST(sliced_finalize_can_be_repeated_to_grow_the_buffer) {
+TEST_CASE("sliced finalize can be repeated to grow the buffer") {
     NavMesh nav_mesh = create_strip_nav_mesh();
     const QueryFilter &filter = nav_mesh_api::DEFAULT_QUERY_FILTER;
 
@@ -238,7 +238,7 @@ TEST(sliced_finalize_can_be_repeated_to_grow_the_buffer) {
     nav_mesh_api::release(nav_mesh);
 }
 
-TEST(warm_queries_do_not_allocate) {
+TEST_CASE("warm queries do not allocate") {
     if (!memory::tracking_enabled()) return;
 
     NavMesh nav_mesh = create_strip_nav_mesh();

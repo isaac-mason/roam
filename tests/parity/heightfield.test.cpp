@@ -54,7 +54,7 @@ static void check_heightfield_stage(const fixture::Fixture &nav_test, const char
     release(flat);
 }
 
-TEST(heightfield_matches_navcat_on_nav_test) {
+TEST_CASE("heightfield matches navcat on nav test") {
     fixture::Fixture nav_test = fixture::load("nav_test_solo");
     REQUIRE(nav_test.loaded);
 

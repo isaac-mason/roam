@@ -6,7 +6,7 @@
 
 using namespace roam;
 
-TEST(watershed_poly_mesh_detail_matches_navcat_on_nav_test) {
+TEST_CASE("watershed poly mesh detail matches navcat on nav test") {
     NavTest nav_test = load_nav_test();
     REQUIRE(nav_test.fixture.loaded);
     const fixture::Fixture &expected = nav_test.fixture;

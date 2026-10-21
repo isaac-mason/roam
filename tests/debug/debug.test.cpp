@@ -27,7 +27,7 @@ static void check_helper(DebugPrimitives primitives, const char *name) {
     debug::release(primitives);
 }
 
-TEST(debug_helpers_draw_a_generated_nav_mesh) {
+TEST_CASE("debug helpers draw a generated nav mesh") {
     const float positions[] = {0, 0, 0, 10, 0, 0, 10, 0, 10, 0, 0, 10, 4, 0, 4, 6, 0, 4, 6, 2, 6, 4, 2, 6};
     const uint32_t indices[] = {0, 2, 1, 0, 3, 2, 4, 7, 6, 4, 6, 5};
 

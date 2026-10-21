@@ -34,7 +34,7 @@ static uint32_t links_to_off_mesh_nodes(const NavMesh &nav_mesh, const NavMeshNo
     return count;
 }
 
-TEST(node_graph_tile_polys) {
+TEST_CASE("node graph tile polys") {
     const float positions[] = {0, 0, 0, 2, 0, 0, 2, 0, 2, 0, 0, 2};
     const uint32_t indices[] = {0, 1, 2, 0, 2, 3};
 
@@ -84,7 +84,7 @@ static const NavMeshNode *find_node(const NavMesh &nav_mesh, NodeRef ref) {
     return nullptr;
 }
 
-TEST(node_graph_bidirectional_off_mesh_connection) {
+TEST_CASE("node graph bidirectional off mesh connection") {
     NavMesh nav_mesh = create_off_mesh_test_nav_mesh();
     CHECK(allocated_node_count(nav_mesh, -1) == 4);
     CHECK(nav_mesh.off_mesh_connections.length == 0);
@@ -126,7 +126,7 @@ TEST(node_graph_bidirectional_off_mesh_connection) {
     nav_mesh_api::release(nav_mesh);
 }
 
-TEST(node_graph_one_way_off_mesh_connection) {
+TEST_CASE("node graph one way off mesh connection") {
     NavMesh nav_mesh = create_off_mesh_test_nav_mesh();
     CHECK(allocated_node_count(nav_mesh, -1) == 4);
 

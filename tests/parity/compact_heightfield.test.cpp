@@ -13,7 +13,7 @@ static void check_regions(const char *prefix, const CompactHeightfield &compact_
     CHECK_I32_ARRAY(name, &max_regions, 1, fixture::i32(expected, name));
 }
 
-TEST(compact_heightfield_matches_navcat_on_nav_test) {
+TEST_CASE("compact heightfield matches navcat on nav test") {
     NavTest nav_test = load_nav_test();
     REQUIRE(nav_test.fixture.loaded);
     const fixture::Fixture &expected = nav_test.fixture;
@@ -62,8 +62,8 @@ static void check_region_method(RegionMethod method, const char *prefix) {
     release(nav_test);
 }
 
-TEST(watershed_regions_match_navcat_on_nav_test) { check_region_method(REGION_METHOD_WATERSHED, "regions.watershed"); }
+TEST_CASE("watershed regions match navcat on nav test") { check_region_method(REGION_METHOD_WATERSHED, "regions.watershed"); }
 
-TEST(monotone_regions_match_navcat_on_nav_test) { check_region_method(REGION_METHOD_MONOTONE, "regions.monotone"); }
+TEST_CASE("monotone regions match navcat on nav test") { check_region_method(REGION_METHOD_MONOTONE, "regions.monotone"); }
 
-TEST(layer_regions_match_navcat_on_nav_test) { check_region_method(REGION_METHOD_LAYERS, "regions.layers"); }
+TEST_CASE("layer regions match navcat on nav test") { check_region_method(REGION_METHOD_LAYERS, "regions.layers"); }

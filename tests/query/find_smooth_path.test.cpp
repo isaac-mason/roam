@@ -4,7 +4,7 @@
 
 using namespace roam;
 
-TEST(find_smooth_path_takes_off_mesh_connection_from_its_start) {
+TEST_CASE("find smooth path takes off mesh connection from its start") {
     const float positions[] = {0, 0, 0, 2, 0, 0, 2, 0, 2, 0, 0, 2, 7, 0, 0, 9, 0, 0, 9, 0, 2, 7, 0, 2};
     const uint32_t indices[] = {0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7};
     NavMesh nav_mesh = create_nav_mesh_from_triangles(positions, 8, indices, 12);

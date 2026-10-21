@@ -41,7 +41,7 @@ static MoveAlongSurfaceResult move(const NavMesh &nav_mesh, Vec3 start, Vec3 end
     return result;
 }
 
-TEST(move_along_surface_within_single_polygon) {
+TEST_CASE("move along surface within single polygon") {
     NavMesh nav_mesh = create_simple_quad_nav_mesh();
     NodeRef visited[MAX_VISITED];
     MoveAlongSurfaceResult result = move(nav_mesh, {0.5f, 0, 0.5f}, {0.8f, 0, 0.8f}, visited);
@@ -52,7 +52,7 @@ TEST(move_along_surface_within_single_polygon) {
     nav_mesh_api::release(nav_mesh);
 }
 
-TEST(move_along_surface_across_two_adjacent_triangles) {
+TEST_CASE("move along surface across two adjacent triangles") {
     NavMesh nav_mesh = create_simple_quad_nav_mesh();
     NodeRef visited[MAX_VISITED];
     MoveAlongSurfaceResult result = move(nav_mesh, {1.5f, 0, 0.5f}, {0.5f, 0, 1.5f}, visited);
@@ -62,7 +62,7 @@ TEST(move_along_surface_across_two_adjacent_triangles) {
     nav_mesh_api::release(nav_mesh);
 }
 
-TEST(move_along_surface_small_movement_within_polygon) {
+TEST_CASE("move along surface small movement within polygon") {
     NavMesh nav_mesh = create_simple_quad_nav_mesh();
     NodeRef visited[MAX_VISITED];
     MoveAlongSurfaceResult result = move(nav_mesh, {1.0f, 0, 1.0f}, {1.015f, 0, 1.0f}, visited);
@@ -71,7 +71,7 @@ TEST(move_along_surface_small_movement_within_polygon) {
     nav_mesh_api::release(nav_mesh);
 }
 
-TEST(move_along_surface_across_long_thin_corridor) {
+TEST_CASE("move along surface across long thin corridor") {
     NavMesh nav_mesh = create_long_corridor_nav_mesh();
     NodeRef visited[MAX_VISITED];
     MoveAlongSurfaceResult result = move(nav_mesh, {0.5f, 0, 0.5f}, {9.5f, 0, 0.5f}, visited);
@@ -80,7 +80,7 @@ TEST(move_along_surface_across_long_thin_corridor) {
     nav_mesh_api::release(nav_mesh);
 }
 
-TEST(move_along_surface_small_movement_crossing_polygon_boundary) {
+TEST_CASE("move along surface small movement crossing polygon boundary") {
     NavMesh nav_mesh = create_simple_quad_nav_mesh();
     NodeRef visited[MAX_VISITED];
     MoveAlongSurfaceResult result = move(nav_mesh, {1.0f, 0, 0.5f}, {1.0f, 0, 1.5f}, visited);
@@ -89,7 +89,7 @@ TEST(move_along_surface_small_movement_crossing_polygon_boundary) {
     nav_mesh_api::release(nav_mesh);
 }
 
-TEST(move_along_surface_very_small_movement_crossing_polygon_boundary) {
+TEST_CASE("move along surface very small movement crossing polygon boundary") {
     NavMesh nav_mesh = create_simple_quad_nav_mesh();
     NodeRef visited[MAX_VISITED];
     MoveAlongSurfaceResult result = move(nav_mesh, {1.0f, 0, 0.9925f}, {1.0f, 0, 1.0075f}, visited);
@@ -98,7 +98,7 @@ TEST(move_along_surface_very_small_movement_crossing_polygon_boundary) {
     nav_mesh_api::release(nav_mesh);
 }
 
-TEST(move_along_surface_stops_at_wall_when_target_is_outside) {
+TEST_CASE("move along surface stops at wall when target is outside") {
     NavMesh nav_mesh = create_simple_quad_nav_mesh();
     NodeRef visited[MAX_VISITED];
     MoveAlongSurfaceResult result = move(nav_mesh, {1.0f, 0, 1.0f}, {5.0f, 0, 1.0f}, visited);
@@ -108,7 +108,7 @@ TEST(move_along_surface_stops_at_wall_when_target_is_outside) {
     nav_mesh_api::release(nav_mesh);
 }
 
-TEST(move_along_surface_snaps_to_nearest_wall_when_start_is_outside_start_polygon) {
+TEST_CASE("move along surface snaps to nearest wall when start is outside start polygon") {
     NavMesh nav_mesh = create_simple_quad_nav_mesh();
     NodeRef visited[MAX_VISITED];
     MoveAlongSurfaceResult result = move(nav_mesh, {1.0f, 0, 1.5f}, {1.0f, 0, 1.52f}, visited);
@@ -118,7 +118,7 @@ TEST(move_along_surface_snaps_to_nearest_wall_when_start_is_outside_start_polygo
     nav_mesh_api::release(nav_mesh);
 }
 
-TEST(move_along_surface_stops_at_wall_edge_matching_off_mesh_link_edge) {
+TEST_CASE("move along surface stops at wall edge matching off mesh link edge") {
     NavMesh nav_mesh = create_simple_quad_nav_mesh();
     nav_mesh_api::add_off_mesh_connection(nav_mesh, {{1.5f, 0, 0.4f}, {0.5f, 0, 1.8f}, 0.1f, OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL, 1, 0});
 

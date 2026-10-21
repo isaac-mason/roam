@@ -10,7 +10,7 @@
 
 using namespace roam;
 
-TEST(nav_mesh_matches_navcat_on_nav_test) {
+TEST_CASE("nav mesh matches navcat on nav test") {
     fixture::Fixture expected = fixture::load("nav_test_solo");
     REQUIRE(expected.loaded);
 

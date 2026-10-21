@@ -10,7 +10,7 @@
 
 using namespace roam;
 
-TEST(merge_positions_and_indices_shares_the_first_vertex) {
+TEST_CASE("merge positions and indices shares the first vertex") {
     const float positions[] = {0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1};
     const uint32_t first[] = {0, 1, 2};
     const uint32_t second[] = {0, 2, 3};
@@ -26,7 +26,7 @@ TEST(merge_positions_and_indices_shares_the_first_vertex) {
     merge_positions_and_indices::release(merged);
 }
 
-TEST(merge_positions_and_indices_treats_negative_zero_as_zero) {
+TEST_CASE("merge positions and indices treats negative zero as zero") {
     const float positions[] = {0, 0, 0, -0.0f, 0, -0.0f};
     const uint32_t indices[] = {0, 1};
     const InputTriangleMesh mesh = {positions, indices};
@@ -40,7 +40,7 @@ TEST(merge_positions_and_indices_treats_negative_zero_as_zero) {
     merge_positions_and_indices::release(merged);
 }
 
-TEST(chunky_tri_mesh_of_nothing_is_empty) {
+TEST_CASE("chunky tri mesh of nothing is empty") {
     ChunkyTriMesh mesh = chunky_tri_mesh::create({});
     CHECK(mesh.nodes.length == 0);
     CHECK(mesh.max_tris_per_chunk == 0);
@@ -52,7 +52,7 @@ TEST(chunky_tri_mesh_of_nothing_is_empty) {
     chunky_tri_mesh::release(mesh);
 }
 
-TEST(chunky_tri_mesh_finds_every_triangle_in_a_covering_rect) {
+TEST_CASE("chunky tri mesh finds every triangle in a covering rect") {
     Array<float> positions = {};
     Array<uint32_t> indices = {};
     for (int z = 0; z < 10; z++) {
@@ -87,7 +87,7 @@ TEST(chunky_tri_mesh_finds_every_triangle_in_a_covering_rect) {
     indices.release();
 }
 
-TEST(flood_fill_nav_mesh_splits_disconnected_islands) {
+TEST_CASE("flood fill nav mesh splits disconnected islands") {
     const float positions[] = {0, 0, 0, 2, 0, 0, 2, 0, 2, 0, 0, 2, 7, 0, 0, 9, 0, 0, 9, 0, 2, 7, 0, 2};
     const uint32_t indices[] = {0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7};
     NavMesh nav_mesh = create_nav_mesh_from_triangles(positions, 8, indices, 12);
@@ -114,7 +114,7 @@ TEST(flood_fill_nav_mesh_splits_disconnected_islands) {
 static const float PLANE_POSITIONS[] = {0, 0, 0, 10, 0, 0, 10, 0, 10, 0, 0, 10};
 static const uint32_t PLANE_INDICES[] = {0, 2, 1, 0, 3, 2};
 
-TEST(generate_solo_nav_mesh_covers_a_plane) {
+TEST_CASE("generate solo nav mesh covers a plane") {
     SoloNavMeshOptions options = {
         .cell_size = 0.2f,
         .cell_height = 0.2f,
@@ -149,7 +149,7 @@ TEST(generate_solo_nav_mesh_covers_a_plane) {
     nav_mesh_api::release(result.nav_mesh);
 }
 
-TEST(generate_tiled_nav_mesh_connects_tiles_across_a_plane) {
+TEST_CASE("generate tiled nav mesh connects tiles across a plane") {
     TiledNavMeshOptions options = {
         .cell_size = 0.2f,
         .cell_height = 0.2f,

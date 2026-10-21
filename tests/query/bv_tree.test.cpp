@@ -8,7 +8,7 @@ static bool overlaps(const int *bmin, const int *bmax, const NavMeshBvNode &node
            bmax[2] >= node.bmin[2];
 }
 
-TEST(bv_tree_traversal_matches_brute_force_over_leaves) {
+TEST_CASE("bv tree traversal matches brute force over leaves") {
     NavMeshTileParams params = {};
     Array<float> vertices = {};
     Array<NavMeshPoly> polys = {};
@@ -81,7 +81,7 @@ TEST(bv_tree_traversal_matches_brute_force_over_leaves) {
     poly_vertices.release();
 }
 
-TEST(bv_tree_snaps_near_integers_before_truncating) {
+TEST_CASE("bv tree snaps near integers before truncating") {
     NavMeshTileParams params = {};
     Array<NavMeshPoly> polys = {};
     Array<uint32_t> poly_vertices = {};

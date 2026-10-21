@@ -16,6 +16,14 @@ A working checklist. Tick items as they land, and record findings and numbers in
 - [x] **Tile add and remove**, in roam_bench and recast_bench: 0.56-0.64x of Detour. Rebuilding tiles at runtime is a main reason to use tiled meshes, and linking now walks each node's list to append.
 - [x] **Standalone queries** (move along surface 0.6x, wall segments 0.7x, query polygons and local neighbourhood about 0.93x, straight paths 1.2x): `move_along_surface`, `query_polygons`, `find_local_neighbourhood`, `find_straight_path`, `find_smooth_path`, `find_random_point_around_circle`.
 
+## Core next (2026-10-21)
+
+- [x] Tests on doctest.
+- [ ] Port navcat's remaining unit tests: heightfield (42), compact heightfield (31), chunky tri mesh, path corridor, geometry.
+- [ ] Robustness fuzzing: stale refs, NaN, zero-size buffers, tile and off-mesh churn with link invariants, degenerate generation input.
+- [ ] Saving and loading: Detour-aligned binary format, `save_tile` / `load_tile` plus a nav mesh file that restores refs. Design doc first.
+- [x] Decided: generation memory (not keeping intermediates) is user code.
+
 ## Performance
 
 - [ ] **The crowd's hottest phases.** Obstacle avoidance: three exact scalar rewrites measured and dropped; the remaining lever is SIMD over obstacles (deferred). Next: corners (`find_corners`).

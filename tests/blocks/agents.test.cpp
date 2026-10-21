@@ -31,7 +31,7 @@ static bool equals(const Array<NodeRef> &actual, const NodeRef *expected, uint32
     return true;
 }
 
-TEST(path_corridor_merge_start_moved_prepends_visited_in_reverse) {
+TEST_CASE("path corridor merge start moved prepends visited in reverse") {
     REFS(path, 1, 2, 3, 4);
     REFS(visited, 1, 7, 2);
 
@@ -47,7 +47,7 @@ TEST(path_corridor_merge_start_moved_prepends_visited_in_reverse) {
     path.release();
 }
 
-TEST(path_corridor_merge_start_shortcut_replaces_the_start) {
+TEST_CASE("path corridor merge start shortcut replaces the start") {
     REFS(path, 1, 2, 3, 4, 5);
     REFS(shortcut, 1, 9, 4);
 
@@ -63,7 +63,7 @@ TEST(path_corridor_merge_start_shortcut_replaces_the_start) {
     path.release();
 }
 
-TEST(path_corridor_fix_path_start_keeps_the_end) {
+TEST_CASE("path corridor fix path start keeps the end") {
     PathCorridor corridor = path_corridor::create();
     path_corridor::reset(corridor, 5, {0, 0, 0});
 
@@ -87,7 +87,7 @@ static NavMesh create_two_islands() {
     return nav_mesh;
 }
 
-TEST(path_corridor_move_over_off_mesh_connection_lands_on_the_far_side) {
+TEST_CASE("path corridor move over off mesh connection lands on the far side") {
     NavMesh nav_mesh = create_two_islands();
     const OffMeshConnectionAttachment &attachment = nav_mesh.off_mesh_connection_attachments[0];
 
@@ -120,7 +120,7 @@ static AgentParams test_agent_params() {
     };
 }
 
-TEST(crowd_reuses_removed_agent_ids) {
+TEST_CASE("crowd reuses removed agent ids") {
     NavMesh nav_mesh = create_two_islands();
     Crowd crowd = crowd::create(0.5f);
 
@@ -144,7 +144,7 @@ TEST(crowd_reuses_removed_agent_ids) {
     nav_mesh_api::release(nav_mesh);
 }
 
-TEST(crowd_agent_crosses_an_off_mesh_connection_to_its_target) {
+TEST_CASE("crowd agent crosses an off mesh connection to its target") {
     NavMesh nav_mesh = create_two_islands();
     Crowd crowd = crowd::create(0.5f);
 
@@ -176,7 +176,7 @@ static NavMesh create_open_floor() {
     return create_nav_mesh_from_triangles(positions, 4, indices, 6);
 }
 
-TEST(crowd_max_neighbours_keeps_the_nearest) {
+TEST_CASE("crowd max neighbours keeps the nearest") {
     NavMesh nav_mesh = create_open_floor();
 
     for (uint32_t cap = 0; cap <= 2; cap += 2) {

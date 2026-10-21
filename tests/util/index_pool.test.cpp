@@ -3,7 +3,7 @@
 
 using namespace roam;
 
-TEST(index_pool_counts_up_then_reuses_released) {
+TEST_CASE("index pool counts up then reuses released") {
     IndexPool pool = {};
     CHECK(index_pool::request(pool) == 0);
     CHECK(index_pool::request(pool) == 1);
@@ -14,7 +14,7 @@ TEST(index_pool_counts_up_then_reuses_released) {
     index_pool::release(pool);
 }
 
-TEST(index_pool_reuses_most_recently_released_first) {
+TEST_CASE("index pool reuses most recently released first") {
     IndexPool pool = {};
     for (int i = 0; i < 4; i++) index_pool::request(pool);
     index_pool::release_index(pool, 0);

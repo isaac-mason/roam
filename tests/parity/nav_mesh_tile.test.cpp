@@ -44,7 +44,7 @@ static void check_tile_detail(const char *prefix, const NavMeshTileDetailMesh &d
     CHECK_EXPECTED(name, widen(detail_mesh.detail_triangles, [](int value) { return value; }), expected);
 }
 
-TEST(tile_polys_match_navcat_on_nav_test) {
+TEST_CASE("tile polys match navcat on nav test") {
     NavTest nav_test = load_nav_test();
     REQUIRE(nav_test.fixture.loaded);
     const fixture::Fixture &expected = nav_test.fixture;

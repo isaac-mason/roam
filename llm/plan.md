@@ -34,7 +34,7 @@ roam/                      the library; includes read "roam/generate/heightfield
   blocks/                  navcat blocks/*, built as the separate roam_blocks target
     geometry/  generators/  search/  agents/
 tests/                     mirrors roam/, files end in .test.cpp
-  harness/                 test.h, fixture loader, main
+  harness/                 test.h (doctest plus CHECK_NEAR), leak listener, fixture loader, main
   parity/                  tests against navcat fixtures
 demos/
   app/                     sokol and imgui shell, camera, debug draw, model loading
@@ -65,7 +65,7 @@ From JS to C++:
    - File format: a u32 entry count, then per entry: u32 name length, name, u32 type (0 f64, 1 i32), u32 count, values. Little-endian.
 2. C++ tests load the fixtures and compare stage by stage: structure exactly, values within a float tolerance. The first stage that diverges tells you which file has the bug.
 3. Port navcat's `tst/*` suites.
-4. Use a tiny test harness written for roam, with no third-party test framework.
+4. Tests use doctest (fetched and pinned by CMake, test binaries only; the library has no dependencies). `doctest_discover_tests` registers each test with ctest; run one with `roam_tests -tc="name*"`. `tests/harness/` adds `CHECK_NEAR`, the fixture loader, and a listener that fails the run when a passing test leaks roam allocations. Test binaries build with exceptions, since doctest's `REQUIRE` throws; the library stays `-fno-exceptions`.
 
 ## Known divergences from navcat
 

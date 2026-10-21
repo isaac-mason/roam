@@ -1,7 +1,7 @@
 #include "tests/harness/fixture.h"
 #include "tests/harness/test.h"
 
-TEST(nav_test_solo_fixture_loads) {
+TEST_CASE("nav test solo fixture loads") {
     fixture::Fixture nav_test = fixture::load("nav_test_solo");
     REQUIRE(nav_test.loaded);
 

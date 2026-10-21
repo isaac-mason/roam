@@ -182,7 +182,7 @@ static SoloNavMeshOptions solo_options(const BlocksTest &test) {
     };
 }
 
-TEST(merge_positions_and_indices_matches_navcat_on_nav_test) {
+TEST_CASE("merge positions and indices matches navcat on nav test") {
     BlocksTest test = load_blocks_test();
     REQUIRE(test.expected.loaded);
 
@@ -203,7 +203,7 @@ TEST(merge_positions_and_indices_matches_navcat_on_nav_test) {
     release(test);
 }
 
-TEST(chunky_tri_mesh_matches_navcat_on_nav_test) {
+TEST_CASE("chunky tri mesh matches navcat on nav test") {
     BlocksTest test = load_blocks_test();
     REQUIRE(test.expected.loaded);
     const fixture::Fixture &expected = test.expected;
@@ -273,7 +273,7 @@ TEST(chunky_tri_mesh_matches_navcat_on_nav_test) {
     release(test);
 }
 
-TEST(generate_solo_nav_mesh_matches_navcat_on_nav_test) {
+TEST_CASE("generate solo nav mesh matches navcat on nav test") {
     BlocksTest test = load_blocks_test();
     REQUIRE(test.expected.loaded);
 
@@ -373,7 +373,7 @@ static NavMeshTile copy_tile(const NavMeshTile &tile) {
     return copy;
 }
 
-TEST(generate_tiled_nav_mesh_and_flood_fill_match_navcat_on_nav_test) {
+TEST_CASE("generate tiled nav mesh and flood fill match navcat on nav test") {
     BlocksTest test = load_blocks_test();
     REQUIRE(test.expected.loaded);
     const fixture::Fixture &expected = test.expected;
@@ -403,7 +403,7 @@ TEST(generate_tiled_nav_mesh_and_flood_fill_match_navcat_on_nav_test) {
     release(test);
 }
 
-TEST(removing_and_re_adding_a_tile_restores_every_link) {
+TEST_CASE("removing and re adding a tile restores every link") {
     BlocksTest test = load_blocks_test();
     REQUIRE(test.expected.loaded);
 
@@ -462,7 +462,7 @@ static Array<AgentPoint> load_agent_points(const fixture::Fixture &expected) {
 
 static Vec3 vec3_at(const double *values) { return {(float)values[0], (float)values[1], (float)values[2]}; }
 
-TEST(local_boundary_matches_navcat_on_nav_test) {
+TEST_CASE("local boundary matches navcat on nav test") {
     BlocksTest test = load_blocks_test();
     REQUIRE(test.expected.loaded);
     const fixture::Fixture &expected = test.expected;
@@ -506,7 +506,7 @@ TEST(local_boundary_matches_navcat_on_nav_test) {
     release(test);
 }
 
-TEST(obstacle_avoidance_matches_navcat) {
+TEST_CASE("obstacle avoidance matches navcat") {
     BlocksTest test = load_blocks_test();
     REQUIRE(test.expected.loaded);
 
@@ -601,7 +601,7 @@ static AgentParams crowd_agent_params(float radius, float max_speed, float colli
     };
 }
 
-TEST(crowd_matches_navcat_on_a_flat_scene) {
+TEST_CASE("crowd matches navcat on a flat scene") {
     BlocksTest test = load_blocks_test();
     REQUIRE(test.expected.loaded);
     const fixture::Fixture &expected = test.expected;
@@ -668,7 +668,7 @@ TEST(crowd_matches_navcat_on_a_flat_scene) {
     release(test);
 }
 
-TEST(crowd_matches_navcat_on_nav_test) {
+TEST_CASE("crowd matches navcat on nav test") {
     BlocksTest test = load_blocks_test();
     REQUIRE(test.expected.loaded);
     const fixture::Fixture &expected = test.expected;
@@ -690,7 +690,7 @@ TEST(crowd_matches_navcat_on_nav_test) {
         run_crowd(crowd, tiled.nav_mesh, agent_ids, 120, fixture::f64(expected, "crowd.frames"), fixture::i32(expected, "crowd.states"));
     printf("nav-test crowd: first divergent frame %u, max xz error %f, max height error %f, final state mismatches %u\n",
            comparison.first_divergent_frame, comparison.max_xz_error, comparison.max_height_error, comparison.final_state_mismatches);
-    CHECK(comparison.first_divergent_frame == 0 || comparison.first_divergent_frame > 30);
+    CHECK((comparison.first_divergent_frame == 0 || comparison.first_divergent_frame > 30));
     CHECK(comparison.max_xz_error < 0.5f);
     CHECK(comparison.final_state_mismatches == 0);
 

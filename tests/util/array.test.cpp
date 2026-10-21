@@ -3,7 +3,7 @@
 
 using namespace roam;
 
-TEST(array_starts_empty_when_zeroed) {
+TEST_CASE("array starts empty when zeroed") {
     Array<int> array = {};
     CHECK(array.length == 0);
     CHECK(array.capacity == 0);
@@ -11,7 +11,7 @@ TEST(array_starts_empty_when_zeroed) {
     array.release();
 }
 
-TEST(array_push_grows_and_keeps_values) {
+TEST_CASE("array push grows and keeps values") {
     Array<int> array = {};
     for (int i = 0; i < 100; i++) array.push(i * 3);
     REQUIRE(array.length == 100);
@@ -19,7 +19,7 @@ TEST(array_push_grows_and_keeps_values) {
     array.release();
 }
 
-TEST(array_push_of_own_element_survives_growth) {
+TEST_CASE("array push of own element survives growth") {
     Array<int> array = {};
     for (int i = 0; i < 8; i++) array.push(i);
     REQUIRE(array.length == array.capacity);
@@ -28,7 +28,7 @@ TEST(array_push_of_own_element_survives_growth) {
     array.release();
 }
 
-TEST(array_pop_returns_last) {
+TEST_CASE("array pop returns last") {
     Array<int> array = {};
     array.push(1);
     array.push(2);
@@ -37,7 +37,7 @@ TEST(array_pop_returns_last) {
     array.release();
 }
 
-TEST(array_resize_fills_new_elements) {
+TEST_CASE("array resize fills new elements") {
     Array<int> array = {};
     array.push(5);
     array.resize(4, -1);
@@ -47,7 +47,7 @@ TEST(array_resize_fills_new_elements) {
     array.release();
 }
 
-TEST(array_remove_swap_moves_last_into_place) {
+TEST_CASE("array remove swap moves last into place") {
     Array<int> array = {};
     for (int i = 0; i < 4; i++) array.push(i);
     array.remove_swap(1);
@@ -56,7 +56,7 @@ TEST(array_remove_swap_moves_last_into_place) {
     array.release();
 }
 
-TEST(array_iterates_with_range_for) {
+TEST_CASE("array iterates with range for") {
     Array<int> array = {};
     for (int i = 1; i <= 4; i++) array.push(i);
     int sum = 0;

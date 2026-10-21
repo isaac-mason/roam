@@ -46,12 +46,12 @@ static void check_contours(RegionMethod method, uint32_t build_flags, const char
     release(nav_test);
 }
 
-TEST(watershed_contours_match_navcat_on_nav_test) { check_contours(REGION_METHOD_WATERSHED, CONTOUR_TESS_WALL_EDGES, "contours.watershed"); }
+TEST_CASE("watershed contours match navcat on nav test") { check_contours(REGION_METHOD_WATERSHED, CONTOUR_TESS_WALL_EDGES, "contours.watershed"); }
 
-TEST(monotone_contours_match_navcat_on_nav_test) {
+TEST_CASE("monotone contours match navcat on nav test") {
     check_contours(REGION_METHOD_MONOTONE, CONTOUR_TESS_WALL_EDGES | CONTOUR_TESS_AREA_EDGES, "contours.monotone");
 }
 
-TEST(layer_contours_match_navcat_on_nav_test) {
+TEST_CASE("layer contours match navcat on nav test") {
     check_contours(REGION_METHOD_LAYERS, CONTOUR_TESS_WALL_EDGES | CONTOUR_TESS_AREA_EDGES, "contours.layers");
 }

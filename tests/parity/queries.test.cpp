@@ -96,7 +96,7 @@ static float next_random(void *user_data) {
     return (float)((double)lcg.state / 4294967296.0);
 }
 
-TEST(queries_match_navcat_on_nav_test) {
+TEST_CASE("queries match navcat on nav test") {
     fixture::Fixture expected = fixture::load("nav_test_solo");
     REQUIRE(expected.loaded);
 

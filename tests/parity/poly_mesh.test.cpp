@@ -37,10 +37,10 @@ static void check_poly_mesh(RegionMethod method, int max_vertices_per_poly, cons
     release(nav_test);
 }
 
-TEST(watershed_poly_mesh_matches_navcat_on_nav_test) { check_poly_mesh(REGION_METHOD_WATERSHED, 5, "poly_mesh.watershed"); }
+TEST_CASE("watershed poly mesh matches navcat on nav test") { check_poly_mesh(REGION_METHOD_WATERSHED, 5, "poly_mesh.watershed"); }
 
-TEST(monotone_poly_mesh_matches_navcat_on_nav_test) { check_poly_mesh(REGION_METHOD_MONOTONE, 5, "poly_mesh.monotone"); }
+TEST_CASE("monotone poly mesh matches navcat on nav test") { check_poly_mesh(REGION_METHOD_MONOTONE, 5, "poly_mesh.monotone"); }
 
-TEST(layer_poly_mesh_matches_navcat_on_nav_test) { check_poly_mesh(REGION_METHOD_LAYERS, 5, "poly_mesh.layers"); }
+TEST_CASE("layer poly mesh matches navcat on nav test") { check_poly_mesh(REGION_METHOD_LAYERS, 5, "poly_mesh.layers"); }
 
-TEST(triangle_poly_mesh_matches_navcat_on_nav_test) { check_poly_mesh(REGION_METHOD_WATERSHED, 3, "poly_mesh.triangles"); }
+TEST_CASE("triangle poly mesh matches navcat on nav test") { check_poly_mesh(REGION_METHOD_WATERSHED, 3, "poly_mesh.triangles"); }

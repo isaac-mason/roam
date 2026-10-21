@@ -3,14 +3,14 @@
 
 using namespace roam;
 
-TEST(map_get_on_empty_is_null) {
+TEST_CASE("map get on empty is null") {
     Map<uint64_t, int> map = {};
     CHECK(map.get(42) == nullptr);
     CHECK(!map.remove(42));
     map.release();
 }
 
-TEST(map_set_then_get) {
+TEST_CASE("map set then get") {
     Map<uint64_t, int> map = {};
     map.set(7, 70);
     map.set(9, 90);
@@ -21,7 +21,7 @@ TEST(map_set_then_get) {
     map.release();
 }
 
-TEST(map_set_overwrites_existing_key) {
+TEST_CASE("map set overwrites existing key") {
     Map<uint32_t, int> map = {};
     map.set(1, 10);
     map.set(1, 11);
@@ -30,7 +30,7 @@ TEST(map_set_overwrites_existing_key) {
     map.release();
 }
 
-TEST(map_survives_growth_and_removal) {
+TEST_CASE("map survives growth and removal") {
     Map<uint64_t, uint64_t> map = {};
     for (uint64_t i = 0; i < 10000; i++) map.set(i * 7919, i);
     for (uint64_t i = 0; i < 10000; i += 2) CHECK(map.remove(i * 7919));
@@ -47,7 +47,7 @@ TEST(map_survives_growth_and_removal) {
     map.release();
 }
 
-TEST(map_reuses_removed_slots_without_growing_forever) {
+TEST_CASE("map reuses removed slots without growing forever") {
     Map<uint32_t, int> map = {};
     for (int round = 0; round < 1000; round++) {
         map.set((uint32_t)round, round);
@@ -58,7 +58,7 @@ TEST(map_reuses_removed_slots_without_growing_forever) {
     map.release();
 }
 
-TEST(map_supports_negative_signed_keys) {
+TEST_CASE("map supports negative signed keys") {
     Map<int32_t, int> map = {};
     map.set(-5, 1);
     map.set(5, 2);

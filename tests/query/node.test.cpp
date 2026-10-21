@@ -10,11 +10,11 @@ static void check_roundtrip(NodeType type, uint32_t node_index, uint32_t sequenc
     CHECK(node::get_node_ref_sequence(ref) == sequence);
 }
 
-TEST(node_ref_roundtrips_basic_values) { check_roundtrip(NODE_TYPE_POLY, 100, 42); }
+TEST_CASE("node ref roundtrips basic values") { check_roundtrip(NODE_TYPE_POLY, 100, 42); }
 
-TEST(node_ref_roundtrips_max_values) { check_roundtrip(NODE_TYPE_OFFMESH, node::MAX_NODE_INDEX, node::MAX_SEQUENCE); }
+TEST_CASE("node ref roundtrips max values") { check_roundtrip(NODE_TYPE_OFFMESH, node::MAX_NODE_INDEX, node::MAX_SEQUENCE); }
 
-TEST(node_ref_roundtrips_various_poly_values) {
+TEST_CASE("node ref roundtrips various poly values") {
     check_roundtrip(NODE_TYPE_POLY, 0, 0);
     check_roundtrip(NODE_TYPE_POLY, 1, 1);
     check_roundtrip(NODE_TYPE_POLY, 12345, 50);
@@ -23,14 +23,14 @@ TEST(node_ref_roundtrips_various_poly_values) {
     check_roundtrip(NODE_TYPE_POLY, node::MAX_NODE_INDEX >> 1, node::MAX_SEQUENCE >> 1);
 }
 
-TEST(node_ref_roundtrips_various_offmesh_values) {
+TEST_CASE("node ref roundtrips various offmesh values") {
     check_roundtrip(NODE_TYPE_OFFMESH, 0, 0);
     check_roundtrip(NODE_TYPE_OFFMESH, 1, 1);
     check_roundtrip(NODE_TYPE_OFFMESH, 12345, 50);
     check_roundtrip(NODE_TYPE_OFFMESH, 1000000, 100000);
 }
 
-TEST(node_ref_type_bit_is_isolated) {
+TEST_CASE("node ref type bit is isolated") {
     NodeRef poly = node::ser_node_ref(NODE_TYPE_POLY, 12345, 678);
     NodeRef offmesh = node::ser_node_ref(NODE_TYPE_OFFMESH, 12345, 678);
     CHECK(node::get_node_ref_index(poly) == 12345);
@@ -41,7 +41,7 @@ TEST(node_ref_type_bit_is_isolated) {
     CHECK(node::get_node_ref_type(offmesh) == NODE_TYPE_OFFMESH);
 }
 
-TEST(node_ref_invalid_is_distinct_from_valid_refs) {
+TEST_CASE("node ref invalid is distinct from valid refs") {
     CHECK(node::ser_node_ref(NODE_TYPE_POLY, 0, 0) != INVALID_NODE_REF);
     CHECK(node::ser_node_ref(NODE_TYPE_POLY, 1, 1) != INVALID_NODE_REF);
     CHECK(node::ser_node_ref(NODE_TYPE_POLY, node::MAX_NODE_INDEX, node::MAX_SEQUENCE) != INVALID_NODE_REF);
@@ -49,7 +49,7 @@ TEST(node_ref_invalid_is_distinct_from_valid_refs) {
     CHECK(node::ser_node_ref(NODE_TYPE_OFFMESH, node::MAX_NODE_INDEX, node::MAX_SEQUENCE) != INVALID_NODE_REF);
 }
 
-TEST(node_ref_invalid_deserializes_to_max_fields) {
+TEST_CASE("node ref invalid deserializes to max fields") {
     CHECK(node::get_node_ref_type(INVALID_NODE_REF) == NODE_TYPE_OFFMESH);
     CHECK(node::get_node_ref_index(INVALID_NODE_REF) == 2147483647u);
     CHECK(node::get_node_ref_sequence(INVALID_NODE_REF) == 1048575u);

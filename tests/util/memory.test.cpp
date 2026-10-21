@@ -7,7 +7,7 @@ using namespace roam;
 
 static void release_array(Array<int> &array) { array.release(); }
 
-TEST(memory_tracking_counts_outstanding_allocations) {
+TEST_CASE("memory tracking counts outstanding allocations") {
     if (!memory::tracking_enabled()) return;
 
     memory::MemoryStats before = memory::outstanding();
@@ -23,7 +23,7 @@ TEST(memory_tracking_counts_outstanding_allocations) {
     CHECK(after.bytes == before.bytes);
 }
 
-TEST(release_is_safe_to_repeat) {
+TEST_CASE("release is safe to repeat") {
     Array<int> values = {};
     values.release();
     values.push(3);
@@ -33,7 +33,7 @@ TEST(release_is_safe_to_repeat) {
     CHECK(values.length == 0);
 }
 
-TEST(scoped_releases_at_end_of_scope) {
+TEST_CASE("scoped releases at end of scope") {
     if (!memory::tracking_enabled()) return;
 
     memory::MemoryStats before = memory::outstanding();
@@ -53,7 +53,7 @@ static Scoped<Array<int>> make_values() {
     return values;
 }
 
-TEST(scoped_moves_ownership) {
+TEST_CASE("scoped moves ownership") {
     if (!memory::tracking_enabled()) return;
 
     memory::MemoryStats before = memory::outstanding();

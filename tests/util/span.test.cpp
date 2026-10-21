@@ -14,7 +14,7 @@ static void fill(Span<int> values) {
     for (uint32_t i = 0; i < values.capacity; i++) values[i] = (int)i + 1;
 }
 
-TEST(span_comes_from_arrays_and_c_arrays) {
+TEST_CASE("span comes from arrays and c arrays") {
     int fixed[3];
     fill(fixed);
     CHECK(fixed[2] == 3);

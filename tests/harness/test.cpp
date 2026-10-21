@@ -1,70 +1,47 @@
 #include "tests/harness/test.h"
 
 #include <stdio.h>
-#include <string.h>
 
 #include "roam/util/memory.h"
 
 namespace test {
 
-struct Case {
-    const char *name;
-    const char *file;
-    void (*run)();
+static int leaking_tests = 0;
+
+void fail(const char *file, int line, const char *message) { ADD_FAIL_CHECK_AT(file, line, doctest::String(message)); }
+
+int leak_count() { return leaking_tests; }
+
+struct LeakListener : doctest::IReporter {
+    roam::memory::MemoryStats before = {};
+    const doctest::TestCaseData *test_case = nullptr;
+
+    LeakListener(const doctest::ContextOptions &) {}
+
+    void report_query(const doctest::QueryData &) override {}
+    void test_run_start() override {}
+    void test_run_end(const doctest::TestRunStats &) override {}
+    void test_case_start(const doctest::TestCaseData &data) override {
+        test_case = &data;
+        before = roam::memory::outstanding();
+    }
+    void test_case_reenter(const doctest::TestCaseData &) override {}
+    void test_case_end(const doctest::CurrentTestCaseStats &stats) override {
+        roam::memory::MemoryStats after = roam::memory::outstanding();
+        if (stats.failure_flags != 0) return;
+        if (after.allocations == before.allocations && after.bytes == before.bytes) return;
+        printf("%s:%d: %s leaked %lld allocations (%lld bytes)\n", test_case->m_file.c_str(), test_case->m_line, test_case->m_name,
+               (long long)(after.allocations - before.allocations), (long long)(after.bytes - before.bytes));
+        leaking_tests++;
+    }
+    void test_case_exception(const doctest::TestCaseException &) override {}
+    void subcase_start(const doctest::SubcaseSignature &) override {}
+    void subcase_end() override {}
+    void log_assert(const doctest::AssertData &) override {}
+    void log_message(const doctest::MessageData &) override {}
+    void test_case_skipped(const doctest::TestCaseData &) override {}
 };
 
-static const int MAX_CASES = 4096;
-static Case cases[MAX_CASES];
-static int case_count = 0;
-static int current_failures = 0;
-static const char *current_name = nullptr;
-
-void add(const char *name, const char *file, void (*run)()) {
-    if (case_count == MAX_CASES) {
-        fprintf(stderr, "too many tests, raise MAX_CASES\n");
-        return;
-    }
-    cases[case_count++] = {name, file, run};
-}
-
-void fail(const char *file, int line, const char *message) {
-    if (current_failures == 0) printf("FAIL %s\n", current_name);
-    printf("  %s:%d: %s\n", file, line, message);
-    current_failures++;
-}
-
-void fail_near(const char *file, int line, const char *expression, double actual, double expected, double tolerance) {
-    char message[512];
-    snprintf(message, sizeof(message), "%s is %.9g, expected %.9g within %.3g", expression, actual, expected, tolerance);
-    fail(file, line, message);
-}
-
-static bool matches(const Case &test_case, const char *filter) {
-    if (filter == nullptr) return true;
-    return strstr(test_case.name, filter) != nullptr || strstr(test_case.file, filter) != nullptr;
-}
-
-int run_all(const char *filter) {
-    int ran = 0;
-    int failed = 0;
-    for (int i = 0; i < case_count; i++) {
-        if (!matches(cases[i], filter)) continue;
-        current_name = cases[i].name;
-        current_failures = 0;
-        roam::memory::MemoryStats before = roam::memory::outstanding();
-        cases[i].run();
-        roam::memory::MemoryStats after = roam::memory::outstanding();
-        if (current_failures == 0 && (after.allocations != before.allocations || after.bytes != before.bytes)) {
-            char message[256];
-            snprintf(message, sizeof(message), "leaked %lld allocations (%lld bytes)", (long long)(after.allocations - before.allocations),
-                     (long long)(after.bytes - before.bytes));
-            fail(cases[i].file, 0, message);
-        }
-        ran++;
-        if (current_failures > 0) failed++;
-    }
-    printf("%d passed, %d failed\n", ran - failed, failed);
-    return failed == 0 ? 0 : 1;
-}
+DOCTEST_REGISTER_LISTENER("leaks", 1, LeakListener);
 
 }

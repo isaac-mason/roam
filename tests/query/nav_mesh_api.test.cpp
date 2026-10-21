@@ -17,31 +17,31 @@ static NavMeshTile mock_tile(int tile_x, int tile_y, int tile_layer) {
     return tile;
 }
 
-TEST(get_tile_at_returns_tile_at_position) {
+TEST_CASE("get tile at returns tile at position") {
     NavMesh nav_mesh = nav_mesh_api::create_nav_mesh();
     nav_mesh_api::add_tile(nav_mesh, mock_tile(0, 0, 0));
 
     const NavMeshTile *tile = nav_mesh_api::get_tile_at(nav_mesh, 0, 0, 0);
     REQUIRE(tile != nullptr);
-    CHECK(tile->tile_x == 0 && tile->tile_y == 0 && tile->tile_layer == 0);
+    CHECK((tile->tile_x == 0 && tile->tile_y == 0 && tile->tile_layer == 0));
 
     nav_mesh_api::release(nav_mesh);
 }
 
-TEST(get_tile_at_returns_null_for_missing_position) {
+TEST_CASE("get tile at returns null for missing position") {
     NavMesh nav_mesh = nav_mesh_api::create_nav_mesh();
     CHECK(nav_mesh_api::get_tile_at(nav_mesh, 5, 5, 0) == nullptr);
     nav_mesh_api::release(nav_mesh);
 }
 
-TEST(get_tile_at_differentiates_layers) {
+TEST_CASE("get tile at differentiates layers") {
     NavMesh nav_mesh = nav_mesh_api::create_nav_mesh();
     nav_mesh_api::add_tile(nav_mesh, mock_tile(1, 1, 0));
     nav_mesh_api::add_tile(nav_mesh, mock_tile(1, 1, 1));
 
     const NavMeshTile *layer_0 = nav_mesh_api::get_tile_at(nav_mesh, 1, 1, 0);
     const NavMeshTile *layer_1 = nav_mesh_api::get_tile_at(nav_mesh, 1, 1, 1);
-    REQUIRE(layer_0 != nullptr && layer_1 != nullptr);
+    REQUIRE((layer_0 != nullptr && layer_1 != nullptr));
     CHECK(layer_0->tile_layer == 0);
     CHECK(layer_1->tile_layer == 1);
     CHECK(layer_0->id != layer_1->id);
@@ -49,18 +49,18 @@ TEST(get_tile_at_differentiates_layers) {
     nav_mesh_api::release(nav_mesh);
 }
 
-TEST(get_tile_at_handles_negative_coordinates) {
+TEST_CASE("get tile at handles negative coordinates") {
     NavMesh nav_mesh = nav_mesh_api::create_nav_mesh();
     nav_mesh_api::add_tile(nav_mesh, mock_tile(-5, -3, 0));
 
     const NavMeshTile *tile = nav_mesh_api::get_tile_at(nav_mesh, -5, -3, 0);
     REQUIRE(tile != nullptr);
-    CHECK(tile->tile_x == -5 && tile->tile_y == -3);
+    CHECK((tile->tile_x == -5 && tile->tile_y == -3));
 
     nav_mesh_api::release(nav_mesh);
 }
 
-TEST(get_tile_ids_at_returns_all_layers) {
+TEST_CASE("get tile ids at returns all layers") {
     NavMesh nav_mesh = nav_mesh_api::create_nav_mesh();
     for (int layer = 0; layer < 3; layer++) nav_mesh_api::add_tile(nav_mesh, mock_tile(2, 3, layer));
 
@@ -73,25 +73,25 @@ TEST(get_tile_ids_at_returns_all_layers) {
     nav_mesh_api::release(nav_mesh);
 }
 
-TEST(get_tile_ids_at_returns_empty_for_missing_position) {
+TEST_CASE("get tile ids at returns empty for missing position") {
     NavMesh nav_mesh = nav_mesh_api::create_nav_mesh();
     CHECK(nav_mesh_api::get_tile_ids_at(nav_mesh, 10, 10).capacity == 0);
     nav_mesh_api::release(nav_mesh);
 }
 
-TEST(get_tile_ids_at_handles_negative_coordinates_and_ignores_other_columns) {
+TEST_CASE("get tile ids at handles negative coordinates and ignores other columns") {
     NavMesh nav_mesh = nav_mesh_api::create_nav_mesh();
     nav_mesh_api::add_tile(nav_mesh, mock_tile(-10, -5, 0));
     nav_mesh_api::add_tile(nav_mesh, mock_tile(-9, -5, 0));
 
     Span<const uint32_t> tile_ids = nav_mesh_api::get_tile_ids_at(nav_mesh, -10, -5);
     REQUIRE(tile_ids.capacity == 1);
-    CHECK(nav_mesh.tiles[tile_ids[0]].tile_x == -10 && nav_mesh.tiles[tile_ids[0]].tile_y == -5);
+    CHECK((nav_mesh.tiles[tile_ids[0]].tile_x == -10 && nav_mesh.tiles[tile_ids[0]].tile_y == -5));
 
     nav_mesh_api::release(nav_mesh);
 }
 
-TEST(add_tile_replaces_tile_at_same_position) {
+TEST_CASE("add tile replaces tile at same position") {
     NavMesh nav_mesh = nav_mesh_api::create_nav_mesh();
     nav_mesh_api::add_tile(nav_mesh, mock_tile(0, 0, 0));
     uint32_t first_sequence = nav_mesh_api::get_tile_at(nav_mesh, 0, 0, 0)->sequence;
