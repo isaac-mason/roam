@@ -11,8 +11,7 @@
 #include <GL/gl.h>
 #endif
 
-#include "app/app.h"
-#include "app/examples.h"
+#include "app/shell.h"
 #include "imgui.h"
 #include "sokol_app.h"
 #include "sokol_gfx.h"
@@ -33,65 +32,15 @@ struct Input {
     float y;
 };
 
-static App state;
 static Input input;
-static int current_example = -1;
 static int initial_example = 0;
 static const char *screenshot_path = nullptr;
 static const char *drop_path = nullptr;
 static int frame_count = 0;
 
-namespace app {
-
-void load_level(App &app, const char *name, ModelLoadOptions options) { set_level(app, model::load(name, options)); }
-
-void set_level(App &app, Model level) {
-    model::release(app.level);
-    app.level = level;
-    renderer::set_level(app.renderer, app.level);
-    if (app.level.loaded) camera::frame_bounds(app.camera, app.level.bounds);
-}
-
-void draw_static(App &app, const StaticDrawing &drawing) { app.statics.push(drawing); }
-
-DrawList &frame(App &app) { return app.renderer.frame; }
-
-double now_milliseconds() { return stm_ms(stm_now()); }
-
-void lift(DebugPrimitives &primitives, float height) {
-    for (DebugPrimitive &primitive : primitives) {
-        for (uint32_t i = 1; i < primitive.positions.length; i += 3) primitive.positions[i] += height;
-    }
-}
-
-}
-
-static void select_example(int index) {
-    if (index == current_example) return;
-    if (current_example >= 0 && EXAMPLES[current_example]->shutdown) EXAMPLES[current_example]->shutdown(state);
-    current_example = index;
-    state.click = {};
-    state.want_hover = false;
-    EXAMPLES[current_example]->init(state);
-}
-
 static void init() {
-    sg_desc desc = {};
-    desc.environment = sglue_environment();
-    desc.logger.func = slog_func;
-    sg_setup(&desc);
-
-    simgui_desc_t imgui = {};
-    imgui.logger.func = slog_func;
-    simgui_setup(&imgui);
-
     stm_setup();
-
-    state.renderer = renderer::create();
-    state.camera = camera::create();
-    state.show_level = true;
-
-    select_example(initial_example);
+    shell::setup(sglue_environment(), initial_example);
 }
 
 static void save_screenshot() {
@@ -114,114 +63,32 @@ static void save_screenshot() {
     sapp_request_quit();
 }
 
-static void read_dropped_file(const char *path);
-
 static void frame() {
-    float width = sapp_widthf();
-    float height = sapp_heightf();
-    float delta_time = (float)sapp_frame_duration();
+    if (drop_path && frame_count == 1) shell::read_dropped_file(drop_path);
 
-    simgui_frame_desc_t imgui_frame = {};
-    imgui_frame.width = sapp_width();
-    imgui_frame.height = sapp_height();
-    imgui_frame.delta_time = sapp_frame_duration();
-    imgui_frame.dpi_scale = sapp_dpi_scale();
-    simgui_new_frame(&imgui_frame);
-
-    camera::update(state.camera, width, height);
-    renderer::clear(state.renderer.frame);
-    state.statics.clear();
-
-    state.hover = {};
-    if (state.want_hover && !ImGui::GetIO().WantCaptureMouse) {
-        Ray ray = camera::screen_ray(state.camera, input.x, input.y);
-        RayHit hit = model::raycast(state.level, ray);
-        state.hover = {hit.hit, hit.point, ray};
-    }
-
-    if (drop_path && frame_count == 1) read_dropped_file(drop_path);
-
-    const Example &example = *EXAMPLES[current_example];
-    if (example.update) example.update(state, delta_time);
-    state.click = {};
-    if (state.dropped.ready || state.dropped.failed) {
-        state.dropped.ready = false;
-        state.dropped.failed = false;
-        state.dropped.data.clear();
-    }
-
-    ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(340, 0), ImGuiCond_FirstUseEver);
-    ImGui::Begin("roam");
-    if (ImGui::BeginCombo("example", example.name)) {
-        for (int i = 0; i < EXAMPLE_COUNT; i++) {
-            if (ImGui::Selectable(EXAMPLES[i]->name, i == current_example)) select_example(i);
-        }
-        ImGui::EndCombo();
-    }
-    ImGui::Checkbox("show level", &state.show_level);
-    ImGui::Text("%.1f ms", delta_time * 1000.0f);
-    ImGui::Separator();
-    if (EXAMPLES[current_example]->ui) EXAMPLES[current_example]->ui(state);
-    ImGui::End();
-
-    sg_pass pass = {};
-    pass.action.colors[0].load_action = SG_LOADACTION_CLEAR;
-    pass.action.colors[0].clear_value = {0.125f, 0.125f, 0.125f, 1.0f};
-    pass.swapchain = sglue_swapchain();
-    sg_begin_pass(&pass);
-    renderer::render(state.renderer, state.camera, state.statics.data, state.statics.length, state.show_level);
-    simgui_render();
-    sg_end_pass();
-    sg_commit();
+    FrameInput frame_input = {sapp_widthf(), sapp_heightf(), (float)sapp_frame_duration(), sapp_dpi_scale(), input.x, input.y, sglue_swapchain()};
+    shell::frame(frame_input);
 
     frame_count++;
     if (screenshot_path && frame_count == 30) save_screenshot();
 }
 
-static void cleanup() {
-    if (current_example >= 0 && EXAMPLES[current_example]->shutdown) EXAMPLES[current_example]->shutdown(state);
-    model::release(state.level);
-    state.dropped.data.release();
-    state.statics.release();
-    renderer::destroy(state.renderer);
-    simgui_shutdown();
-    sg_shutdown();
-}
+static void cleanup() { shell::shutdown(); }
 
 #if defined(__EMSCRIPTEN__)
 static void dropped_file_fetched(const sapp_html5_fetch_response *response) {
-    state.dropped.pending = false;
+    shell::app().dropped.pending = false;
     if (response->succeeded) {
-        state.dropped.data.resize((uint32_t)response->data.size);
-        state.dropped.ready = true;
+        shell::app().dropped.data.resize((uint32_t)response->data.size);
+        shell::app().dropped.ready = true;
     } else {
-        state.dropped.failed = true;
+        shell::app().dropped.failed = true;
     }
 }
 #endif
 
-static void read_dropped_file(const char *path) {
-    DroppedFile &dropped = state.dropped;
-    snprintf(dropped.path, sizeof(dropped.path), "%s", path);
-    FILE *file = fopen(dropped.path, "rb");
-    if (!file) {
-        dropped.failed = true;
-        return;
-    }
-    fseek(file, 0, SEEK_END);
-    long size = ftell(file);
-    fseek(file, 0, SEEK_SET);
-    dropped.data.clear();
-    dropped.data.resize((uint32_t)size);
-    size_t read = fread(dropped.data.data, 1, (size_t)size, file);
-    fclose(file);
-    dropped.data.resize((uint32_t)read);
-    dropped.ready = true;
-}
-
 static void receive_dropped_file() {
-    DroppedFile &dropped = state.dropped;
+    DroppedFile &dropped = shell::app().dropped;
     dropped.ready = false;
     dropped.failed = false;
     if (sapp_get_num_dropped_files() < 1) return;
@@ -238,14 +105,12 @@ static void receive_dropped_file() {
     dropped.pending = true;
     sapp_html5_fetch_dropped_file(&request);
 #else
-    read_dropped_file(sapp_get_dropped_file_path(0));
+    shell::read_dropped_file(sapp_get_dropped_file_path(0));
 #endif
 }
 
 static void click(float x, float y, sapp_mousebutton button, uint32_t modifiers) {
-    Ray ray = camera::screen_ray(state.camera, x, y);
-    RayHit hit = model::raycast(state.level, ray);
-    state.click = {true, hit.hit, hit.point, button != SAPP_MOUSEBUTTON_LEFT, (modifiers & SAPP_MODIFIER_SHIFT) != 0, ray};
+    shell::click(x, y, button != SAPP_MOUSEBUTTON_LEFT, (modifiers & SAPP_MODIFIER_SHIFT) != 0);
 }
 
 static void event(const sapp_event *e) {
@@ -269,9 +134,9 @@ static void event(const sapp_event *e) {
             if (moved_x * moved_x + moved_y * moved_y > 16) input.dragging = true;
             if (!input.dragging) break;
             if (input.button == SAPP_MOUSEBUTTON_LEFT && (e->modifiers & SAPP_MODIFIER_SHIFT) == 0) {
-                camera::orbit(state.camera, dx, dy);
+                camera::orbit(shell::app().camera, dx, dy);
             } else {
-                camera::pan(state.camera, dx, dy);
+                camera::pan(shell::app().camera, dx, dy);
             }
             break;
         }
@@ -280,16 +145,16 @@ static void event(const sapp_event *e) {
             input.down = false;
             break;
         case SAPP_EVENTTYPE_KEY_DOWN:
-            if (!ImGui::GetIO().WantCaptureKeyboard && e->key_code >= 0 && e->key_code < 512) state.keys[e->key_code] = true;
+            if (!ImGui::GetIO().WantCaptureKeyboard && e->key_code >= 0 && e->key_code < 512) shell::app().keys[e->key_code] = true;
             break;
         case SAPP_EVENTTYPE_KEY_UP:
-            if (e->key_code >= 0 && e->key_code < 512) state.keys[e->key_code] = false;
+            if (e->key_code >= 0 && e->key_code < 512) shell::app().keys[e->key_code] = false;
             break;
         case SAPP_EVENTTYPE_FILES_DROPPED:
             receive_dropped_file();
             break;
         case SAPP_EVENTTYPE_MOUSE_SCROLL:
-            camera::zoom(state.camera, e->scroll_y);
+            camera::zoom(shell::app().camera, e->scroll_y);
             break;
         default:
             break;
@@ -306,9 +171,8 @@ sapp_desc sokol_main(int argc, char **argv) {
             drop_path = argv[++arg];
             continue;
         }
-        for (int i = 0; i < EXAMPLE_COUNT; i++) {
-            if (strcmp(EXAMPLES[i]->name, argv[arg]) == 0) initial_example = i;
-        }
+        int found = shell::find_example(argv[arg]);
+        if (found >= 0) initial_example = found;
     }
 
     sapp_desc desc = {};

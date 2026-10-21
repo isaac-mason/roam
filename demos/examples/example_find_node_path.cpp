@@ -24,8 +24,11 @@ struct FindNodePathExample {
     uint32_t node_count;
     uint32_t search_node_count;
     SearchWorkspace workspace;
-    NodeRef node_path[MAX_NODE_PATH];
+    Array<NodeRef> node_path;
+    uint32_t times_grown;
 };
+
+static const uint32_t INITIAL_NODE_PATH = 16;
 
 static FindNodePathExample find_node_path_example;
 
@@ -52,9 +55,15 @@ static void update_path() {
 
     if (start.success && end.success) {
         double begin = app::now_milliseconds();
-        FindNodePathResult path = {};
+        FindNodePathResult path;
         nav_mesh_search::find_node_path(path, state.workspace, nav_mesh, start.node_ref, end.node_ref, start.position, end.position,
                                         nav_mesh_api::DEFAULT_QUERY_FILTER, state.node_path);
+        if (path.truncated) {
+            state.node_path.resize(path.path_total);
+            state.times_grown++;
+            nav_mesh_search::find_node_path(path, state.workspace, nav_mesh, start.node_ref, end.node_ref, start.position, end.position,
+                                            nav_mesh_api::DEFAULT_QUERY_FILTER, state.node_path);
+        }
         state.query_milliseconds = app::now_milliseconds() - begin;
         state.searched = true;
         state.success = path.success;
@@ -84,6 +93,7 @@ static void init(App &app) {
     FindNodePathExample &state = find_node_path_example;
     state = {};
     state.workspace = nav_mesh_search::create_search_workspace();
+    state.node_path.resize(INITIAL_NODE_PATH);
     state.start = {-3.94f, 0.26f, 4.71f};
     state.end = {2.52f, 2.39f, -2.2f};
     app.want_hover = true;
@@ -137,6 +147,7 @@ static void ui(App &) {
     }
     ImGui::Text("%s in %.3f ms", state.success ? "found" : "failed", state.query_milliseconds);
     ImGui::Text("%u path nodes, %u search nodes", state.node_count, state.search_node_count);
+    ImGui::Text("path buffer holds %u nodes, grown %u times", state.node_path.length, state.times_grown);
     if (state.flags & FIND_NODE_PATH_RESULT_PARTIAL_PATH) ImGui::Text("partial path");
 }
 
@@ -145,6 +156,7 @@ static void shutdown(App &) {
     renderer::release(state.nav_mesh_drawing);
     renderer::release(state.path_drawing);
     nav_mesh_search::release(state.workspace);
+    state.node_path.release();
     if (state.generated) {
         generate_tiled_nav_mesh::release(state.result.intermediates);
         nav_mesh_api::release_nav_mesh(state.result.nav_mesh);
