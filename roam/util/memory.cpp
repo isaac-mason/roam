@@ -26,14 +26,18 @@ static Allocator current = {system_allocate, system_free, nullptr};
 #if ROAM_MEMORY_TRACKING
 static volatile int64_t outstanding_allocations = 0;
 static volatile int64_t outstanding_bytes = 0;
+static volatile int64_t total_allocations = 0;
 
 static void track(int64_t allocations, int64_t bytes) {
+    int64_t made = allocations > 0 ? allocations : 0;
 #if defined(_MSC_VER)
     _InterlockedExchangeAdd64(&outstanding_allocations, allocations);
     _InterlockedExchangeAdd64(&outstanding_bytes, bytes);
+    _InterlockedExchangeAdd64(&total_allocations, made);
 #else
     __atomic_fetch_add(&outstanding_allocations, allocations, __ATOMIC_RELAXED);
     __atomic_fetch_add(&outstanding_bytes, bytes, __ATOMIC_RELAXED);
+    __atomic_fetch_add(&total_allocations, made, __ATOMIC_RELAXED);
 #endif
 }
 #endif
@@ -68,12 +72,14 @@ bool tracking_enabled() { return ROAM_MEMORY_TRACKING != 0; }
 MemoryStats outstanding() {
 #if ROAM_MEMORY_TRACKING
 #if defined(_MSC_VER)
-    return {_InterlockedExchangeAdd64(&outstanding_allocations, 0), _InterlockedExchangeAdd64(&outstanding_bytes, 0)};
+    return {_InterlockedExchangeAdd64(&outstanding_allocations, 0), _InterlockedExchangeAdd64(&outstanding_bytes, 0),
+            _InterlockedExchangeAdd64(&total_allocations, 0)};
 #else
-    return {__atomic_load_n(&outstanding_allocations, __ATOMIC_RELAXED), __atomic_load_n(&outstanding_bytes, __ATOMIC_RELAXED)};
+    return {__atomic_load_n(&outstanding_allocations, __ATOMIC_RELAXED), __atomic_load_n(&outstanding_bytes, __ATOMIC_RELAXED),
+            __atomic_load_n(&total_allocations, __ATOMIC_RELAXED)};
 #endif
 #else
-    return {0, 0};
+    return {0, 0, 0};
 #endif
 }
 

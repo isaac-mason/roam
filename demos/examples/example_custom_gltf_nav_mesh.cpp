@@ -27,6 +27,8 @@ struct CustomGltfNavMeshExample {
     uint32_t point_count;
     float previous_fov_y;
     SearchWorkspace workspace;
+    StraightPathPoint points[MAX_PATH_POINTS];
+    NodeRef node_path[MAX_NODE_PATH];
 };
 
 static CustomGltfNavMeshExample custom_gltf;
@@ -60,35 +62,37 @@ static void update_path() {
     flag(list, state.start, {0.13f, 0.59f, 0.95f, 1});
     flag(list, state.end, {0, 1, 0, 1});
 
-    FindPathResult path =
-        find_path::find_path(state.nav_mesh, state.start, state.end, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER, {}, &state.workspace);
+    FindPathResult path = {};
+    find_path::find_path(path, state.workspace, state.nav_mesh, state.start, state.end, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER,
+                         state.points, MAX_PATH_POINTS, {.node_path = state.node_path, .max_node_path = MAX_NODE_PATH});
     state.success = path.success;
-    state.point_count = path.path.length;
+    state.point_count = path.point_count;
 
     DebugPrimitives nodes = debug::create_search_nodes_helper(state.workspace.nodes);
     renderer::add_primitives(list, nodes);
     debug::release(nodes);
 
-    for (NodeRef node_ref : path.node_path.path) {
+    for (uint32_t n = 0; n < path.node_path_count; n++) {
+        NodeRef node_ref = state.node_path[n];
         if (node::get_node_ref_type(node_ref) != NODE_TYPE_POLY) continue;
         DebugPrimitives poly = debug::create_nav_mesh_poly_helper(state.nav_mesh, node_ref);
         renderer::add_primitives(list, poly);
         debug::release(poly);
     }
 
-    for (uint32_t i = 0; i < path.path.length; i++) {
-        sphere(list, path.path[i].position, 0.2f, {1, 0, 0, 1});
-        if (i > 0) renderer::line(list, path.path[i - 1].position, path.path[i].position, {1, 1, 0, 1});
+    for (uint32_t i = 0; i < path.point_count; i++) {
+        sphere(list, state.points[i].position, 0.2f, {1, 0, 0, 1});
+        if (i > 0) renderer::line(list, state.points[i - 1].position, state.points[i].position, {1, 1, 0, 1});
     }
 
     state.path_drawing = renderer::create_static(list);
     renderer::release(list);
-    find_path::release(path);
 }
 
 static void init(App &app) {
     CustomGltfNavMeshExample &state = custom_gltf;
     state = {};
+    state.workspace = nav_mesh_search::create_search_workspace();
     state.show_nav_mesh = true;
     state.start = {-2.6f, 1.1f, 2.1f};
     state.end = {0.5f, 11.1f, 0.5f};

@@ -41,6 +41,7 @@ struct FlowFieldExample {
     Vec3 last_hover;
     double flow_field_milliseconds;
     double path_milliseconds;
+    StraightPathPoint points[MAX_PATH_POINTS];
 };
 
 static FlowFieldExample flow_field_example;
@@ -166,13 +167,15 @@ static void update_path(Vec3 position) {
     if (!state.has_flow_field) return;
     const NavMesh &nav_mesh = state.result.nav_mesh;
 
-    FindNearestPolyResult start = nav_mesh_api::find_nearest_poly(nav_mesh, position, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
+    FindNearestPolyResult start = {};
+    nav_mesh_api::find_nearest_poly(start, nav_mesh, position, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
     if (!start.success) return;
 
     state.has_path_start = true;
     state.path_start = start.position;
 
-    FindNearestPolyResult end = nav_mesh_api::find_nearest_poly(nav_mesh, state.flow_field_target, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
+    FindNearestPolyResult end = {};
+    nav_mesh_api::find_nearest_poly(end, nav_mesh, state.flow_field_target, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
 
     double begin = app::now_milliseconds();
     Array<NodeRef> poly_path = {};
@@ -185,7 +188,9 @@ static void update_path(Vec3 position) {
         return;
     }
 
-    FindStraightPathResult straight = find_straight_path::find_straight_path(nav_mesh, start.position, end.position, poly_path.data, poly_path.length);
+    FindStraightPathResult straight = {};
+    find_straight_path::find_straight_path(straight, nav_mesh, start.position, end.position, poly_path.data, poly_path.length, state.points,
+                                           MAX_PATH_POINTS);
 
     renderer::release(state.path_drawing);
     DrawList list = {};
@@ -196,16 +201,15 @@ static void update_path(Vec3 position) {
         debug::release(poly);
     }
     const Vec3 lift = {0, 0.3f, 0};
-    for (uint32_t i = 0; i < straight.path.length; i++) {
-        Vec3 point = vec3::add(straight.path[i].position, lift);
+    for (uint32_t i = 0; i < straight.point_count; i++) {
+        Vec3 point = vec3::add(state.points[i].position, lift);
         renderer::point(list, point, 0.15f, {1, 0, 0, 1});
-        if (i > 0) renderer::line(list, vec3::add(straight.path[i - 1].position, lift), point, {1, 1, 0, 1});
+        if (i > 0) renderer::line(list, vec3::add(state.points[i - 1].position, lift), point, {1, 1, 0, 1});
     }
     state.path_drawing = renderer::create_static(list);
     state.path_found = true;
     renderer::release(list);
 
-    find_straight_path::release(straight);
     poly_path.release();
 }
 
@@ -213,7 +217,8 @@ static void update_flow_field(Vec3 position) {
     FlowFieldExample &state = flow_field_example;
     const NavMesh &nav_mesh = state.result.nav_mesh;
 
-    FindNearestPolyResult result = nav_mesh_api::find_nearest_poly(nav_mesh, position, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
+    FindNearestPolyResult result = {};
+    nav_mesh_api::find_nearest_poly(result, nav_mesh, position, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
     if (!result.success) return;
 
     state.flow_field_target = result.position;

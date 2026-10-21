@@ -23,27 +23,28 @@ using SmoothPathPoint = StraightPathPoint;
 struct FindSmoothPathResult {
     bool success;
     uint32_t flags;
-    Array<SmoothPathPoint> path;
+    uint32_t point_count;
     NodeRef start_node_ref;
     Vec3 start_position;
     NodeRef end_node_ref;
     Vec3 end_position;
-    FindNodePathResult node_path;
+    uint32_t node_path_flags;
+    uint32_t node_path_count;
+    uint32_t full_node_path_count;
 };
 
 struct FindSmoothPathOptions {
     float step_size;
     float slop;
-    uint32_t max_points;
     float raycast_distance;
+    NodeRef *node_path;
+    uint32_t max_node_path;
 };
 
 namespace find_smooth_path {
 
-FindSmoothPathResult find_smooth_path(const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 half_extents, const QueryFilter &filter,
-                                      const FindSmoothPathOptions &options, SearchWorkspace *workspace = nullptr);
-
-void release(FindSmoothPathResult &result);
+void find_smooth_path(FindSmoothPathResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 half_extents,
+                      const QueryFilter &filter, SmoothPathPoint *points, uint32_t max_points, const FindSmoothPathOptions &options);
 
 }
 

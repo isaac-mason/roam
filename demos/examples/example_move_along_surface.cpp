@@ -23,6 +23,8 @@ struct MoveAlongSurfaceExample {
     uint32_t visited_count;
     float requested_distance;
     float actual_distance;
+    SearchWorkspace workspace;
+    NodeRef visited[MAX_NODE_PATH];
 };
 
 static MoveAlongSurfaceExample move_along_surface_example;
@@ -41,16 +43,18 @@ static void update_move_along_surface() {
     flag(list, state.start, {0.13f, 0.59f, 0.95f, 1});
     flag(list, state.end, {0, 1, 0, 1});
 
-    FindNearestPolyResult start = nav_mesh_api::find_nearest_poly(nav_mesh, state.start, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
+    FindNearestPolyResult start = {};
+    nav_mesh_api::find_nearest_poly(start, nav_mesh, state.start, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
     state.on_nav_mesh = start.success;
 
     if (start.success) {
         double begin = app::now_milliseconds();
-        MoveAlongSurfaceResult result =
-            nav_mesh_search::move_along_surface(nav_mesh, start.node_ref, state.start, state.end, nav_mesh_api::DEFAULT_QUERY_FILTER);
+        MoveAlongSurfaceResult result = {};
+        nav_mesh_search::move_along_surface(result, state.workspace, nav_mesh, start.node_ref, state.start, state.end,
+                                            nav_mesh_api::DEFAULT_QUERY_FILTER, state.visited, MAX_NODE_PATH);
         state.query_milliseconds = app::now_milliseconds() - begin;
         state.success = result.success;
-        state.visited_count = result.visited.length;
+        state.visited_count = result.visited_count;
         state.requested_distance = vec3::distance(state.start, state.end);
         state.actual_distance = vec3::distance(state.start, result.position);
 
@@ -58,14 +62,12 @@ static void update_move_along_surface() {
         renderer::line(list, state.start, state.end, {1, 1, 0, 1});
         renderer::line(list, state.start, result.position, {0, 1, 1, 1});
 
-        for (NodeRef node_ref : result.visited) {
-            DebugPrimitives poly = debug::create_nav_mesh_poly_helper(nav_mesh, node_ref);
+        for (uint32_t i = 0; i < result.visited_count; i++) {
+            DebugPrimitives poly = debug::create_nav_mesh_poly_helper(nav_mesh, state.visited[i]);
             app::lift(poly, 0.3f);
             renderer::add_primitives(list, poly);
             debug::release(poly);
         }
-
-        nav_mesh_search::release(result);
     }
 
     state.move_drawing = renderer::create_static(list);
@@ -75,6 +77,7 @@ static void update_move_along_surface() {
 static void init(App &app) {
     MoveAlongSurfaceExample &state = move_along_surface_example;
     state = {};
+    state.workspace = nav_mesh_search::create_search_workspace();
     state.start = {-3.641054110753002f, 1.3775759935379028f, 2.7671564887530034f};
     state.end = {-2.857031378804761f, 0.2670568953640924f, 3.088813745131878f};
     app.want_hover = true;
@@ -141,6 +144,7 @@ static void shutdown(App &) {
     MoveAlongSurfaceExample &state = move_along_surface_example;
     renderer::release(state.nav_mesh_drawing);
     renderer::release(state.move_drawing);
+    nav_mesh_search::release(state.workspace);
     if (state.generated) {
         generate_tiled_nav_mesh::release(state.result.intermediates);
         nav_mesh_api::release_nav_mesh(state.result.nav_mesh);

@@ -23,26 +23,26 @@ static bool in_range(Vec3 a, Vec3 b, float r, float h) {
 static SteerTarget get_steer_target(const NavMesh &nav_mesh, Vec3 start, Vec3 end, float min_target_distance, const Array<NodeRef> &path_polys) {
     SteerTarget result = {false, {0, 0, 0}, INVALID_NODE_REF, 0};
 
-    const int max_straight_path_points = 3;
-    FindStraightPathResult straight_path =
-        find_straight_path::find_straight_path(nav_mesh, start, end, path_polys.data, path_polys.length, max_straight_path_points, 0);
+    const uint32_t max_straight_path_points = 3;
+    StraightPathPoint points[max_straight_path_points];
+    FindStraightPathResult straight_path;
+    find_straight_path::find_straight_path(straight_path, nav_mesh, start, end, path_polys.data, path_polys.length, points, max_straight_path_points);
 
-    if (straight_path.success && straight_path.path.length > 0) {
+    if (straight_path.success && straight_path.point_count > 0) {
         uint32_t ns = 0;
-        while (ns < straight_path.path.length) {
-            const StraightPathPoint &point = straight_path.path[ns];
+        while (ns < straight_path.point_count) {
+            const StraightPathPoint &point = points[ns];
             if (point.type == NODE_TYPE_OFFMESH) break;
             if (!in_range(point.position, start, min_target_distance, 1000.0f)) break;
             ns++;
         }
 
-        if (ns < straight_path.path.length) {
-            const StraightPathPoint &steer_point = straight_path.path[ns];
+        if (ns < straight_path.point_count) {
+            const StraightPathPoint &steer_point = points[ns];
             result = {true, steer_point.position, steer_point.node_ref, steer_point.flags};
         }
     }
 
-    find_straight_path::release(straight_path);
     return result;
 }
 
@@ -121,40 +121,61 @@ static void remove_front(Array<NodeRef> &values, uint32_t count) {
     values.resize(values.length - count);
 }
 
-static FindSmoothPathResult find_smooth_path_in(const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 half_extents, const QueryFilter &filter,
-                                                const FindSmoothPathOptions &options, SearchWorkspace &workspace) {
-    FindSmoothPathResult result = {};
+static void move_with_visited(MoveAlongSurfaceResult &moved, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
+                              Vec3 start_position, Vec3 end_position, const QueryFilter &filter) {
+    Array<NodeRef> &visited = workspace.visited;
+    nav_mesh_search::move_along_surface(moved, workspace, nav_mesh, start_node_ref, start_position, end_position, filter, visited.data,
+                                        visited.capacity);
+    if (moved.full_visited_count > visited.capacity) {
+        visited.reserve(moved.full_visited_count);
+        nav_mesh_search::move_along_surface(moved, workspace, nav_mesh, start_node_ref, start_position, end_position, filter, visited.data,
+                                            visited.capacity);
+    }
+    visited.resize(moved.visited_count);
+}
+
+void find_smooth_path(FindSmoothPathResult &result, SearchWorkspace &workspace, const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 half_extents,
+                      const QueryFilter &filter, SmoothPathPoint *points, uint32_t max_points, const FindSmoothPathOptions &options) {
+    result = {};
     result.flags = FIND_SMOOTH_PATH_RESULT_NONE | FIND_SMOOTH_PATH_RESULT_INVALID_INPUT;
     result.start_node_ref = INVALID_NODE_REF;
     result.end_node_ref = INVALID_NODE_REF;
+    result.node_path_flags = FIND_NODE_PATH_RESULT_NONE;
+    if (max_points == 0) return;
+    uint32_t &point_count = result.point_count;
 
-    FindNearestPolyResult start_nearest = nav_mesh_api::find_nearest_poly(nav_mesh, start, half_extents, filter);
-    if (!start_nearest.success) return result;
+    FindNearestPolyResult start_nearest;
+    nav_mesh_api::find_nearest_poly(start_nearest, nav_mesh, start, half_extents, filter);
+    if (!start_nearest.success) return;
     result.start_position = start_nearest.position;
     result.start_node_ref = start_nearest.node_ref;
 
-    FindNearestPolyResult end_nearest = nav_mesh_api::find_nearest_poly(nav_mesh, end, half_extents, filter);
-    if (!end_nearest.success) return result;
+    FindNearestPolyResult end_nearest;
+    nav_mesh_api::find_nearest_poly(end_nearest, nav_mesh, end, half_extents, filter);
+    if (!end_nearest.success) return;
     result.end_position = end_nearest.position;
     result.end_node_ref = end_nearest.node_ref;
 
-    result.node_path = nav_mesh_search::find_node_path(nav_mesh, result.start_node_ref, result.end_node_ref, result.start_position,
-                                                       result.end_position, filter, {options.raycast_distance}, &workspace);
+    FindNodePathResult node_path;
+    nav_mesh_search::find_node_path_to_workspace(node_path, workspace, nav_mesh, result.start_node_ref, result.end_node_ref, result.start_position,
+                                         result.end_position, filter, {options.raycast_distance});
+    Array<NodeRef> &polys = workspace.node_path;
+    result.node_path_flags = node_path.flags;
+    result.full_node_path_count = polys.length;
+    result.node_path_count = polys.length < options.max_node_path ? polys.length : options.max_node_path;
+    for (uint32_t i = 0; i < result.node_path_count; i++) options.node_path[i] = polys[i];
 
-    if (!result.node_path.success || result.node_path.path.length == 0) {
+    if (!node_path.success || polys.length == 0) {
         result.flags = FIND_SMOOTH_PATH_RESULT_FIND_NODE_PATH_FAILED;
-        return result;
+        return;
     }
 
     Vec3 iteration_position = result.start_position;
     Vec3 target_position = result.end_position;
 
-    Array<NodeRef> polys = {};
-    for (NodeRef ref : result.node_path.path) polys.push(ref);
+    points[point_count++] = {iteration_position, NODE_TYPE_POLY, result.start_node_ref, STRAIGHT_PATH_POINT_START};
 
-    result.path.push({iteration_position, NODE_TYPE_POLY, result.start_node_ref, STRAIGHT_PATH_POINT_START});
-
-    while (polys.length > 0 && result.path.length < options.max_points) {
+    while (polys.length > 0 && point_count < max_points) {
         SteerTarget steer_target = get_steer_target(nav_mesh, iteration_position, target_position, options.slop, polys);
         if (!steer_target.success) break;
 
@@ -167,22 +188,19 @@ static FindSmoothPathResult find_smooth_path_in(const NavMesh &nav_mesh, Vec3 st
 
         Vec3 move_target = vec3::scale_and_add(iteration_position, delta, length);
 
-        MoveAlongSurfaceResult moved = nav_mesh_search::move_along_surface(nav_mesh, polys[0], iteration_position, move_target, filter, &workspace);
-        if (!moved.success) {
-            nav_mesh_search::release(moved);
-            break;
-        }
+        MoveAlongSurfaceResult moved;
+        move_with_visited(moved, workspace, nav_mesh, polys[0], iteration_position, move_target, filter);
+        if (!moved.success) break;
 
-        merge_corridor_start_moved(polys, moved.visited, 256);
+        merge_corridor_start_moved(polys, workspace.visited, 256);
         fixup_shortcuts(polys, nav_mesh);
 
         iteration_position = moved.position;
-        nav_mesh_search::release(moved);
 
         if (is_end_of_path && in_range(iteration_position, steer_target.steer_position, options.slop, 1.0f)) {
             iteration_position = target_position;
-            if (result.path.length < options.max_points) {
-                result.path.push({iteration_position, NODE_TYPE_POLY, result.end_node_ref, STRAIGHT_PATH_POINT_END});
+            if (point_count < max_points) {
+                points[point_count++] = {iteration_position, NODE_TYPE_POLY, result.end_node_ref, STRAIGHT_PATH_POINT_END};
             }
             break;
         } else if (is_off_mesh_connection && in_range(iteration_position, steer_target.steer_position, options.slop, 1.0f)) {
@@ -218,46 +236,30 @@ static FindSmoothPathResult find_smooth_path_in(const NavMesh &nav_mesh, Vec3 st
 
                 bool entering_from_start = link_edge == 0;
 
-                if (result.path.length < options.max_points) {
-                    result.path.push({iteration_position, NODE_TYPE_OFFMESH, off_mesh_connection_ref, STRAIGHT_PATH_POINT_OFFMESH});
+                if (point_count < max_points) {
+                    points[point_count++] = {iteration_position, NODE_TYPE_OFFMESH, off_mesh_connection_ref, STRAIGHT_PATH_POINT_OFFMESH};
                     iteration_position = entering_from_start ? connection.end : connection.start;
                 }
             }
         }
 
-        if (result.path.length < options.max_points) {
+        if (point_count < max_points) {
             NodeRef current_node_ref = polys.length > 0 ? polys[0] : result.end_node_ref;
-            result.path.push({iteration_position, NODE_TYPE_POLY, current_node_ref, 0});
+            points[point_count++] = {iteration_position, NODE_TYPE_POLY, current_node_ref, 0};
         }
     }
 
-    polys.release();
-
     uint32_t flags = FIND_SMOOTH_PATH_RESULT_SUCCESS;
-    if (result.node_path.flags & FIND_NODE_PATH_RESULT_COMPLETE_PATH) {
+    if (node_path.flags & FIND_NODE_PATH_RESULT_COMPLETE_PATH) {
         flags |= FIND_SMOOTH_PATH_RESULT_COMPLETE_PATH;
-    } else if (result.node_path.flags & FIND_NODE_PATH_RESULT_PARTIAL_PATH) {
+    } else if (node_path.flags & FIND_NODE_PATH_RESULT_PARTIAL_PATH) {
         flags |= FIND_SMOOTH_PATH_RESULT_PARTIAL_PATH;
     }
 
     result.success = true;
     result.flags = flags;
-    return result;
 }
 
-FindSmoothPathResult find_smooth_path(const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 half_extents, const QueryFilter &filter,
-                                      const FindSmoothPathOptions &options, SearchWorkspace *workspace) {
-    if (workspace) return find_smooth_path_in(nav_mesh, start, end, half_extents, filter, options, *workspace);
-    SearchWorkspace temporary = {};
-    FindSmoothPathResult result = find_smooth_path_in(nav_mesh, start, end, half_extents, filter, options, temporary);
-    nav_mesh_search::release(temporary);
-    return result;
-}
-
-void release(FindSmoothPathResult &result) {
-    result.path.release();
-    nav_mesh_search::release(result.node_path);
-}
 
 }
 

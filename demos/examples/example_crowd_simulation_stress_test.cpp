@@ -44,8 +44,8 @@ static double next_target_time(double now) {
 
 static void pick_new_target(uint32_t agent_id, double now) {
     CrowdStressTestExample &state = crowd_stress_test_example;
-    FindRandomPointResult point =
-        nav_mesh_search::find_random_point(state.result.nav_mesh, nav_mesh_api::DEFAULT_QUERY_FILTER, next_random, &state.random_state);
+    FindRandomPointResult point = {};
+    nav_mesh_search::find_random_point(point, state.result.nav_mesh, nav_mesh_api::DEFAULT_QUERY_FILTER, next_random, &state.random_state);
     if (!point.success) return;
     crowd::request_move_target(state.crowd, agent_id, point.node_ref, point.position);
     state.next_target_times[agent_id] = next_target_time(now);
@@ -95,11 +95,15 @@ static void init(App &app) {
     state.generated = true;
     NavMesh &nav_mesh = state.result.nav_mesh;
 
-    FindNearestPolyResult seed = nav_mesh_api::find_nearest_poly(nav_mesh, {0, 0, 0}, {0.5f, 0.5f, 0.5f}, nav_mesh_api::DEFAULT_QUERY_FILTER);
+    FindNearestPolyResult seed = {};
+    nav_mesh_api::find_nearest_poly(seed, nav_mesh, {0, 0, 0}, {0.5f, 0.5f, 0.5f}, nav_mesh_api::DEFAULT_QUERY_FILTER);
     if (seed.success) {
-        FloodFillNavMeshResult flood = flood_fill_nav_mesh::flood_fill_nav_mesh(nav_mesh, &seed.node_ref, 1);
-        for (NodeRef node_ref : flood.unreachable) nav_mesh.nodes[node::get_node_ref_index(node_ref)].flags = 0;
-        flood_fill_nav_mesh::release(flood);
+        Array<NodeRef> unreachable = {};
+        unreachable.resize(nav_mesh.nodes.length);
+        FloodFillNavMeshResult flood = {};
+        flood_fill_nav_mesh::flood_fill_nav_mesh(flood, nav_mesh, &seed.node_ref, 1, nullptr, 0, unreachable.data, unreachable.length);
+        for (uint32_t i = 0; i < flood.unreachable_count; i++) nav_mesh.nodes[node::get_node_ref_index(unreachable[i])].flags = 0;
+        unreachable.release();
     }
 
     DebugPrimitives nav_mesh_helper = debug::create_nav_mesh_helper(nav_mesh);
@@ -121,7 +125,8 @@ static void init(App &app) {
 
     double now = app::now_milliseconds();
     for (int i = 0; i < AGENT_COUNT; i++) {
-        FindRandomPointResult point = nav_mesh_search::find_random_point(nav_mesh, nav_mesh_api::DEFAULT_QUERY_FILTER, next_random, &state.random_state);
+        FindRandomPointResult point = {};
+        nav_mesh_search::find_random_point(point, nav_mesh, nav_mesh_api::DEFAULT_QUERY_FILTER, next_random, &state.random_state);
         uint32_t agent_id = crowd::add_agent(state.crowd, nav_mesh, point.position, params);
         if (state.next_target_times.length <= agent_id) state.next_target_times.resize(agent_id + 1, 0);
         state.next_target_times[agent_id] = next_target_time(now);

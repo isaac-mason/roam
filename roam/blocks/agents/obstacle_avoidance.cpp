@@ -239,11 +239,11 @@ static void prepare_sampling(ObstacleAvoidanceQuery &query, Vec3 position, float
     if (debug) reset_obstacle_avoidance_debug_data(*debug);
 }
 
-SampleVelocityResult sample_velocity_grid(ObstacleAvoidanceQuery &query, Vec3 position, float radius, float vmax, Vec3 velocity, Vec3 desired_velocity,
-                                          const ObstacleAvoidanceParams &params, ObstacleAvoidanceDebugData *debug) {
+void sample_velocity_grid(SampleVelocityResult &result, ObstacleAvoidanceQuery &query, Vec3 position, float radius, float vmax, Vec3 velocity,
+                          Vec3 desired_velocity, const ObstacleAvoidanceParams &params, ObstacleAvoidanceDebugData *debug) {
     prepare_sampling(query, position, radius, vmax, desired_velocity, params, debug);
 
-    SampleVelocityResult result = {{0, 0, 0}, 0};
+    result = {{0, 0, 0}, 0};
 
     float cvx = desired_velocity.x * params.vel_bias;
     float cvz = desired_velocity.z * params.vel_bias;
@@ -270,7 +270,6 @@ SampleVelocityResult sample_velocity_grid(ObstacleAvoidanceQuery &query, Vec3 po
         }
     }
 
-    return result;
 }
 
 static Vec3 normalize_2d(Vec3 v) {
@@ -286,8 +285,8 @@ static Vec3 rotate_2d(Vec3 v, float angle) {
     return {v.x * c - v.z * s, v.y, v.x * s + v.z * c};
 }
 
-SampleVelocityResult sample_velocity_adaptive(ObstacleAvoidanceQuery &query, Vec3 position, float radius, float vmax, Vec3 velocity,
-                                              Vec3 desired_velocity, const ObstacleAvoidanceParams &params, ObstacleAvoidanceDebugData *debug) {
+void sample_velocity_adaptive(SampleVelocityResult &result, ObstacleAvoidanceQuery &query, Vec3 position, float radius, float vmax, Vec3 velocity,
+                              Vec3 desired_velocity, const ObstacleAvoidanceParams &params, ObstacleAvoidanceDebugData *debug) {
     prepare_sampling(query, position, radius, vmax, desired_velocity, params, debug);
 
     float *pattern = query.pattern;
@@ -339,7 +338,7 @@ SampleVelocityResult sample_velocity_adaptive(ObstacleAvoidanceQuery &query, Vec
     float cr = vmax * (1.0f - query.params.vel_bias);
     Vec3 res = {desired_velocity.x * query.params.vel_bias, 0, desired_velocity.z * query.params.vel_bias};
 
-    SampleVelocityResult result = {{0, 0, 0}, 0};
+    result = {{0, 0, 0}, 0};
 
     float vmax_plus_epsilon = vmax + 0.001f;
     float vmax_sqr = vmax_plus_epsilon * vmax_plus_epsilon;
@@ -367,7 +366,6 @@ SampleVelocityResult sample_velocity_adaptive(ObstacleAvoidanceQuery &query, Vec
     }
 
     result.velocity = res;
-    return result;
 }
 
 }

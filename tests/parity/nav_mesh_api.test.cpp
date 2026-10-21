@@ -45,7 +45,8 @@ TEST(nav_mesh_matches_navcat_on_nav_test) {
     for (uint32_t i = 0; i < nearest_success.count; i++) {
         Vec3 point = {(float)points.data[i * 3], (float)points.data[i * 3 + 1], (float)points.data[i * 3 + 2]};
 
-        FindNearestPolyResult nearest = nav_mesh_api::find_nearest_poly(nav_mesh, point, half_extents, nav_mesh_api::DEFAULT_QUERY_FILTER);
+        FindNearestPolyResult nearest = {};
+        nav_mesh_api::find_nearest_poly(nearest, nav_mesh, point, half_extents, nav_mesh_api::DEFAULT_QUERY_FILTER);
         bool same = nearest.success == (nearest_success.data[i] != 0);
         if (same && nearest.success) {
             same = nearest.node_ref == ref_from_f64(nearest_refs.data[i]) && fabs(nearest.position.x - nearest_positions.data[i * 3]) < 1e-3 &&
@@ -53,13 +54,14 @@ TEST(nav_mesh_matches_navcat_on_nav_test) {
         }
         if (!same) nearest_mismatches++;
 
-        Array<NodeRef> refs =
-            nav_mesh_api::query_polygons(nav_mesh, {vec3::subtract(point, half_extents), vec3::add(point, half_extents)}, nav_mesh_api::DEFAULT_QUERY_FILTER);
-        bool same_polygons = refs.length == (uint32_t)polygon_counts.data[i];
-        for (uint32_t k = 0; same_polygons && k < refs.length; k++) same_polygons = refs[k] == ref_from_f64(polygon_refs.data[polygon_cursor + k]);
+        NodeRef refs[256];
+        QueryPolygonsResult polygons;
+        nav_mesh_api::query_polygons(polygons, nav_mesh, {vec3::subtract(point, half_extents), vec3::add(point, half_extents)},
+                                     nav_mesh_api::DEFAULT_QUERY_FILTER, refs, 256);
+        bool same_polygons = polygons.full_poly_count == polygons.poly_count && polygons.poly_count == (uint32_t)polygon_counts.data[i];
+        for (uint32_t k = 0; same_polygons && k < polygons.poly_count; k++) same_polygons = refs[k] == ref_from_f64(polygon_refs.data[polygon_cursor + k]);
         if (!same_polygons) polygon_mismatches++;
         polygon_cursor += (uint32_t)polygon_counts.data[i];
-        refs.release();
     }
     CHECK(nearest_mismatches == 0);
     CHECK(polygon_mismatches == 0);

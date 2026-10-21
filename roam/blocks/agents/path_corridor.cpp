@@ -83,67 +83,57 @@ void merge_start_shortcut(Array<NodeRef> &current_path, const Array<NodeRef> &vi
     for (uint32_t i = 0; i < required; i++) current_path[i] = visited[i];
 }
 
-bool move_position(PathCorridor &corridor, Vec3 new_position, const NavMesh &nav_mesh, const QueryFilter &filter, SearchWorkspace *workspace) {
+bool move_position(PathCorridor &corridor, SearchWorkspace &workspace, Vec3 new_position, const NavMesh &nav_mesh, const QueryFilter &filter) {
     if (corridor.path.length == 0) return false;
 
-    MoveAlongSurfaceResult temporary = {};
-    MoveAlongSurfaceResult &result = workspace ? workspace->move_result : temporary;
-    nav_mesh_search::move_along_surface_into(nav_mesh, corridor.path[0], corridor.position, new_position, filter, result, workspace);
+    Array<NodeRef> &visited = workspace.visited;
+    MoveAlongSurfaceResult result;
+    nav_mesh_search::move_along_surface(result, workspace, nav_mesh, corridor.path[0], corridor.position, new_position, filter, visited.data,
+                                        visited.capacity);
+    if (result.full_visited_count > visited.capacity) {
+        visited.reserve(result.full_visited_count);
+        nav_mesh_search::move_along_surface(result, workspace, nav_mesh, corridor.path[0], corridor.position, new_position, filter, visited.data,
+                                            visited.capacity);
+    }
+    visited.resize(result.visited_count);
+
     bool moved = result.success;
     if (moved) {
-        merge_start_moved(corridor.path, result.visited);
+        merge_start_moved(corridor.path, visited);
         corridor.position = result.position;
     }
-
-    nav_mesh_search::release(temporary);
     return moved;
 }
 
-bool find_corners_into(const PathCorridor &corridor, const NavMesh &nav_mesh, int max_corners, Array<StraightPathPoint> &corners) {
-    corners.clear();
-    if (corridor.path.length == 0) return false;
+void find_corners(FindCornersResult &out, const PathCorridor &corridor, const NavMesh &nav_mesh, StraightPathPoint *corners, uint32_t max_corners) {
+    out = {false, 0};
+    if (corridor.path.length == 0) return;
 
-    FindStraightPathResult straight_path = {};
-    straight_path.path = corners;
-    find_straight_path::find_straight_path_into(nav_mesh, corridor.position, corridor.target, corridor.path.data, corridor.path.length, max_corners, 0,
-                                                straight_path);
-    corners = straight_path.path;
+    FindStraightPathResult straight_path;
+    find_straight_path::find_straight_path(straight_path, nav_mesh, corridor.position, corridor.target, corridor.path.data, corridor.path.length,
+                                           corners, max_corners);
+    if (!straight_path.success || straight_path.point_count == 0) return;
 
-    if (!straight_path.success || corners.length == 0) {
-        corners.clear();
-        return false;
-    }
-
-    Array<StraightPathPoint> &points = corners;
-
+    uint32_t count = straight_path.point_count;
     uint32_t first = 0;
-    while (first < points.length) {
-        const StraightPathPoint &corner = points[first];
+    while (first < count) {
+        const StraightPathPoint &corner = corners[first];
         if (corner.type == NODE_TYPE_OFFMESH || vec3::distance(corridor.position, corner.position) > MIN_TARGET_DISTANCE) break;
         first++;
     }
 
-    uint32_t end = points.length;
-    for (uint32_t i = first; i < points.length; i++) {
-        if (points[i].type == NODE_TYPE_OFFMESH) {
+    uint32_t end = count;
+    for (uint32_t i = first; i < count; i++) {
+        if (corners[i].type == NODE_TYPE_OFFMESH) {
             end = i + 1;
             break;
         }
     }
 
-    for (uint32_t i = first; i < end; i++) points[i - first] = points[i];
-    points.resize(end - first);
-    return true;
+    for (uint32_t i = first; i < end; i++) corners[i - first] = corners[i];
+    out.success = true;
+    out.corner_count = end - first;
 }
-
-FindCornersResult find_corners(const PathCorridor &corridor, const NavMesh &nav_mesh, int max_corners) {
-    FindCornersResult result = {};
-    result.success = find_corners_into(corridor, nav_mesh, max_corners, result.corners);
-    if (!result.success) result.corners.release();
-    return result;
-}
-
-void release(FindCornersResult &result) { result.corners.release(); }
 
 bool corridor_is_valid(const PathCorridor &corridor, uint32_t max_look_ahead, const NavMesh &nav_mesh, const QueryFilter &filter) {
     uint32_t count = corridor.path.length < max_look_ahead ? corridor.path.length : max_look_ahead;
@@ -170,9 +160,9 @@ bool fix_path_start(PathCorridor &corridor, NodeRef safe_ref, Vec3 safe_position
     return true;
 }
 
-MoveOverOffMeshConnectionResult move_over_off_mesh_connection(PathCorridor &corridor, NodeRef off_mesh_node_ref, const NavMesh &nav_mesh) {
-    MoveOverOffMeshConnectionResult result = {};
-    if (corridor.path.length == 0) return result;
+void move_over_off_mesh_connection(MoveOverOffMeshConnectionResult &result, PathCorridor &corridor, NodeRef off_mesh_node_ref, const NavMesh &nav_mesh) {
+    result = {};
+    if (corridor.path.length == 0) return;
 
     bool has_previous = false;
     NodeRef previous = INVALID_NODE_REF;
@@ -186,20 +176,20 @@ MoveOverOffMeshConnectionResult move_over_off_mesh_connection(PathCorridor &corr
         if (i < corridor.path.length) node_ref = corridor.path[i];
     }
 
-    if (i == corridor.path.length) return result;
+    if (i == corridor.path.length) return;
 
     uint32_t remaining = corridor.path.length - (i + 1);
     for (uint32_t k = 0; k < remaining; k++) corridor.path[k] = corridor.path[i + 1 + k];
     corridor.path.resize(remaining);
 
-    if (!has_previous) return result;
+    if (!has_previous) return;
 
     int32_t connection_id = nav_mesh_api::get_node_by_ref(nav_mesh, off_mesh_node_ref).off_mesh_connection_id;
-    if (connection_id < 0 || (uint32_t)connection_id >= nav_mesh.off_mesh_connections.length) return result;
+    if (connection_id < 0 || (uint32_t)connection_id >= nav_mesh.off_mesh_connections.length) return;
 
     const OffMeshConnection &connection = nav_mesh.off_mesh_connections[(uint32_t)connection_id];
     const OffMeshConnectionAttachment &attachment = nav_mesh.off_mesh_connection_attachments[(uint32_t)connection_id];
-    if (!connection.allocated || !attachment.attached) return result;
+    if (!connection.allocated || !attachment.attached) return;
 
     bool on_start = attachment.start_poly_node == previous;
     Vec3 end_position = on_start ? connection.end : connection.start;
@@ -212,30 +202,26 @@ MoveOverOffMeshConnectionResult move_over_off_mesh_connection(PathCorridor &corr
     result.end_node_ref = on_start ? attachment.end_poly_node : attachment.start_poly_node;
     result.prev_node_ref = previous;
     result.off_mesh_node_ref = off_mesh_node_ref;
-    return result;
 }
 
-bool optimize_path_topology(PathCorridor &corridor, const NavMesh &nav_mesh, const QueryFilter &filter) {
+bool optimize_path_topology(PathCorridor &corridor, SlicedNodePathQuery &query, SearchWorkspace &workspace, const NavMesh &nav_mesh,
+                            const QueryFilter &filter) {
     if (corridor.path.length < 3) return false;
 
     const int MAX_ITERATIONS = 32;
 
-    SlicedNodePathQuery query = nav_mesh_search::create_sliced_node_path_query();
     nav_mesh_search::init_sliced_find_node_path(nav_mesh, query, corridor.path[0], corridor.path.back(), corridor.position, corridor.target, filter);
     nav_mesh_search::update_sliced_find_node_path(nav_mesh, query, MAX_ITERATIONS);
-    SlicedFindNodePathResult result =
-        nav_mesh_search::finalize_sliced_find_node_path_partial(nav_mesh, query, corridor.path.data, corridor.path.length);
+    SlicedFindNodePathResult result;
+    nav_mesh_search::finalize_sliced_find_node_path_partial_to_workspace(result, workspace, nav_mesh, query, corridor.path.data, corridor.path.length);
 
-    bool optimized = (result.status & SLICED_FIND_NODE_PATH_SUCCESS) != 0 && result.path.length > 0;
-    if (optimized) merge_start_shortcut(corridor.path, result.path);
-
-    nav_mesh_search::release(result);
-    nav_mesh_search::release(query);
+    bool optimized = (result.status & SLICED_FIND_NODE_PATH_SUCCESS) != 0 && workspace.node_path.length > 0;
+    if (optimized) merge_start_shortcut(corridor.path, workspace.node_path);
     return optimized;
 }
 
-void optimize_path_visibility(PathCorridor &corridor, Vec3 next, float path_optimization_range, const NavMesh &nav_mesh, const QueryFilter &filter,
-                              SearchWorkspace *workspace) {
+void optimize_path_visibility(PathCorridor &corridor, SearchWorkspace &workspace, Vec3 next, float path_optimization_range, const NavMesh &nav_mesh,
+                              const QueryFilter &filter) {
     if (corridor.path.length == 0) return;
 
     float dx = next.x - corridor.position.x;
@@ -248,11 +234,15 @@ void optimize_path_visibility(PathCorridor &corridor, Vec3 next, float path_opti
     Vec3 delta = vec3::subtract(next, corridor.position);
     Vec3 goal = vec3::scale_and_add(corridor.position, delta, path_optimization_range / distance);
 
-    RaycastResult temporary = {};
-    RaycastResult &result = workspace ? workspace->raycast_result : temporary;
-    nav_mesh_search::raycast_into(nav_mesh, corridor.path[0], corridor.position, goal, filter, result, workspace);
-    if (result.path.length > 1 && result.t > 0.99f) merge_start_shortcut(corridor.path, result.path);
-    nav_mesh_search::release(temporary);
+    Array<NodeRef> &path = workspace.raycast_path;
+    RaycastResult result;
+    nav_mesh_search::raycast(result, nav_mesh, corridor.path[0], corridor.position, goal, filter, path.data, path.capacity);
+    if (result.full_path_count > path.capacity) {
+        path.reserve(result.full_path_count);
+        nav_mesh_search::raycast(result, nav_mesh, corridor.path[0], corridor.position, goal, filter, path.data, path.capacity);
+    }
+    path.resize(result.path_count);
+    if (path.length > 1 && result.t > 0.99f) merge_start_shortcut(corridor.path, path);
 }
 
 }

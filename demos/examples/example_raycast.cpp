@@ -33,6 +33,7 @@ struct RaycastExample {
     float path_cost;
     uint32_t path_length;
     float ray_length;
+    NodeRef path[MAX_NODE_PATH];
 };
 
 static RaycastExample raycast_example;
@@ -72,9 +73,11 @@ static void perform_raycast() {
     state.valid = false;
 
     const NavMesh &nav_mesh = state.result.nav_mesh;
-    FindNearestPolyResult start = nav_mesh_api::find_nearest_poly(nav_mesh, state.clicked_start, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
+    FindNearestPolyResult start = {};
+    nav_mesh_api::find_nearest_poly(start, nav_mesh, state.clicked_start, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
     if (!start.success) return;
-    FindNearestPolyResult end = nav_mesh_api::find_nearest_poly(nav_mesh, state.clicked_end, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
+    FindNearestPolyResult end = {};
+    nav_mesh_api::find_nearest_poly(end, nav_mesh, state.clicked_end, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
     if (!end.success) return;
 
     state.valid = true;
@@ -83,21 +86,25 @@ static void perform_raycast() {
     state.end_node_ref = end.node_ref;
     state.end_position = end.position;
 
-    RaycastResult raycast = state.calculate_costs
-                                ? nav_mesh_search::raycast_with_costs(nav_mesh, start.node_ref, start.position, end.position,
-                                                                      nav_mesh_api::DEFAULT_QUERY_FILTER, INVALID_NODE_REF)
-                                : nav_mesh_search::raycast(nav_mesh, start.node_ref, start.position, end.position, nav_mesh_api::DEFAULT_QUERY_FILTER);
+    RaycastResult raycast = {};
+    if (state.calculate_costs) {
+        nav_mesh_search::raycast_with_costs(raycast, nav_mesh, start.node_ref, start.position, end.position, nav_mesh_api::DEFAULT_QUERY_FILTER,
+                                            INVALID_NODE_REF, state.path, MAX_NODE_PATH);
+    } else {
+        nav_mesh_search::raycast(raycast, nav_mesh, start.node_ref, start.position, end.position, nav_mesh_api::DEFAULT_QUERY_FILTER, state.path,
+                                 MAX_NODE_PATH);
+    }
 
     bool reached_end = raycast.t == FLT_MAX;
     state.path_cost = raycast.path_cost;
-    state.path_length = raycast.path.length;
+    state.path_length = raycast.path_count;
 
     if (reached_end) {
         state.hit_position = end.position;
-        state.hit_node_ref = raycast.path.length > 0 ? raycast.path[raycast.path.length - 1] : end.node_ref;
+        state.hit_node_ref = raycast.path_count > 0 ? state.path[raycast.path_count - 1] : end.node_ref;
     } else {
         state.hit_position = vec3::lerp(start.position, end.position, raycast.t);
-        state.hit_node_ref = raycast.path.length > 0 ? raycast.path[raycast.path.length - 1] : start.node_ref;
+        state.hit_node_ref = raycast.path_count > 0 ? state.path[raycast.path_count - 1] : start.node_ref;
     }
     state.ray_length = vec3::distance(start.position, state.hit_position);
 
@@ -105,8 +112,8 @@ static void perform_raycast() {
     if (reached_end && state.hit_node_ref != end.node_ref) {
         TileAndPoly tile_and_poly = nav_mesh_api::get_tile_and_poly_by_ref(state.hit_node_ref, nav_mesh);
         if (tile_and_poly.success) {
-            GetPolyHeightResult height =
-                nav_mesh_api::get_poly_height(*tile_and_poly.tile, *tile_and_poly.poly, tile_and_poly.poly_index, state.hit_position);
+            GetPolyHeightResult height = {};
+            nav_mesh_api::get_poly_height(height, *tile_and_poly.tile, *tile_and_poly.poly, tile_and_poly.poly_index, state.hit_position);
             if (height.success) {
                 state.has_actual_hit_position = true;
                 state.actual_hit_position = {state.hit_position.x, height.height, state.hit_position.z};
@@ -157,15 +164,14 @@ static void perform_raycast() {
     add_poly(list, nav_mesh, end.node_ref, {0, 0, 1}, 0.25f);
     if (state.hit_node_ref != end.node_ref) add_poly(list, nav_mesh, state.hit_node_ref, {1, 0.6f, 0}, 0.25f);
 
-    for (uint32_t i = 0; i < raycast.path.length; i++) {
-        NodeRef node_ref = raycast.path[i];
+    for (uint32_t i = 0; i < raycast.path_count; i++) {
+        NodeRef node_ref = state.path[i];
         if (node_ref == start.node_ref || node_ref == end.node_ref || node_ref == state.hit_node_ref) continue;
-        add_poly(list, nav_mesh, node_ref, hsl(0.8f, 0.9f, 0.4f + ((float)i / (float)raycast.path.length) * 0.3f), 0.35f);
+        add_poly(list, nav_mesh, node_ref, hsl(0.8f, 0.9f, 0.4f + ((float)i / (float)raycast.path_count) * 0.3f), 0.35f);
     }
 
     state.raycast_drawing = renderer::create_static(list);
     renderer::release(list);
-    nav_mesh_search::release(raycast);
 }
 
 static void init(App &app) {

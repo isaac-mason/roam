@@ -16,6 +16,7 @@ struct Allocator {
 struct MemoryStats {
     int64_t allocations;
     int64_t bytes;
+    int64_t total_allocations;
 };
 
 void set_allocator(const Allocator &allocator);

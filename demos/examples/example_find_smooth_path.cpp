@@ -30,6 +30,8 @@ static const OffMeshConnectionParams OFF_MESH_CONNECTIONS[] = {
     },
 };
 
+constexpr uint32_t MAX_SMOOTH_PATH_POINTS = 1024;
+
 struct FindSmoothPathExample {
     bool generated;
     TiledNavMeshResult result;
@@ -46,6 +48,8 @@ struct FindSmoothPathExample {
     uint32_t node_count;
     uint32_t point_count;
     SearchWorkspace workspace;
+    SmoothPathPoint points[MAX_SMOOTH_PATH_POINTS];
+    NodeRef node_path[MAX_NODE_PATH];
 };
 
 static FindSmoothPathExample find_smooth_path_example;
@@ -87,20 +91,27 @@ static void update_path() {
     flag(list, state.end, {0, 1, 0, 1});
 
     double begin = app::now_milliseconds();
-    FindSmoothPathResult path = find_smooth_path::find_smooth_path(nav_mesh, state.start, state.end, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER,
-                                                                   {.step_size = state.step_size, .slop = state.slop, .max_points = 1024, .raycast_distance = 0}, &state.workspace);
+    FindSmoothPathResult path = {};
+    find_smooth_path::find_smooth_path(path, state.workspace, nav_mesh, state.start, state.end, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER,
+                                       state.points, MAX_SMOOTH_PATH_POINTS,
+                                       {.step_size = state.step_size,
+                                        .slop = state.slop,
+                                        .raycast_distance = 0,
+                                        .node_path = state.node_path,
+                                        .max_node_path = MAX_NODE_PATH});
     state.query_milliseconds = app::now_milliseconds() - begin;
     state.success = path.success;
     state.flags = path.flags;
-    state.node_count = path.node_path.path.length;
-    state.point_count = path.path.length;
+    state.node_count = path.node_path_count;
+    state.point_count = path.point_count;
 
     if (path.success) {
         DebugPrimitives nodes = debug::create_search_nodes_helper(state.workspace.nodes);
         renderer::add_primitives(list, nodes);
         debug::release(nodes);
 
-        for (NodeRef node_ref : path.node_path.path) {
+        for (uint32_t i = 0; i < path.node_path_count; i++) {
+            NodeRef node_ref = state.node_path[i];
             if (node::get_node_ref_type(node_ref) != NODE_TYPE_POLY) continue;
             DebugPrimitives poly = debug::create_nav_mesh_poly_helper(nav_mesh, node_ref);
             app::lift(poly, 0.15f);
@@ -109,22 +120,22 @@ static void update_path() {
         }
 
         const Vec3 lift = {0, 0.2f, 0};
-        for (uint32_t i = 0; i < path.path.length; i++) {
-            Color color = hsl((float)i / (float)path.path.length * 360.0f, 0.9f, 0.5f);
-            Vec3 position = vec3::add(path.path[i].position, lift);
+        for (uint32_t i = 0; i < path.point_count; i++) {
+            Color color = hsl((float)i / (float)path.point_count * 360.0f, 0.9f, 0.5f);
+            Vec3 position = vec3::add(state.points[i].position, lift);
             renderer::point(list, position, 0.1f, color);
-            if (i > 0) renderer::thick_line(list, vec3::add(path.path[i - 1].position, lift), position, 0.1f, color);
+            if (i > 0) renderer::thick_line(list, vec3::add(state.points[i - 1].position, lift), position, 0.1f, color);
         }
     }
 
     state.path_drawing = renderer::create_static(list);
     renderer::release(list);
-    find_smooth_path::release(path);
 }
 
 static void init(App &app) {
     FindSmoothPathExample &state = find_smooth_path_example;
     state = {};
+    state.workspace = nav_mesh_search::create_search_workspace();
     state.start = {-3.94f, 0.26f, 4.71f};
     state.end = {1.01f, 2.38f, -1.93f};
     state.step_size = 0.3f;

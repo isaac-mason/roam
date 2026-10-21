@@ -2,6 +2,9 @@
 
 #include "app/app.h"
 
+constexpr uint32_t MAX_PATH_POINTS = 2048;
+constexpr uint32_t MAX_NODE_PATH = 4096;
+
 extern const Example EXAMPLE_CROWD_SIMULATION;
 extern const Example EXAMPLE_NAVMESH_CONSTRAINED_CHARACTER_CONTROLLER;
 extern const Example EXAMPLE_AREA_FILTERS;

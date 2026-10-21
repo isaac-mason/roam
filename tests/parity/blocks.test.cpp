@@ -44,12 +44,12 @@ static Array<int32_t> to_i32(const uint32_t *values, uint32_t count) {
     return wide;
 }
 
-static void check_refs(const char *label, const Array<NodeRef> &actual, const fixture::F64 &expected) {
-    bool same = actual.length == expected.count;
-    for (uint32_t i = 0; same && i < actual.length; i++) same = actual[i] == ref_from_f64(expected.data[i]);
+static void check_refs(const char *label, const NodeRef *actual, uint32_t actual_count, const fixture::F64 &expected) {
+    bool same = actual_count == expected.count;
+    for (uint32_t i = 0; same && i < actual_count; i++) same = actual[i] == ref_from_f64(expected.data[i]);
     if (same) return;
     char message[256];
-    snprintf(message, sizeof(message), "%s: %u refs, expected %u", label, actual.length, expected.count);
+    snprintf(message, sizeof(message), "%s: %u refs, expected %u", label, actual_count, expected.count);
     test::fail(__FILE__, __LINE__, message);
 }
 
@@ -324,11 +324,18 @@ TEST(generate_tiled_nav_mesh_and_flood_fill_match_navcat_on_nav_test) {
     fixture::F64 seeds = fixture::f64(expected, "flood.seeds");
     Array<NodeRef> seed_refs = {};
     for (uint32_t i = 0; i < seeds.count; i++) seed_refs.push(ref_from_f64(seeds.data[i]));
-    FloodFillNavMeshResult flood = flood_fill_nav_mesh::flood_fill_nav_mesh(result.nav_mesh, seed_refs.data, seed_refs.length);
-    check_refs("flood.reachable", flood.reachable, fixture::f64(expected, "flood.reachable"));
-    check_refs("flood.unreachable", flood.unreachable, fixture::f64(expected, "flood.unreachable"));
+    Array<NodeRef> reachable = {};
+    Array<NodeRef> unreachable = {};
+    reachable.resize(result.nav_mesh.nodes.length);
+    unreachable.resize(result.nav_mesh.nodes.length);
+    FloodFillNavMeshResult flood;
+    flood_fill_nav_mesh::flood_fill_nav_mesh(flood, result.nav_mesh, seed_refs.data, seed_refs.length, reachable.data, reachable.length,
+                                             unreachable.data, unreachable.length);
+    check_refs("flood.reachable", reachable.data, flood.reachable_count, fixture::f64(expected, "flood.reachable"));
+    check_refs("flood.unreachable", unreachable.data, flood.unreachable_count, fixture::f64(expected, "flood.unreachable"));
 
-    flood_fill_nav_mesh::release(flood);
+    reachable.release();
+    unreachable.release();
     seed_refs.release();
     generate_tiled_nav_mesh::release(result.intermediates);
     nav_mesh_api::release_nav_mesh(result.nav_mesh);
@@ -365,12 +372,14 @@ TEST(local_boundary_matches_navcat_on_nav_test) {
     fixture::F64 polys = fixture::f64(expected, "boundary.polys");
     REQUIRE(segment_counts.count == points.length);
 
+    SearchWorkspace workspace = nav_mesh_search::create_search_workspace();
     uint32_t segment_cursor = 0;
     uint32_t poly_cursor = 0;
     uint32_t mismatches = 0;
     for (uint32_t i = 0; i < points.length; i++) {
         LocalBoundary boundary = local_boundary::create();
-        local_boundary::update_local_boundary(boundary, points[i].ref, points[i].position, 1.5f, tiled.nav_mesh, nav_mesh_api::DEFAULT_QUERY_FILTER);
+        local_boundary::update_local_boundary(boundary, points[i].ref, points[i].position, 1.5f, tiled.nav_mesh, nav_mesh_api::DEFAULT_QUERY_FILTER,
+                                              workspace);
 
         bool same = boundary.segment_count == (uint32_t)segment_counts.data[i] && boundary.poly_count == (uint32_t)poly_counts.data[i];
         for (uint32_t k = 0; same && k < boundary.segment_count; k++) {
@@ -386,6 +395,7 @@ TEST(local_boundary_matches_navcat_on_nav_test) {
     }
     CHECK(mismatches == 0);
 
+    nav_mesh_search::release(workspace);
     points.release();
     generate_tiled_nav_mesh::release(tiled.intermediates);
     nav_mesh_api::release_nav_mesh(tiled.nav_mesh);
@@ -425,9 +435,10 @@ TEST(obstacle_avoidance_matches_navcat) {
         Vec3 velocity = vec3_at(input + 3);
         Vec3 desired = vec3_at(input + 6);
 
-        SampleVelocityResult adaptive =
-            obstacle_avoidance::sample_velocity_adaptive(query, position, 0.4f, 2, velocity, desired, DEFAULT_OBSTACLE_AVOIDANCE_PARAMS);
-        SampleVelocityResult grid = obstacle_avoidance::sample_velocity_grid(query, position, 0.4f, 2, velocity, desired, grid_params);
+        SampleVelocityResult adaptive = {};
+        obstacle_avoidance::sample_velocity_adaptive(adaptive, query, position, 0.4f, 2, velocity, desired, DEFAULT_OBSTACLE_AVOIDANCE_PARAMS);
+        SampleVelocityResult grid = {};
+        obstacle_avoidance::sample_velocity_grid(grid, query, position, 0.4f, 2, velocity, desired, grid_params);
 
         bool same = vec3::distance(adaptive.velocity, vec3_at(output)) < 1e-3f && adaptive.samples == (int)output[3] &&
                     vec3::distance(grid.velocity, vec3_at(output + 4)) < 1e-3f && grid.samples == (int)output[7];
@@ -532,7 +543,8 @@ TEST(crowd_matches_navcat_on_a_flat_scene) {
         params.height = 2;
         uint32_t id = crowd::add_agent(crowd, tiled.nav_mesh, start, params);
         agent_ids.push(id);
-        FindNearestPolyResult target = nav_mesh_api::find_nearest_poly(tiled.nav_mesh, end, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
+        FindNearestPolyResult target = {};
+        nav_mesh_api::find_nearest_poly(target, tiled.nav_mesh, end, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
         crowd::request_move_target(crowd, id, target.node_ref, target.position);
     }
 

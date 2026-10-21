@@ -22,26 +22,27 @@ enum FindPathResultFlags : uint32_t {
 struct FindPathResult {
     bool success;
     uint32_t flags;
-    Array<StraightPathPoint> path;
+    uint32_t point_count;
     uint32_t straight_path_flags;
     NodeRef start_node_ref;
     Vec3 start_position;
     NodeRef end_node_ref;
     Vec3 end_position;
-    FindNodePathResult node_path;
     uint32_t node_path_flags;
+    uint32_t node_path_count;
+    uint32_t full_node_path_count;
 };
 
 struct FindPathOptions {
     float raycast_distance;
+    NodeRef *node_path;
+    uint32_t max_node_path;
 };
 
 namespace find_path {
 
-FindPathResult find_path(const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 half_extents, const QueryFilter &filter, FindPathOptions options = {},
-                         SearchWorkspace *workspace = nullptr);
-
-void release(FindPathResult &result);
+void find_path(FindPathResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 half_extents,
+               const QueryFilter &filter, StraightPathPoint *points, uint32_t max_points, FindPathOptions options = {});
 
 }
 

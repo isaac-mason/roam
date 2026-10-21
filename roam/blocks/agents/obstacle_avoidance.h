@@ -100,12 +100,11 @@ void reset_obstacle_avoidance_debug_data(ObstacleAvoidanceDebugData &debug);
 void add_circle_obstacle(ObstacleAvoidanceQuery &query, Vec3 position, float radius, Vec3 velocity, Vec3 desired_velocity);
 void add_segment_obstacle(ObstacleAvoidanceQuery &query, Vec3 p, Vec3 q);
 
-SampleVelocityResult sample_velocity_grid(ObstacleAvoidanceQuery &query, Vec3 position, float radius, float vmax, Vec3 velocity, Vec3 desired_velocity,
-                                          const ObstacleAvoidanceParams &params, ObstacleAvoidanceDebugData *debug = nullptr);
+void sample_velocity_grid(SampleVelocityResult &out, ObstacleAvoidanceQuery &query, Vec3 position, float radius, float vmax, Vec3 velocity,
+                          Vec3 desired_velocity, const ObstacleAvoidanceParams &params, ObstacleAvoidanceDebugData *debug = nullptr);
 
-SampleVelocityResult sample_velocity_adaptive(ObstacleAvoidanceQuery &query, Vec3 position, float radius, float vmax, Vec3 velocity,
-                                              Vec3 desired_velocity, const ObstacleAvoidanceParams &params,
-                                              ObstacleAvoidanceDebugData *debug = nullptr);
+void sample_velocity_adaptive(SampleVelocityResult &out, ObstacleAvoidanceQuery &query, Vec3 position, float radius, float vmax, Vec3 velocity,
+                              Vec3 desired_velocity, const ObstacleAvoidanceParams &params, ObstacleAvoidanceDebugData *debug = nullptr);
 
 }
 

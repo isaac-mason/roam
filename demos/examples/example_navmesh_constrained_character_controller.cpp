@@ -32,6 +32,7 @@ struct CharacterControllerExample {
     bool sprinting;
     bool first_position_update;
     Vec3 camera_position;
+    SearchWorkspace workspace;
 };
 
 static CharacterControllerExample character_controller_example;
@@ -82,6 +83,7 @@ static void generate_nav_mesh(const Model &level) {
 static void init(App &app) {
     CharacterControllerExample &state = character_controller_example;
     state = {};
+    state.workspace = nav_mesh_search::create_search_workspace();
     state.show_nav_mesh_helper = true;
     state.cell_size = 0.2f;
     state.cell_height = 0.2f;
@@ -102,8 +104,8 @@ static void init(App &app) {
 
     generate_nav_mesh(app.level);
 
-    FindNearestPolyResult nearest =
-        nav_mesh_api::find_nearest_poly(state.result.nav_mesh, {0, 1, 0}, {5, 5, 5}, nav_mesh_api::DEFAULT_QUERY_FILTER);
+    FindNearestPolyResult nearest = {};
+    nav_mesh_api::find_nearest_poly(nearest, state.result.nav_mesh, {0, 1, 0}, {5, 5, 5}, nav_mesh_api::DEFAULT_QUERY_FILTER);
     if (nearest.success) state.position = nearest.position;
 }
 
@@ -129,12 +131,13 @@ static void movement_update(const App &app, float delta) {
     if (vec3::length(movement) > 0 || state.first_position_update) {
         const NavMesh &nav_mesh = state.result.nav_mesh;
         Vec3 target = vec3::add(state.position, movement);
-        FindNearestPolyResult nearest = nav_mesh_api::find_nearest_poly(nav_mesh, state.position, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
+        FindNearestPolyResult nearest = {};
+        nav_mesh_api::find_nearest_poly(nearest, nav_mesh, state.position, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
         if (nearest.success) {
-            MoveAlongSurfaceResult moved =
-                nav_mesh_search::move_along_surface(nav_mesh, nearest.node_ref, state.position, target, nav_mesh_api::DEFAULT_QUERY_FILTER);
+            MoveAlongSurfaceResult moved = {};
+            nav_mesh_search::move_along_surface(moved, state.workspace, nav_mesh, nearest.node_ref, state.position, target,
+                                                nav_mesh_api::DEFAULT_QUERY_FILTER, nullptr, 0);
             if (moved.success) state.position = moved.position;
-            nav_mesh_search::release(moved);
         }
         state.first_position_update = false;
     }
@@ -224,6 +227,10 @@ static void ui(App &app) {
     }
 }
 
-static void shutdown(App &) { release_nav_mesh(); }
+static void shutdown(App &) {
+    CharacterControllerExample &state = character_controller_example;
+    release_nav_mesh();
+    nav_mesh_search::release(state.workspace);
+}
 
 const Example EXAMPLE_NAVMESH_CONSTRAINED_CHARACTER_CONTROLLER = {"navmesh constrained character controller", init, update, ui, shutdown};

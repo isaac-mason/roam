@@ -66,6 +66,8 @@ struct UploadModelExample {
     Vec3 end;
     StaticDrawing path_drawing;
     SearchWorkspace workspace;
+    StraightPathPoint points[MAX_PATH_POINTS];
+    NodeRef node_path[MAX_NODE_PATH];
     bool path_success;
     bool path_partial;
     uint32_t path_points;
@@ -210,27 +212,28 @@ static void update_path() {
     if (upload.has_start && upload.has_end) {
         const NavMesh &nav_mesh = current_nav_mesh();
         double begin = app::now_milliseconds();
-        FindPathResult path = find_path::find_path(nav_mesh, upload.start, upload.end, upload.path_half_extents, nav_mesh_api::DEFAULT_QUERY_FILTER, {},
-                                                   &upload.workspace);
+        FindPathResult path = {};
+        find_path::find_path(path, upload.workspace, nav_mesh, upload.start, upload.end, upload.path_half_extents, nav_mesh_api::DEFAULT_QUERY_FILTER,
+                             upload.points, MAX_PATH_POINTS, {.node_path = upload.node_path, .max_node_path = MAX_NODE_PATH});
         upload.path_milliseconds = app::now_milliseconds() - begin;
         upload.path_success = path.success;
         upload.path_partial = (path.straight_path_flags & FIND_STRAIGHT_PATH_RESULT_PARTIAL_PATH) != 0;
-        upload.path_points = path.path.length;
+        upload.path_points = path.point_count;
         upload.path_length = 0;
 
         if (upload.show_search_nodes) add_helper(list, debug::create_search_nodes_helper(upload.workspace.nodes), 0);
 
-        for (NodeRef node_ref : path.node_path.path) {
+        for (uint32_t n = 0; n < path.node_path_count; n++) {
+            NodeRef node_ref = upload.node_path[n];
             if (node::get_node_ref_type(node_ref) == NODE_TYPE_POLY) add_helper(list, debug::create_nav_mesh_poly_helper(nav_mesh, node_ref), 0.15f);
         }
 
-        for (uint32_t i = 0; i < path.path.length; i++) {
-            renderer::point(list, path.path[i].position, 0.2f, {1, 0, 0, 1});
+        for (uint32_t i = 0; i < path.point_count; i++) {
+            renderer::point(list, upload.points[i].position, 0.2f, {1, 0, 0, 1});
             if (i == 0) continue;
-            renderer::thick_line(list, path.path[i - 1].position, path.path[i].position, 0.1f, {1, 1, 0, 1});
-            upload.path_length += vec3::distance(path.path[i - 1].position, path.path[i].position);
+            renderer::thick_line(list, upload.points[i - 1].position, upload.points[i].position, 0.1f, {1, 1, 0, 1});
+            upload.path_length += vec3::distance(upload.points[i - 1].position, upload.points[i].position);
         }
-        find_path::release(path);
     }
 
     upload.path_drawing = renderer::create_static(list);
@@ -243,7 +246,8 @@ static void update_query(Vec3 point) {
 
     upload.query_done = true;
     upload.query_point = point;
-    upload.query_result = nav_mesh_api::find_nearest_poly(current_nav_mesh(), point, upload.query_half_extents, nav_mesh_api::DEFAULT_QUERY_FILTER);
+    upload.query_result = {};
+    nav_mesh_api::find_nearest_poly(upload.query_result, current_nav_mesh(), point, upload.query_half_extents, nav_mesh_api::DEFAULT_QUERY_FILTER);
     if (!upload.query_result.success) return;
 
     DrawList list = {};
@@ -301,6 +305,7 @@ static const char *file_name(const char *path) {
 
 static void init(App &app) {
     upload = {};
+    upload.workspace = nav_mesh_search::create_search_workspace();
     upload.config = upload_config();
     upload.show[UPLOAD_HELPER_NAV_MESH] = true;
     upload.tool = UPLOAD_TOOL_PATHFINDING;

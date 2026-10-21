@@ -58,6 +58,8 @@ struct AreaFiltersExample {
     bool partial;
     uint32_t point_count;
     SearchWorkspace workspace;
+    StraightPathPoint points[MAX_PATH_POINTS];
+    NodeRef node_path[MAX_NODE_PATH];
 };
 
 static AreaFiltersExample area_filters_example;
@@ -207,16 +209,19 @@ static void update_path() {
                          : state.filter == AREA_FILTERS_FILTER_GROUND ? area_only_query_filter(AREA_FILTERS_GROUND)
                                                                       : area_only_query_filter(AREA_FILTERS_WATER);
 
-    FindPathResult path = find_path::find_path(nav_mesh, state.start, state.end, {1, 1, 1}, filter, {}, &state.workspace);
+    FindPathResult path = {};
+    find_path::find_path(path, state.workspace, nav_mesh, state.start, state.end, {1, 1, 1}, filter, state.points, MAX_PATH_POINTS,
+                         {.node_path = state.node_path, .max_node_path = MAX_NODE_PATH});
     state.success = path.success;
     state.partial = (path.straight_path_flags & FIND_STRAIGHT_PATH_RESULT_PARTIAL_PATH) != 0;
-    state.point_count = path.path.length;
+    state.point_count = path.point_count;
 
     DebugPrimitives nodes = debug::create_search_nodes_helper(state.workspace.nodes);
     renderer::add_primitives(list, nodes);
     debug::release(nodes);
 
-    for (NodeRef node_ref : path.node_path.path) {
+    for (uint32_t n = 0; n < path.node_path_count; n++) {
+        NodeRef node_ref = state.node_path[n];
         if (node::get_node_ref_type(node_ref) != NODE_TYPE_POLY) continue;
         DebugPrimitives poly = debug::create_nav_mesh_poly_helper(nav_mesh, node_ref);
         app::lift(poly, 0.15f);
@@ -224,20 +229,20 @@ static void update_path() {
         debug::release(poly);
     }
 
-    for (uint32_t i = 0; i < path.path.length; i++) {
-        Vec3 position = path.path[i].position;
+    for (uint32_t i = 0; i < path.point_count; i++) {
+        Vec3 position = state.points[i].position;
         renderer::point(list, position, 0.2f, {1, 0, 0, 1});
-        if (i > 0) renderer::line(list, path.path[i - 1].position, position, {1, 1, 0, 1});
+        if (i > 0) renderer::line(list, state.points[i - 1].position, position, {1, 1, 0, 1});
     }
 
     state.path_drawing = renderer::create_static(list);
     renderer::release(list);
-    find_path::release(path);
 }
 
 static void init(App &app) {
     AreaFiltersExample &state = area_filters_example;
     state = {};
+    state.workspace = nav_mesh_search::create_search_workspace();
     state.filter = AREA_FILTERS_FILTER_GROUND;
     state.start = {-8, 1.5f, -2.3f};
     state.end = {8, 1, -0.5f};

@@ -78,8 +78,10 @@ struct OffMeshConnectionsExample {
     uint32_t node_path_flags;
     uint32_t node_count;
     uint32_t off_mesh_node_count;
-    Array<StraightPathPoint> path;
+    uint32_t point_count;
     SearchWorkspace workspace;
+    StraightPathPoint points[MAX_PATH_POINTS];
+    NodeRef node_path[MAX_NODE_PATH];
 };
 
 static OffMeshConnectionsExample off_mesh_connections_example;
@@ -110,22 +112,24 @@ static void update_path() {
     flag(list, state.start, {0.129f, 0.588f, 0.953f, 1});
     flag(list, state.end, {0, 1, 0, 1});
 
-    FindPathResult path = find_path::find_path(nav_mesh, state.start, state.end, {1, 1, 1}, state.filter, {}, &state.workspace);
+    FindPathResult path = {};
+    find_path::find_path(path, state.workspace, nav_mesh, state.start, state.end, {1, 1, 1}, state.filter, state.points, MAX_PATH_POINTS,
+                         {.node_path = state.node_path, .max_node_path = MAX_NODE_PATH});
     state.success = path.success;
     state.flags = path.flags;
     state.straight_path_flags = path.straight_path_flags;
     state.node_path_flags = path.node_path_flags;
-    state.node_count = path.node_path.path.length;
+    state.node_count = path.node_path_count;
     state.off_mesh_node_count = 0;
-    state.path.clear();
-    for (const StraightPathPoint &point : path.path) state.path.push(point);
+    state.point_count = path.point_count;
 
     if (path.success) {
         DebugPrimitives nodes = debug::create_search_nodes_helper(state.workspace.nodes);
         renderer::add_primitives(list, nodes);
         debug::release(nodes);
 
-        for (NodeRef node_ref : path.node_path.path) {
+        for (uint32_t n = 0; n < path.node_path_count; n++) {
+            NodeRef node_ref = state.node_path[n];
             if (node::get_node_ref_type(node_ref) != NODE_TYPE_POLY) {
                 state.off_mesh_node_count++;
                 continue;
@@ -136,21 +140,21 @@ static void update_path() {
             debug::release(poly);
         }
 
-        for (uint32_t i = 0; i < path.path.length; i++) {
-            Vec3 position = path.path[i].position;
+        for (uint32_t i = 0; i < path.point_count; i++) {
+            Vec3 position = state.points[i].position;
             renderer::point(list, position, 0.2f, {1, 0, 0, 1});
-            if (i > 0) renderer::line(list, path.path[i - 1].position, position, {1, 1, 0, 1});
+            if (i > 0) renderer::line(list, state.points[i - 1].position, position, {1, 1, 0, 1});
         }
     }
 
     state.path_drawing = renderer::create_static(list);
     renderer::release(list);
-    find_path::release(path);
 }
 
 static void init(App &app) {
     OffMeshConnectionsExample &state = off_mesh_connections_example;
     state = {};
+    state.workspace = nav_mesh_search::create_search_workspace();
     state.filter = {pass_all, off_mesh_connection_cost, 0xffffffffu, 0, nullptr};
     state.start = {-2.2f, 0.26f, 4.71f};
     state.end = {3.4f, 2.8f, 3.6f};
@@ -216,8 +220,8 @@ static void ui(App &) {
         ImGui::Text("success %s, flags %u", state.success ? "true" : "false", state.flags);
         ImGui::Text("node path flags %u, straight path flags %u", state.node_path_flags, state.straight_path_flags);
         ImGui::Text("%u nodes, %u off mesh connections", state.node_count, state.off_mesh_node_count);
-        for (uint32_t i = 0; i < state.path.length; i++) {
-            const StraightPathPoint &point = state.path[i];
+        for (uint32_t i = 0; i < state.point_count; i++) {
+            const StraightPathPoint &point = state.points[i];
             ImGui::Text("%u %s (%.2f, %.2f, %.2f)", i, point.type == NODE_TYPE_OFFMESH ? "offmesh" : "poly", point.position.x, point.position.y,
                         point.position.z);
         }
@@ -230,7 +234,6 @@ static void shutdown(App &) {
     nav_mesh_search::release(state.workspace);
     renderer::release(state.off_mesh_connections_drawing);
     renderer::release(state.path_drawing);
-    state.path.release();
     if (state.generated) {
         generate_tiled_nav_mesh::release(state.result.intermediates);
         nav_mesh_api::release_nav_mesh(state.result.nav_mesh);

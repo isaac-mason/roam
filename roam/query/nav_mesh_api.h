@@ -26,6 +26,14 @@ struct TileAndPoly {
     int poly_index;
 };
 
+constexpr uint32_t INLINE_POLY_VERTICES = 32;
+
+struct PolyVertices {
+    float inline_values[INLINE_POLY_VERTICES * 3];
+    Array<float> overflow;
+    float *data;
+};
+
 struct GetPolyHeightResult {
     bool success;
     float height;
@@ -45,6 +53,11 @@ struct GetClosestPointOnPolyResult {
 struct ClosestPointOnPolyBoundary {
     bool success;
     Vec3 point;
+};
+
+struct QueryPolygonsResult {
+    uint32_t poly_count;
+    uint32_t full_poly_count;
 };
 
 struct FindNearestPolyResult {
@@ -73,15 +86,19 @@ Vec2 world_to_tile_position(const NavMesh &nav_mesh, Vec3 world_position);
 
 TileAndPoly get_tile_and_poly_by_ref(NodeRef ref, const NavMesh &nav_mesh);
 
-GetPolyHeightResult get_poly_height(const NavMeshTile &tile, const NavMeshPoly &poly, int poly_index, Vec3 position);
+uint32_t gather_poly_vertices(const NavMeshTile &tile, const NavMeshPoly &poly, PolyVertices &vertices);
+void release(PolyVertices &vertices);
+
+void get_poly_height(GetPolyHeightResult &out, const NavMeshTile &tile, const NavMeshPoly &poly, int poly_index, Vec3 position);
 ClosestPointOnDetailEdges get_closest_point_on_detail_edges(const NavMeshTile &tile, const NavMeshPoly &poly, int poly_index, Vec3 position,
                                                             bool only_boundary);
-GetClosestPointOnPolyResult get_closest_point_on_poly(const NavMesh &nav_mesh, NodeRef node_ref, Vec3 position);
-ClosestPointOnPolyBoundary get_closest_point_on_poly_boundary(const NavMesh &nav_mesh, NodeRef node_ref, Vec3 point);
-FindNearestPolyResult find_nearest_poly(const NavMesh &nav_mesh, Vec3 center, Vec3 half_extents, const QueryFilter &filter);
+void get_closest_point_on_poly(GetClosestPointOnPolyResult &out, const NavMesh &nav_mesh, NodeRef node_ref, Vec3 position);
+void get_closest_point_on_poly_boundary(ClosestPointOnPolyBoundary &out, const NavMesh &nav_mesh, NodeRef node_ref, Vec3 point);
+void find_nearest_poly(FindNearestPolyResult &out, const NavMesh &nav_mesh, Vec3 center, Vec3 half_extents, const QueryFilter &filter);
 
-void query_polygons_in_tile(Array<NodeRef> &out, const NavMesh &nav_mesh, const NavMeshTile &tile, Box3 bounds, const QueryFilter &filter);
-Array<NodeRef> query_polygons(const NavMesh &nav_mesh, Box3 bounds, const QueryFilter &filter);
+void query_polygons_in_tile(QueryPolygonsResult &out, const NavMesh &nav_mesh, const NavMeshTile &tile, Box3 bounds, const QueryFilter &filter,
+                            NodeRef *polys, uint32_t max_polys);
+void query_polygons(QueryPolygonsResult &out, const NavMesh &nav_mesh, Box3 bounds, const QueryFilter &filter, NodeRef *polys, uint32_t max_polys);
 
 NavMeshTile build_tile(const NavMeshTileParams &params);
 uint32_t add_tile(NavMesh &nav_mesh, NavMeshTile tile);

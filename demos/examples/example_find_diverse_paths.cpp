@@ -51,6 +51,9 @@ struct FindDiversePathsExample {
     DiversePathsMoving moving;
     uint32_t path_count;
     double query_milliseconds;
+    SearchWorkspace workspace;
+    NodeRef node_path[MAX_NODE_PATH];
+    StraightPathPoint points[MAX_PATH_POINTS];
 };
 
 static FindDiversePathsExample find_diverse_paths_example;
@@ -100,6 +103,13 @@ static float compute_unpenalized_cost(const NavMesh &nav_mesh, const Array<NodeR
     }
     mids.release();
     return total;
+}
+
+static Array<NodeRef> copy_path(const NodeRef *path, uint32_t count) {
+    Array<NodeRef> copy = {};
+    copy.resize(count);
+    for (uint32_t i = 0; i < count; i++) copy[i] = path[i];
+    return copy;
 }
 
 static Map<NodeRef, uint8_t> node_set_of(const Array<NodeRef> &path) {
@@ -159,29 +169,28 @@ static void spread_penalty(const NavMesh &nav_mesh, Map<NodeRef, float> &penalty
     seen_order.release();
 }
 
-static Array<DiverseNodePath> find_diverse_paths(const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 half_extents, const QueryFilter &base_filter,
-                                                 const FindDiversePathsOptions &options) {
+static Array<DiverseNodePath> find_diverse_paths(SearchWorkspace &workspace, NodeRef *buffer, const NavMesh &nav_mesh, Vec3 start, Vec3 end,
+                                                 Vec3 half_extents, const QueryFilter &base_filter, const FindDiversePathsOptions &options) {
     Array<DiverseNodePath> accepted = {};
 
-    FindNearestPolyResult start_nearest = nav_mesh_api::find_nearest_poly(nav_mesh, start, half_extents, base_filter);
+    FindNearestPolyResult start_nearest = {};
+    nav_mesh_api::find_nearest_poly(start_nearest, nav_mesh, start, half_extents, base_filter);
     if (!start_nearest.success) return accepted;
-    FindNearestPolyResult end_nearest = nav_mesh_api::find_nearest_poly(nav_mesh, end, half_extents, base_filter);
+    FindNearestPolyResult end_nearest = {};
+    nav_mesh_api::find_nearest_poly(end_nearest, nav_mesh, end, half_extents, base_filter);
     if (!end_nearest.success) return accepted;
 
     NodeRef start_node_ref = start_nearest.node_ref;
     NodeRef end_node_ref = end_nearest.node_ref;
 
-    FindNodePathResult best = nav_mesh_search::find_node_path(nav_mesh, start_node_ref, end_node_ref, start, end, base_filter);
-    if (!best.success) {
-        nav_mesh_search::release(best);
-        return accepted;
-    }
+    FindNodePathResult best = {};
+    nav_mesh_search::find_node_path(best, workspace, nav_mesh, start_node_ref, end_node_ref, start, end, base_filter, buffer, MAX_NODE_PATH);
+    if (!best.success) return accepted;
 
     Map<NodeRef, float> penalty = {};
-    float best_cost = compute_unpenalized_cost(nav_mesh, best.path, start, end, base_filter);
-    accepted.push({best.path, node_set_of(best.path), best_cost});
-    best.path = {};
-    nav_mesh_search::release(best);
+    Array<NodeRef> best_path = copy_path(buffer, best.path_count);
+    float best_cost = compute_unpenalized_cost(nav_mesh, best_path, start, end, base_filter);
+    accepted.push({best_path, node_set_of(best_path), best_cost});
     spread_penalty(nav_mesh, penalty, accepted[0].path, options);
 
     PenalizedFilterData data = {&base_filter, &penalty};
@@ -190,30 +199,27 @@ static Array<DiverseNodePath> find_diverse_paths(const NavMesh &nav_mesh, Vec3 s
     int tries = 0;
     while ((int)accepted.length < options.k && tries < options.max_tries) {
         tries++;
-        FindNodePathResult candidate = nav_mesh_search::find_node_path(nav_mesh, start_node_ref, end_node_ref, start, end, penalized);
-        if (!candidate.success) {
-            nav_mesh_search::release(candidate);
-            continue;
-        }
+        FindNodePathResult candidate = {};
+        nav_mesh_search::find_node_path(candidate, workspace, nav_mesh, start_node_ref, end_node_ref, start, end, penalized, buffer, MAX_NODE_PATH);
+        if (!candidate.success) continue;
 
-        float cost = compute_unpenalized_cost(nav_mesh, candidate.path, start, end, base_filter);
+        Array<NodeRef> candidate_path = copy_path(buffer, candidate.path_count);
+        float cost = compute_unpenalized_cost(nav_mesh, candidate_path, start, end, base_filter);
         if (cost > (1 + options.max_stretch) * best_cost) {
-            nav_mesh_search::release(candidate);
+            candidate_path.release();
             continue;
         }
 
-        Map<NodeRef, uint8_t> nodes = node_set_of(candidate.path);
+        Map<NodeRef, uint8_t> nodes = node_set_of(candidate_path);
         bool too_similar = false;
         for (const DiverseNodePath &existing : accepted) too_similar = too_similar || jaccard(existing.node_set, nodes) > options.max_shared;
         if (too_similar) {
             nodes.release();
-            nav_mesh_search::release(candidate);
+            candidate_path.release();
             continue;
         }
 
-        accepted.push({candidate.path, nodes, cost});
-        candidate.path = {};
-        nav_mesh_search::release(candidate);
+        accepted.push({candidate_path, nodes, cost});
         spread_penalty(nav_mesh, penalty, accepted.back().path, options);
     }
 
@@ -237,8 +243,8 @@ static void update_path() {
     flag(list, state.end, {0, 1, 0, 1});
 
     double started = app::now_milliseconds();
-    Array<DiverseNodePath> node_paths =
-        find_diverse_paths(nav_mesh, state.start, state.end, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER, state.options);
+    Array<DiverseNodePath> node_paths = find_diverse_paths(state.workspace, state.node_path, nav_mesh, state.start, state.end, {1, 1, 1},
+                                                           nav_mesh_api::DEFAULT_QUERY_FILTER, state.options);
     state.query_milliseconds = app::now_milliseconds() - started;
     state.path_count = node_paths.length;
 
@@ -256,16 +262,17 @@ static void update_path() {
             }
         }
 
-        FindStraightPathResult straight = find_straight_path::find_straight_path(nav_mesh, state.start, state.end, node_path.data, node_path.length);
+        FindStraightPathResult straight = {};
+        find_straight_path::find_straight_path(straight, nav_mesh, state.start, state.end, node_path.data, node_path.length, state.points,
+                                               MAX_PATH_POINTS);
         if (straight.success) {
             const Vec3 lift = {0, 0.1f, 0};
-            for (uint32_t i = 0; i < straight.path.length; i++) {
-                Vec3 position = vec3::add(straight.path[i].position, lift);
+            for (uint32_t i = 0; i < straight.point_count; i++) {
+                Vec3 position = vec3::add(state.points[i].position, lift);
                 renderer::point(list, position, path_index == 0 ? 0.2f : 0.15f, route_color);
-                if (i > 0) renderer::line(list, vec3::add(straight.path[i - 1].position, lift), position, route_color);
+                if (i > 0) renderer::line(list, vec3::add(state.points[i - 1].position, lift), position, route_color);
             }
         }
-        find_straight_path::release(straight);
     }
 
     for (DiverseNodePath &node_path : node_paths) release(node_path);
@@ -278,6 +285,7 @@ static void update_path() {
 static void init(App &app) {
     FindDiversePathsExample &state = find_diverse_paths_example;
     state = {};
+    state.workspace = nav_mesh_search::create_search_workspace();
     state.start = {-3.94f, 0.26f, 4.71f};
     state.end = {2.52f, 2.39f, -2.2f};
     state.options = {3, 0.2f, 0.65f, 120, 2, 0.5f, 20};
@@ -351,6 +359,7 @@ static void shutdown(App &) {
     FindDiversePathsExample &state = find_diverse_paths_example;
     renderer::release(state.nav_mesh_drawing);
     renderer::release(state.path_drawing);
+    nav_mesh_search::release(state.workspace);
     if (state.generated) {
         generate_tiled_nav_mesh::release(state.result.intermediates);
         nav_mesh_api::release_nav_mesh(state.result.nav_mesh);

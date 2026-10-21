@@ -11,6 +11,7 @@ namespace crowd {
 
 static const uint32_t CHECK_LOOKAHEAD = 10;
 static const float TARGET_REPLAN_DELAY_SECONDS = 1.0f;
+static const uint32_t MAX_CORNERS = 3;
 
 Crowd create(float max_agent_radius) {
     Crowd crowd = {};
@@ -19,6 +20,8 @@ Crowd create(float max_agent_radius) {
     crowd.max_iterations_per_update = 600;
     crowd.max_iterations_per_agent = 200;
     crowd.quick_search_iterations = 20;
+    crowd.workspace = nav_mesh_search::create_search_workspace();
+    crowd.topology_query = nav_mesh_search::create_sliced_node_path_query();
     return crowd;
 }
 
@@ -43,7 +46,8 @@ void release(Crowd &crowd) {
     crowd.scratch_cells.release();
     crowd.scratch_cell_starts.release();
     crowd.scratch_cell_agents.release();
-    crowd.scratch_corners.release();
+    nav_mesh_search::release(crowd.topology_query);
+    crowd.scratch_merged_path.release();
 }
 
 static Agent *get_agent(Crowd &crowd, uint32_t agent_id) {
@@ -83,7 +87,8 @@ uint32_t add_agent(Crowd &crowd, const NavMesh &nav_mesh, Vec3 position, const A
     agent.target_state = AGENT_TARGET_STATE_NONE;
     agent.target_ref = INVALID_NODE_REF;
 
-    FindNearestPolyResult nearest = nav_mesh_api::find_nearest_poly(nav_mesh, position, crowd.agent_placement_half_extents, agent.query_filter);
+    FindNearestPolyResult nearest = {};
+    nav_mesh_api::find_nearest_poly(nearest, nav_mesh, position, crowd.agent_placement_half_extents, agent.query_filter);
 
     Vec3 nearest_position = position;
     NodeRef nearest_ref = INVALID_NODE_REF;
@@ -162,8 +167,8 @@ static void check_path_validity(Crowd &crowd, const NavMesh &nav_mesh, float del
         bool replan = false;
 
         if (!nav_mesh_api::is_valid_node_ref(nav_mesh, first_corridor_ref(agent))) {
-            FindNearestPolyResult nearest =
-                nav_mesh_api::find_nearest_poly(nav_mesh, agent.position, crowd.agent_placement_half_extents, agent.query_filter);
+            FindNearestPolyResult nearest = {};
+            nav_mesh_api::find_nearest_poly(nearest, nav_mesh, agent.position, crowd.agent_placement_half_extents, agent.query_filter);
 
             if (!nearest.success) {
                 agent.state = AGENT_STATE_INVALID;
@@ -184,8 +189,8 @@ static void check_path_validity(Crowd &crowd, const NavMesh &nav_mesh, float del
         if (agent.target_state != AGENT_TARGET_STATE_FAILED) {
             if (!nav_mesh_api::is_valid_node_ref(nav_mesh, agent.target_ref) ||
                 !agent.query_filter.pass_filter(agent.query_filter, agent.target_ref, nav_mesh)) {
-                FindNearestPolyResult nearest =
-                    nav_mesh_api::find_nearest_poly(nav_mesh, agent.target_position, crowd.agent_placement_half_extents, agent.query_filter);
+                FindNearestPolyResult nearest = {};
+                nav_mesh_api::find_nearest_poly(nearest, nav_mesh, agent.target_position, crowd.agent_placement_half_extents, agent.query_filter);
 
                 if (!nearest.success) {
                     agent.target_state = AGENT_TARGET_STATE_NONE;
@@ -217,19 +222,22 @@ static void request_path(Crowd &crowd, const NavMesh &nav_mesh, Agent &agent) {
                                                 agent.target_position, agent.query_filter);
     nav_mesh_search::update_sliced_find_node_path(nav_mesh, agent.sliced_query, crowd.quick_search_iterations);
 
-    SlicedFindNodePathResult result =
-        agent.target_replan
-            ? nav_mesh_search::finalize_sliced_find_node_path_partial(nav_mesh, agent.sliced_query, agent.corridor.path.data, agent.corridor.path.length)
-            : nav_mesh_search::finalize_sliced_find_node_path(nav_mesh, agent.sliced_query);
+    SlicedFindNodePathResult result;
+    if (agent.target_replan) {
+        nav_mesh_search::finalize_sliced_find_node_path_partial_to_workspace(result, crowd.workspace, nav_mesh, agent.sliced_query,
+                                                                             agent.corridor.path.data, agent.corridor.path.length);
+    } else {
+        nav_mesh_search::finalize_sliced_find_node_path_to_workspace(result, crowd.workspace, nav_mesh, agent.sliced_query);
+    }
 
-    Array<NodeRef> &request_path = result.path;
+    Array<NodeRef> &request_path = crowd.workspace.node_path;
     uint32_t request_path_count = request_path.length;
     Vec3 request_position = agent.target_position;
 
     if (request_path_count > 0) {
         if (request_path[request_path_count - 1] != agent.target_ref) {
-            GetClosestPointOnPolyResult closest =
-                nav_mesh_api::get_closest_point_on_poly(nav_mesh, request_path[request_path_count - 1], agent.target_position);
+            GetClosestPointOnPolyResult closest = {};
+            nav_mesh_api::get_closest_point_on_poly(closest, nav_mesh, request_path[request_path_count - 1], agent.target_position);
 
             if (closest.success) {
                 request_position = closest.position;
@@ -256,8 +264,6 @@ static void request_path(Crowd &crowd, const NavMesh &nav_mesh, Agent &agent) {
     } else {
         agent.target_state = AGENT_TARGET_STATE_WAITING_FOR_QUEUE;
     }
-
-    nav_mesh_search::release(result);
 }
 
 static void retry_or_fail(Agent &agent) {
@@ -279,21 +285,22 @@ static void remove_trackbacks(Array<NodeRef> &path) {
     }
 }
 
-static void complete_path(const NavMesh &nav_mesh, Agent &agent) {
+static void complete_path(Crowd &crowd, const NavMesh &nav_mesh, Agent &agent) {
     agent.target_path_is_partial = (agent.sliced_query.status & SLICED_FIND_NODE_PATH_PARTIAL_RESULT) != 0;
 
-    SlicedFindNodePathResult result = nav_mesh_search::finalize_sliced_find_node_path(nav_mesh, agent.sliced_query);
-    const Array<NodeRef> &new_path = result.path;
+    SlicedFindNodePathResult result;
+    nav_mesh_search::finalize_sliced_find_node_path_to_workspace(result, crowd.workspace, nav_mesh, agent.sliced_query);
+    const Array<NodeRef> &new_path = crowd.workspace.node_path;
     const Array<NodeRef> &current_path = agent.corridor.path;
 
     bool valid = !(current_path.length > 0 && new_path.length > 0 && current_path.back() != new_path[0]);
     if (!valid) {
         retry_or_fail(agent);
-        nav_mesh_search::release(result);
         return;
     }
 
-    Array<NodeRef> merged = {};
+    Array<NodeRef> &merged = crowd.scratch_merged_path;
+    merged.clear();
     if (current_path.length > 1) {
         for (uint32_t i = 0; i + 1 < current_path.length; i++) merged.push(current_path[i]);
         for (NodeRef ref : new_path) merged.push(ref);
@@ -304,7 +311,8 @@ static void complete_path(const NavMesh &nav_mesh, Agent &agent) {
 
     Vec3 target_position = agent.target_position;
     if (merged.length > 0 && merged.back() != agent.target_ref) {
-        GetClosestPointOnPolyResult closest = nav_mesh_api::get_closest_point_on_poly(nav_mesh, merged.back(), agent.target_position);
+        GetClosestPointOnPolyResult closest = {};
+        nav_mesh_api::get_closest_point_on_poly(closest, nav_mesh, merged.back(), agent.target_position);
         if (closest.success) {
             target_position = closest.position;
         } else {
@@ -320,9 +328,6 @@ static void complete_path(const NavMesh &nav_mesh, Agent &agent) {
     } else {
         retry_or_fail(agent);
     }
-
-    merged.release();
-    nav_mesh_search::release(result);
 }
 
 static void update_move_requests(Crowd &crowd, const NavMesh &nav_mesh, float delta_time) {
@@ -375,7 +380,7 @@ static void update_move_requests(Crowd &crowd, const NavMesh &nav_mesh, float de
             agent.target_pathfinding_time = 0;
             agent.target_path_is_partial = false;
         } else if ((agent.sliced_query.status & SLICED_FIND_NODE_PATH_SUCCESS) != 0) {
-            complete_path(nav_mesh, agent);
+            complete_path(crowd, nav_mesh, agent);
         }
     }
 }
@@ -489,7 +494,7 @@ static void update_local_boundaries(Crowd &crowd, const NavMesh &nav_mesh) {
 
         if (moved_distance > update_threshold || !local_boundary::is_local_boundary_valid(agent.boundary, nav_mesh, agent.query_filter)) {
             local_boundary::update_local_boundary(agent.boundary, agent.corridor.path[0], agent.position, agent.collision_query_range, nav_mesh,
-                                                  agent.query_filter, &crowd.workspace);
+                                                  agent.query_filter, crowd.workspace);
         }
     }
 }
@@ -503,19 +508,21 @@ static void update_corners(Crowd &crowd, const NavMesh &nav_mesh) {
             continue;
         }
 
-        if (!path_corridor::find_corners_into(agent.corridor, nav_mesh, 3, crowd.scratch_corners)) {
+        StraightPathPoint corners[MAX_CORNERS];
+        FindCornersResult found;
+        path_corridor::find_corners(found, agent.corridor, nav_mesh, corners, MAX_CORNERS);
+        if (!found.success) {
             agent.desired_velocity = {0, 0, 0};
             continue;
         }
 
-        Array<StraightPathPoint> previous = agent.corners;
-        agent.corners = crowd.scratch_corners;
-        crowd.scratch_corners = previous;
+        agent.corners.clear();
+        for (uint32_t i = 0; i < found.corner_count; i++) agent.corners.push(corners[i]);
 
         if ((agent.update_flags & CROWD_UPDATE_OPTIMIZE_VIS) != 0 && agent.corners.length > 0) {
             uint32_t target_index = agent.corners.length > 1 ? 1 : 0;
-            path_corridor::optimize_path_visibility(agent.corridor, agent.corners[target_index].position, agent.path_optimization_range, nav_mesh,
-                                                    agent.query_filter, &crowd.workspace);
+            path_corridor::optimize_path_visibility(agent.corridor, crowd.workspace, agent.corners[target_index].position, agent.path_optimization_range,
+                                                    nav_mesh, agent.query_filter);
         }
     }
 }
@@ -546,7 +553,8 @@ static void update_off_mesh_connection_triggers(Crowd &crowd, const NavMesh &nav
         NodeRef off_mesh_node_ref = agent.corners.back().node_ref;
         if (off_mesh_node_ref == INVALID_NODE_REF) continue;
 
-        MoveOverOffMeshConnectionResult result = path_corridor::move_over_off_mesh_connection(agent.corridor, off_mesh_node_ref, nav_mesh);
+        MoveOverOffMeshConnectionResult result = {};
+        path_corridor::move_over_off_mesh_connection(result, agent.corridor, off_mesh_node_ref, nav_mesh);
         if (!result.success) continue;
 
         agent.state = AGENT_STATE_OFFMESH;
@@ -704,9 +712,8 @@ static void update_velocity_planning(Crowd &crowd) {
         }
 
         ObstacleAvoidanceDebugData *debug = agent.debug_obstacle_avoidance ? &agent.obstacle_avoidance_debug_data : nullptr;
-        SampleVelocityResult sampled =
-            obstacle_avoidance::sample_velocity_adaptive(agent.obstacle_avoidance_query, agent.position, agent.radius, agent.max_speed, agent.velocity,
-                                                         agent.desired_velocity, agent.obstacle_avoidance, debug);
+        SampleVelocityResult sampled = {};
+        obstacle_avoidance::sample_velocity_adaptive(sampled, agent.obstacle_avoidance_query, agent.position, agent.radius, agent.max_speed, agent.velocity, agent.desired_velocity, agent.obstacle_avoidance, debug);
         agent.new_velocity = sampled.velocity;
     }
 }
@@ -784,7 +791,7 @@ static void update_corridors(Crowd &crowd, const NavMesh &nav_mesh) {
     for (Agent &agent : crowd.agents) {
         if (!agent.allocated || agent.state != AGENT_STATE_WALKING) continue;
 
-        path_corridor::move_position(agent.corridor, agent.position, nav_mesh, agent.query_filter, &crowd.workspace);
+        path_corridor::move_position(agent.corridor, crowd.workspace, agent.position, nav_mesh, agent.query_filter);
         agent.position = agent.corridor.position;
 
         if (agent.target_state == AGENT_TARGET_STATE_NONE || agent.target_state == AGENT_TARGET_STATE_VELOCITY) {
@@ -857,7 +864,7 @@ static void update_topology_optimization(Crowd &crowd, const NavMesh &nav_mesh, 
 
     for (uint32_t i = 0; i < queue_length; i++) {
         Agent &agent = crowd.agents[queue[i].agent_id];
-        path_corridor::optimize_path_topology(agent.corridor, nav_mesh, agent.query_filter);
+        path_corridor::optimize_path_topology(agent.corridor, crowd.topology_query, crowd.workspace, nav_mesh, agent.query_filter);
         agent.topology_opt_time = 0;
     }
 }

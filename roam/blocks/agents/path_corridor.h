@@ -18,7 +18,7 @@ struct PathCorridor {
 
 struct FindCornersResult {
     bool success;
-    Array<StraightPathPoint> corners;
+    uint32_t corner_count;
 };
 
 struct MoveOverOffMeshConnectionResult {
@@ -41,23 +41,21 @@ void set_path(PathCorridor &corridor, Vec3 target, const NodeRef *path, uint32_t
 void merge_start_moved(Array<NodeRef> &current_path, const Array<NodeRef> &visited);
 void merge_start_shortcut(Array<NodeRef> &current_path, const Array<NodeRef> &visited);
 
-bool move_position(PathCorridor &corridor, Vec3 new_position, const NavMesh &nav_mesh, const QueryFilter &filter,
-                   SearchWorkspace *workspace = nullptr);
+bool move_position(PathCorridor &corridor, SearchWorkspace &workspace, Vec3 new_position, const NavMesh &nav_mesh, const QueryFilter &filter);
 
-FindCornersResult find_corners(const PathCorridor &corridor, const NavMesh &nav_mesh, int max_corners);
-bool find_corners_into(const PathCorridor &corridor, const NavMesh &nav_mesh, int max_corners, Array<StraightPathPoint> &corners);
-void release(FindCornersResult &result);
+void find_corners(FindCornersResult &out, const PathCorridor &corridor, const NavMesh &nav_mesh, StraightPathPoint *corners, uint32_t max_corners);
 
 bool corridor_is_valid(const PathCorridor &corridor, uint32_t max_look_ahead, const NavMesh &nav_mesh, const QueryFilter &filter);
 
 bool fix_path_start(PathCorridor &corridor, NodeRef safe_ref, Vec3 safe_position);
 
-MoveOverOffMeshConnectionResult move_over_off_mesh_connection(PathCorridor &corridor, NodeRef off_mesh_node_ref, const NavMesh &nav_mesh);
+void move_over_off_mesh_connection(MoveOverOffMeshConnectionResult &out, PathCorridor &corridor, NodeRef off_mesh_node_ref, const NavMesh &nav_mesh);
 
-bool optimize_path_topology(PathCorridor &corridor, const NavMesh &nav_mesh, const QueryFilter &filter);
+bool optimize_path_topology(PathCorridor &corridor, SlicedNodePathQuery &query, SearchWorkspace &workspace, const NavMesh &nav_mesh,
+                            const QueryFilter &filter);
 
-void optimize_path_visibility(PathCorridor &corridor, Vec3 next, float path_optimization_range, const NavMesh &nav_mesh, const QueryFilter &filter,
-                              SearchWorkspace *workspace = nullptr);
+void optimize_path_visibility(PathCorridor &corridor, SearchWorkspace &workspace, Vec3 next, float path_optimization_range, const NavMesh &nav_mesh,
+                              const QueryFilter &filter);
 
 }
 

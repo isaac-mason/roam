@@ -212,8 +212,8 @@ static void scatter() {
     MultipleAgentSizesExample &state = multiple_agent_sizes_example;
     for (uint32_t id = 0; id < state.crowd.agents.length; id++) {
         if (!crowd::is_agent(state.crowd, id)) continue;
-        FindRandomPointResult point =
-            nav_mesh_search::find_random_point(state.result.nav_mesh, nav_mesh_api::DEFAULT_QUERY_FILTER, next_random, &state.random_state);
+        FindRandomPointResult point = {};
+        nav_mesh_search::find_random_point(point, state.result.nav_mesh, nav_mesh_api::DEFAULT_QUERY_FILTER, next_random, &state.random_state);
         if (point.success) crowd::request_move_target(state.crowd, id, point.node_ref, point.position);
     }
 }
@@ -269,7 +269,8 @@ static void init(App &app) {
 
     state.crowd = crowd::create(1);
     for (int i = 0; i < 10; i++) {
-        FindRandomPointResult point = nav_mesh_search::find_random_point(nav_mesh, state.large_agent_filter, next_random, &state.random_state);
+        FindRandomPointResult point = {};
+        nav_mesh_search::find_random_point(point, nav_mesh, state.large_agent_filter, next_random, &state.random_state);
         bool small = AGENT_IS_SMALL[i];
         AgentParams params = {
             .radius = small ? SMALL_AGENT_RADIUS : LARGE_AGENT_RADIUS,
@@ -302,17 +303,18 @@ static void draw_agent(DrawList &list, const Agent &agent, Color color) {
     renderer::point(list, vec3::add(agent.target_position, {0, 0.1f, 0}), 0.1f, {1, 1, 0, 1});
 
     if (state.show_path_line) {
-        FindCornersResult corners = path_corridor::find_corners(agent.corridor, state.result.nav_mesh, 3);
-        if (corners.success && corners.corners.length > 1) {
+        StraightPathPoint corners[3];
+        FindCornersResult found = {};
+        path_corridor::find_corners(found, agent.corridor, state.result.nav_mesh, corners, 3);
+        if (found.success && found.corner_count > 1) {
             const Vec3 lift = {0, 0.2f, 0};
             Vec3 previous = vec3::add(agent.position, lift);
-            for (const StraightPathPoint &corner : corners.corners) {
-                Vec3 point = vec3::add(corner.position, lift);
+            for (uint32_t i = 0; i < found.corner_count; i++) {
+                Vec3 point = vec3::add(corners[i].position, lift);
                 renderer::line(list, previous, point, color);
                 previous = point;
             }
         }
-        path_corridor::release(corners);
     }
 
     if (state.show_velocity_vectors) {
@@ -329,7 +331,8 @@ static void update(App &app, float delta_time) {
     if (app.click.clicked && !app.click.secondary) {
         state.last_interaction_time = now;
         if (app.click.hit) {
-            FindNearestPolyResult nearest = nav_mesh_api::find_nearest_poly(nav_mesh, app.click.point, {1, 1, 1}, nav_mesh_api::ANY_QUERY_FILTER);
+            FindNearestPolyResult nearest = {};
+            nav_mesh_api::find_nearest_poly(nearest, nav_mesh, app.click.point, {1, 1, 1}, nav_mesh_api::ANY_QUERY_FILTER);
             if (nearest.success) {
                 for (uint32_t id = 0; id < state.crowd.agents.length; id++) {
                     if (crowd::is_agent(state.crowd, id)) crowd::request_move_target(state.crowd, id, nearest.node_ref, nearest.position);

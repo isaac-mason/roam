@@ -237,42 +237,47 @@ static const uint32_t QUERY_COUNT = 100;
 
 static uint32_t pair_end(uint32_t i) { return (i * 37 + 11) % state.centers.length; }
 
-static void run_find_path() {
-    for (uint32_t i = 0; i < QUERY_COUNT; i++) {
-        uint32_t a = i % state.centers.length;
-        FindPathResult path =
-            find_path::find_path(state.nav_mesh, state.centers[a], state.centers[pair_end(i)], {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
-        find_path::release(path);
-    }
-}
+static const uint32_t MAX_PATH = 256;
 
 static SearchWorkspace query_workspace = {};
 
-static void run_find_path_with_workspace() {
+static void run_find_path() {
+    StraightPathPoint points[MAX_PATH];
     for (uint32_t i = 0; i < QUERY_COUNT; i++) {
         uint32_t a = i % state.centers.length;
-        FindPathResult path = find_path::find_path(state.nav_mesh, state.centers[a], state.centers[pair_end(i)], {1, 1, 1},
-                                                   nav_mesh_api::DEFAULT_QUERY_FILTER, {}, &query_workspace);
-        find_path::release(path);
+        FindPathResult path;
+        find_path::find_path(path, query_workspace, state.nav_mesh, state.centers[a], state.centers[pair_end(i)], {1, 1, 1},
+                             nav_mesh_api::DEFAULT_QUERY_FILTER, points, MAX_PATH);
     }
 }
 
 static void run_raycast() {
+    NodeRef path[MAX_PATH];
     for (uint32_t i = 0; i < QUERY_COUNT; i++) {
         uint32_t a = i % state.centers.length;
-        RaycastResult ray = nav_mesh_search::raycast(state.nav_mesh, state.center_refs[a], state.centers[a], state.centers[pair_end(i)],
-                                                     nav_mesh_api::DEFAULT_QUERY_FILTER);
-        nav_mesh_search::release(ray);
+        RaycastResult ray;
+        nav_mesh_search::raycast(ray, state.nav_mesh, state.center_refs[a], state.centers[a], state.centers[pair_end(i)], nav_mesh_api::DEFAULT_QUERY_FILTER,
+                                 path, MAX_PATH);
     }
 }
 
-static RaycastResult reused_ray = {};
+static void run_path_ends() {
+    for (uint32_t i = 0; i < QUERY_COUNT; i++) {
+        FindNearestPolyResult a;
+        nav_mesh_api::find_nearest_poly(a, state.nav_mesh, state.centers[i % state.centers.length], {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
+        FindNearestPolyResult b;
+        nav_mesh_api::find_nearest_poly(b, state.nav_mesh, state.centers[pair_end(i)], {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
+    }
+}
 
-static void run_raycast_reused() {
+static void run_node_paths() {
+    NodeRef path[MAX_PATH];
     for (uint32_t i = 0; i < QUERY_COUNT; i++) {
         uint32_t a = i % state.centers.length;
-        nav_mesh_search::raycast_into(state.nav_mesh, state.center_refs[a], state.centers[a], state.centers[pair_end(i)],
-                                      nav_mesh_api::DEFAULT_QUERY_FILTER, reused_ray, &query_workspace);
+        uint32_t b = pair_end(i);
+        FindNodePathResult result;
+        nav_mesh_search::find_node_path(result, query_workspace, state.nav_mesh, state.center_refs[a], state.center_refs[b], state.centers[a],
+                                        state.centers[b], nav_mesh_api::DEFAULT_QUERY_FILTER, path, MAX_PATH);
     }
 }
 
@@ -282,7 +287,8 @@ static void run_find_nearest_poly() {
         point.x += 0.37f;
         point.y += 0.5f;
         point.z -= 0.21f;
-        nav_mesh_api::find_nearest_poly(state.nav_mesh, point, {1, 2, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
+        FindNearestPolyResult nearest;
+        nav_mesh_api::find_nearest_poly(nearest, state.nav_mesh, point, {1, 2, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
     }
 }
 
@@ -330,11 +336,13 @@ static void build_query_points() {
         Vec3 center = {0, 0, 0};
         for (uint32_t i = 0; i < poly.vertex_count; i++) center = vec3::add(center, vec3::load(tile.vertices.data, tile.poly_vertices[poly.vertex_base + i] * 3));
         center = vec3::scale(center, 1.0f / (float)poly.vertex_count);
-        FindNearestPolyResult nearest = nav_mesh_api::find_nearest_poly(state.nav_mesh, center, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
+        FindNearestPolyResult nearest = {};
+        nav_mesh_api::find_nearest_poly(nearest, state.nav_mesh, center, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
         if (!nearest.success) continue;
         state.centers.push(nearest.position);
         state.center_refs.push(nearest.node_ref);
     }
+    query_workspace = nav_mesh_search::create_search_workspace();
 }
 
 int main(int argc, char **argv) {
@@ -386,9 +394,9 @@ int main(int argc, char **argv) {
     cases[case_count++] = {"generate solo nav mesh", nullptr, run_solo, nullptr};
     cases[case_count++] = {"generate tiled nav mesh", nullptr, run_tiled, nullptr};
     cases[case_count++] = {"find path (100 pairs)", nullptr, run_find_path, nullptr};
-    cases[case_count++] = {"find path (100 pairs, workspace)", nullptr, run_find_path_with_workspace, nullptr};
+    cases[case_count++] = {"path ends (200 nearest)", nullptr, run_path_ends, nullptr};
+    cases[case_count++] = {"node paths (100 pairs)", nullptr, run_node_paths, nullptr};
     cases[case_count++] = {"raycast (100 rays)", nullptr, run_raycast, nullptr};
-    cases[case_count++] = {"raycast (100 rays, reused)", nullptr, run_raycast_reused, nullptr};
     cases[case_count++] = {"find nearest poly (200 points)", nullptr, run_find_nearest_poly, nullptr};
     cases[case_count++] = {"crowd (100 agents, 60 updates)", prepare_crowd, run_crowd, finish_crowd};
     cases[case_count++] = {"crowd (100 agents, 60 updates, 6 neighbours)", prepare_capped_crowd, run_crowd, finish_crowd};
@@ -402,7 +410,6 @@ int main(int argc, char **argv) {
         fflush(stdout);
     }
 
-    nav_mesh_search::release(reused_ray);
     nav_mesh_search::release(query_workspace);
     nav_mesh_api::release_nav_mesh(state.nav_mesh);
     state.centers.release();

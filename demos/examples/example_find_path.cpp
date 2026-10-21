@@ -13,6 +13,8 @@ struct FindPathExample {
     StaticDrawing nav_mesh_drawing;
     StaticDrawing path_drawing;
     SearchWorkspace workspace;
+    StraightPathPoint points[MAX_PATH_POINTS];
+    NodeRef node_path[MAX_NODE_PATH];
     Vec3 start;
     Vec3 end;
     bool any_angle;
@@ -38,13 +40,15 @@ static void update_path() {
 
     const NavMesh &nav_mesh = state.result.nav_mesh;
     double start = app::now_milliseconds();
-    FindPathResult path = find_path::find_path(nav_mesh, state.start, state.end, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER,
-                                               {state.any_angle ? 10.0f : 0.0f}, &state.workspace);
+    FindPathResult path = {};
+    find_path::find_path(path, state.workspace, nav_mesh, state.start, state.end, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER, state.points,
+                         MAX_PATH_POINTS,
+                         {.raycast_distance = state.any_angle ? 10.0f : 0.0f, .node_path = state.node_path, .max_node_path = MAX_NODE_PATH});
     state.query_milliseconds = app::now_milliseconds() - start;
     state.success = path.success;
     state.flags = path.flags;
-    state.node_count = path.node_path.path.length;
-    state.point_count = path.path.length;
+    state.node_count = path.node_path_count;
+    state.point_count = path.point_count;
 
     DrawList list = {};
 
@@ -54,7 +58,8 @@ static void update_path() {
         debug::release(nodes);
     }
 
-    for (NodeRef node_ref : path.node_path.path) {
+    for (uint32_t i = 0; i < path.node_path_count; i++) {
+        NodeRef node_ref = state.node_path[i];
         if (node::get_node_ref_type(node_ref) != NODE_TYPE_POLY) continue;
         DebugPrimitives poly = debug::create_nav_mesh_poly_helper(nav_mesh, node_ref);
         app::lift(poly, 0.15f);
@@ -63,10 +68,10 @@ static void update_path() {
     }
 
     const Vec3 lift = {0, 0.25f, 0};
-    for (uint32_t i = 0; i < path.path.length; i++) {
-        Vec3 position = vec3::add(path.path[i].position, lift);
+    for (uint32_t i = 0; i < path.point_count; i++) {
+        Vec3 position = vec3::add(state.points[i].position, lift);
         renderer::point(list, position, 0.1f, {1, 0, 0, 1});
-        if (i > 0) renderer::line(list, vec3::add(path.path[i - 1].position, lift), position, {1, 1, 0, 1});
+        if (i > 0) renderer::line(list, vec3::add(state.points[i - 1].position, lift), position, {1, 1, 0, 1});
     }
 
     flag(list, state.start, {0.13f, 0.59f, 0.95f, 1});
@@ -74,7 +79,6 @@ static void update_path() {
 
     state.path_drawing = renderer::create_static(list);
     renderer::release(list);
-    find_path::release(path);
 }
 
 static void init(App &app) {
@@ -83,6 +87,7 @@ static void init(App &app) {
     state.start = {-3.94f, 0.26f, 4.71f};
     state.end = {2.52f, 2.39f, -2.2f};
     state.show_search_nodes = true;
+    state.workspace = nav_mesh_search::create_search_workspace();
 
     app::load_level(app, "nav-test.glb");
 

@@ -14,7 +14,16 @@ enum AppendVertexStatus : uint32_t {
     APPEND_VERTEX_IN_PROGRESS = 1 << 2,
 };
 
-static uint32_t append_vertex(Vec3 position, NodeRef node_ref, uint32_t flags, Array<StraightPathPoint> &out_points, NodeType node_type,
+struct PointBuffer {
+    StraightPathPoint *data;
+    uint32_t capacity;
+    uint32_t length;
+
+    StraightPathPoint &back() { return data[length - 1]; }
+    void push(const StraightPathPoint &point) { data[length++] = point; }
+};
+
+static uint32_t append_vertex(Vec3 position, NodeRef node_ref, uint32_t flags, PointBuffer &out_points, NodeType node_type,
                               int max_points) {
     if (out_points.length > 0 && vec3::equals(out_points.back().position, position)) {
         StraightPathPoint &last = out_points.back();
@@ -27,7 +36,7 @@ static uint32_t append_vertex(Vec3 position, NodeRef node_ref, uint32_t flags, A
 
     out_points.push({position, node_type, node_ref, flags});
 
-    if (max_points != UNLIMITED_POINTS && out_points.length >= (uint32_t)max_points) return APPEND_VERTEX_SUCCESS | APPEND_VERTEX_MAX_POINTS_REACHED;
+    if (out_points.length >= (uint32_t)max_points) return APPEND_VERTEX_SUCCESS | APPEND_VERTEX_MAX_POINTS_REACHED;
 
     if (flags & STRAIGHT_PATH_POINT_END) return APPEND_VERTEX_SUCCESS;
 
@@ -35,7 +44,7 @@ static uint32_t append_vertex(Vec3 position, NodeRef node_ref, uint32_t flags, A
 }
 
 static uint32_t append_portals(const NavMesh &nav_mesh, int start_index, int end_index, Vec3 end_position, const NodeRef *path,
-                               Array<StraightPathPoint> &out_points, uint32_t options, int max_points) {
+                               PointBuffer &out_points, uint32_t options, int max_points) {
     Vec3 start_position = out_points.back().position;
 
     for (int i = start_index; i < end_index; i++) {
@@ -62,11 +71,11 @@ static uint32_t append_portals(const NavMesh &nav_mesh, int start_index, int end
     return APPEND_VERTEX_IN_PROGRESS;
 }
 
-static FindStraightPathResult make_result(uint32_t flags, Array<StraightPathPoint> &path) {
-    return {flags, (flags & FIND_STRAIGHT_PATH_RESULT_SUCCESS) != 0, path};
+static FindStraightPathResult make_result(uint32_t flags, const PointBuffer &path) {
+    return {flags, (flags & FIND_STRAIGHT_PATH_RESULT_SUCCESS) != 0, path.length};
 }
 
-static FindStraightPathResult stopped(uint32_t status, uint32_t base_flags, Array<StraightPathPoint> &path) {
+static FindStraightPathResult stopped(uint32_t status, uint32_t base_flags, const PointBuffer &path) {
     uint32_t flags = base_flags;
     if (status & APPEND_VERTEX_MAX_POINTS_REACHED) flags |= FIND_STRAIGHT_PATH_RESULT_MAX_POINTS_REACHED;
     return make_result(flags, path);
@@ -77,15 +86,18 @@ static const uint32_t PARTIAL = FIND_STRAIGHT_PATH_RESULT_SUCCESS | FIND_STRAIGH
 static const uint32_t INVALID = FIND_STRAIGHT_PATH_RESULT_NONE | FIND_STRAIGHT_PATH_RESULT_INVALID_INPUT;
 
 static FindStraightPathResult find_straight_path_in(const NavMesh &nav_mesh, Vec3 start, Vec3 end, const NodeRef *path_node_refs,
-                                                   uint32_t path_node_count, int max_points, uint32_t straight_path_options, Array<StraightPathPoint> path) {
-    path.clear();
+                                                   uint32_t path_node_count, uint32_t straight_path_options, PointBuffer &path) {
+    path.length = 0;
+    int max_points = (int)path.capacity;
 
-    if (!vec3::finite(start) || !vec3::finite(end) || path_node_count == 0) return make_result(INVALID, path);
+    if (!vec3::finite(start) || !vec3::finite(end) || path_node_count == 0 || path.capacity == 0) return make_result(INVALID, path);
 
-    ClosestPointOnPolyBoundary closest_start = nav_mesh_api::get_closest_point_on_poly_boundary(nav_mesh, path_node_refs[0], start);
+    ClosestPointOnPolyBoundary closest_start = {};
+    nav_mesh_api::get_closest_point_on_poly_boundary(closest_start, nav_mesh, path_node_refs[0], start);
     if (!closest_start.success) return make_result(INVALID, path);
 
-    ClosestPointOnPolyBoundary closest_end = nav_mesh_api::get_closest_point_on_poly_boundary(nav_mesh, path_node_refs[path_node_count - 1], end);
+    ClosestPointOnPolyBoundary closest_end = {};
+    nav_mesh_api::get_closest_point_on_poly_boundary(closest_end, nav_mesh, path_node_refs[path_node_count - 1], end);
     if (!closest_end.success) return make_result(INVALID, path);
 
     Vec3 closest_start_position = closest_start.point;
@@ -121,7 +133,8 @@ static FindStraightPathResult find_straight_path_in(const NavMesh &nav_mesh, Vec
                 to_type = node::get_node_ref_type(to_ref);
 
                 if (!nav_mesh_search::get_portal_points(nav_mesh, path_node_refs[i], to_ref, left, right)) {
-                    ClosestPointOnPolyBoundary end_clamp = nav_mesh_api::get_closest_point_on_poly_boundary(nav_mesh, path_node_refs[i], end);
+                    ClosestPointOnPolyBoundary end_clamp = {};
+                    nav_mesh_api::get_closest_point_on_poly_boundary(end_clamp, nav_mesh, path_node_refs[i], end);
                     if (!end_clamp.success) return make_result(INVALID, path);
 
                     if (straight_path_options & ANY_CROSSINGS) {
@@ -279,17 +292,11 @@ static FindStraightPathResult find_straight_path_in(const NavMesh &nav_mesh, Vec
     return stopped(end_status, FIND_STRAIGHT_PATH_RESULT_SUCCESS, path);
 }
 
-FindStraightPathResult find_straight_path(const NavMesh &nav_mesh, Vec3 start, Vec3 end, const NodeRef *path_node_refs, uint32_t path_node_count,
-                                          int max_points, uint32_t straight_path_options) {
-    return find_straight_path_in(nav_mesh, start, end, path_node_refs, path_node_count, max_points, straight_path_options, {});
+void find_straight_path(FindStraightPathResult &out, const NavMesh &nav_mesh, Vec3 start, Vec3 end, const NodeRef *path_node_refs,
+                        uint32_t path_node_count, StraightPathPoint *points, uint32_t max_points, uint32_t straight_path_options) {
+    PointBuffer buffer = {points, max_points, 0};
+    out = find_straight_path_in(nav_mesh, start, end, path_node_refs, path_node_count, straight_path_options, buffer);
 }
-
-void find_straight_path_into(const NavMesh &nav_mesh, Vec3 start, Vec3 end, const NodeRef *path_node_refs, uint32_t path_node_count, int max_points,
-                             uint32_t straight_path_options, FindStraightPathResult &result) {
-    result = find_straight_path_in(nav_mesh, start, end, path_node_refs, path_node_count, max_points, straight_path_options, result.path);
-}
-
-void release(FindStraightPathResult &result) { result.path.release(); }
 
 }
 

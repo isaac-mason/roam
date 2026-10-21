@@ -32,7 +32,7 @@ LocalBoundary create();
 void reset_local_boundary(LocalBoundary &boundary);
 
 void update_local_boundary(LocalBoundary &boundary, NodeRef node_ref, Vec3 position, float collision_query_range, const NavMesh &nav_mesh,
-                           const QueryFilter &filter, SearchWorkspace *workspace = nullptr);
+                           const QueryFilter &filter, SearchWorkspace &workspace);
 
 bool is_local_boundary_valid(const LocalBoundary &boundary, const NavMesh &nav_mesh, const QueryFilter &filter);
 

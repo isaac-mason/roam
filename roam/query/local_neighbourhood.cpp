@@ -13,12 +13,33 @@ struct SegmentInterval {
     int tmax;
 };
 
-static void insert_interval(Array<SegmentInterval> &intervals, int tmin, int tmax, NodeRef node_ref) {
+constexpr uint32_t INLINE_INTERVALS = 16;
+
+struct SegmentIntervals {
+    SegmentInterval inline_values[INLINE_INTERVALS];
+    Array<SegmentInterval> overflow;
+    SegmentInterval *data;
+    uint32_t length;
+    uint32_t capacity;
+};
+
+static void insert_interval(SegmentIntervals &intervals, int tmin, int tmax, NodeRef node_ref) {
+    if (intervals.length == intervals.capacity) {
+        uint32_t capacity = intervals.capacity * 2;
+        if (intervals.data == intervals.inline_values) {
+            intervals.overflow.resize(capacity);
+            for (uint32_t i = 0; i < intervals.length; i++) intervals.overflow[i] = intervals.inline_values[i];
+        } else {
+            intervals.overflow.resize(capacity);
+        }
+        intervals.data = intervals.overflow.data;
+        intervals.capacity = capacity;
+    }
     uint32_t index = 0;
-    while (index < intervals.length && tmax > intervals[index].tmin) index++;
-    intervals.push({});
-    for (uint32_t i = intervals.length - 1; i > index; i--) intervals[i] = intervals[i - 1];
-    intervals[index] = {node_ref, tmin, tmax};
+    while (index < intervals.length && tmax > intervals.data[index].tmin) index++;
+    for (uint32_t i = intervals.length; i > index; i--) intervals.data[i] = intervals.data[i - 1];
+    intervals.data[index] = {node_ref, tmin, tmax};
+    intervals.length++;
 }
 
 static uint32_t gather_vertices(const NavMeshTile &tile, const NavMeshPoly &poly, Array<float> &out) {
@@ -36,13 +57,15 @@ static bool links_to(const NavMesh &nav_mesh, const NavMeshNode &node, NodeRef r
     return false;
 }
 
-static FindLocalNeighbourhoodResult find_local_neighbourhood_in(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 position, float radius,
-                                                                const QueryFilter &filter, SearchWorkspace &workspace) {
-    FindLocalNeighbourhoodResult result = {};
+void find_local_neighbourhood(FindLocalNeighbourhoodResult &result, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
+                              Vec3 position, float radius, const QueryFilter &filter, NodeRef *node_refs, uint32_t max_node_refs) {
+    result = {false, 0, 0};
+    Array<NodeRef> &found = workspace.local_refs;
+    found.clear();
     SearchNodePool &nodes = workspace.local_nodes;
     nav_mesh_search::clear(nodes);
 
-    if (!nav_mesh_api::is_valid_node_ref(nav_mesh, start_node_ref) || !vec3::finite(position) || radius < 0 || !isfinite(radius)) return result;
+    if (!nav_mesh_api::is_valid_node_ref(nav_mesh, start_node_ref) || !vec3::finite(position) || radius < 0 || !isfinite(radius)) return;
 
     SearchNode start = {};
     start.position = position;
@@ -58,7 +81,7 @@ static FindLocalNeighbourhoodResult find_local_neighbourhood_in(const NavMesh &n
 
     float radius_sqr = radius * radius;
 
-    result.node_refs.push(start_node_ref);
+    found.push(start_node_ref);
 
     Array<float> &vertices_a = workspace.vertices;
     Array<float> &vertices_b = workspace.other_vertices;
@@ -100,8 +123,8 @@ static FindLocalNeighbourhoodResult find_local_neighbourhood_in(const NavMesh &n
             uint32_t vertex_count_a = gather_vertices(*neighbour.tile, *neighbour.poly, vertices_a);
 
             bool overlap = false;
-            for (uint32_t j = 0; j < result.node_refs.length; ++j) {
-                NodeRef past_ref = result.node_refs[j];
+            for (uint32_t j = 0; j < found.length; ++j) {
+                NodeRef past_ref = found[j];
 
                 if (links_to(nav_mesh, node, past_ref)) continue;
 
@@ -118,41 +141,37 @@ static FindLocalNeighbourhoodResult find_local_neighbourhood_in(const NavMesh &n
 
             if (overlap) continue;
 
-            result.node_refs.push(neighbour_ref);
+            found.push(neighbour_ref);
             queue.push(neighbour_index);
         }
     }
 
     result.success = true;
-    return result;
+    result.full_node_ref_count = found.length;
+    result.node_ref_count = found.length < max_node_refs ? found.length : max_node_refs;
+    for (uint32_t i = 0; i < result.node_ref_count; i++) node_refs[i] = found[i];
 }
 
-FindLocalNeighbourhoodResult find_local_neighbourhood(const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 position, float radius,
-                                                      const QueryFilter &filter, SearchWorkspace *workspace) {
-    if (workspace) return find_local_neighbourhood_in(nav_mesh, start_node_ref, position, radius, filter, *workspace);
-    SearchWorkspace temporary = {};
-    FindLocalNeighbourhoodResult result = find_local_neighbourhood_in(nav_mesh, start_node_ref, position, radius, filter, temporary);
-    nav_mesh_search::release(temporary);
-    return result;
+struct SegmentWriter {
+    float *vertices;
+    NodeRef *refs;
+    uint32_t capacity;
+    uint32_t count;
+};
+
+static void push_segment(SegmentWriter &writer, Vec3 start, Vec3 end, NodeRef ref) {
+    if (writer.count < writer.capacity) {
+        vec3::store(writer.vertices, writer.count * 6, start);
+        vec3::store(writer.vertices, writer.count * 6 + 3, end);
+        if (writer.refs) writer.refs[writer.count] = ref;
+    }
+    writer.count++;
 }
 
-void release(FindLocalNeighbourhoodResult &result) { result.node_refs.release(); }
-
-static void push_segment(PolyWallSegmentsResult &result, Vec3 start, Vec3 end, NodeRef ref) {
-    result.segment_vertices.push(start.x);
-    result.segment_vertices.push(start.y);
-    result.segment_vertices.push(start.z);
-    result.segment_vertices.push(end.x);
-    result.segment_vertices.push(end.y);
-    result.segment_vertices.push(end.z);
-    result.segment_refs.push(ref);
-}
-
-void get_poly_wall_segments_into(const NavMesh &nav_mesh, NodeRef node_ref, const QueryFilter &filter, bool include_portals,
-                                 PolyWallSegmentsResult &result) {
-    result.success = false;
-    result.segment_vertices.clear();
-    result.segment_refs.clear();
+void get_poly_wall_segments(PolyWallSegmentsResult &result, const NavMesh &nav_mesh, NodeRef node_ref, const QueryFilter &filter, bool include_portals,
+                            float *segment_vertices, NodeRef *segment_refs, uint32_t max_segments) {
+    result = {false, 0, 0};
+    SegmentWriter writer = {segment_vertices, segment_refs, max_segments, 0};
 
     TileAndPoly tile_and_poly = nav_mesh_api::get_tile_and_poly_by_ref(node_ref, nav_mesh);
     if (!tile_and_poly.success) return;
@@ -160,10 +179,12 @@ void get_poly_wall_segments_into(const NavMesh &nav_mesh, NodeRef node_ref, cons
     const NavMeshTile &tile = *tile_and_poly.tile;
     const NavMeshPoly &poly = *tile_and_poly.poly;
 
-    Array<SegmentInterval> intervals = {};
+    SegmentIntervals intervals = {};
+    intervals.data = intervals.inline_values;
+    intervals.capacity = INLINE_INTERVALS;
 
     for (uint32_t i = 0, j = poly.vertex_count - 1; i < poly.vertex_count; j = i++) {
-        intervals.clear();
+        intervals.length = 0;
 
         int nei = tile.poly_neis[poly.vertex_base + j];
         Vec3 vj = vec3::load(tile.vertices.data, tile.poly_vertices[poly.vertex_base + j] * 3);
@@ -189,7 +210,7 @@ void get_poly_wall_segments_into(const NavMesh &nav_mesh, NodeRef node_ref, cons
 
             if (neighbour_ref != INVALID_NODE_REF && !include_portals) continue;
 
-            push_segment(result, vj, vi, neighbour_ref);
+            push_segment(writer, vj, vi, neighbour_ref);
             continue;
         }
 
@@ -197,35 +218,26 @@ void get_poly_wall_segments_into(const NavMesh &nav_mesh, NodeRef node_ref, cons
         insert_interval(intervals, 255, 256, INVALID_NODE_REF);
 
         for (uint32_t k = 1; k < intervals.length; ++k) {
-            if (include_portals && intervals[k].node_ref != INVALID_NODE_REF) {
-                float tmin = (float)intervals[k].tmin / 255.0f;
-                float tmax = (float)intervals[k].tmax / 255.0f;
-                push_segment(result, vec3::lerp(vj, vi, tmin), vec3::lerp(vj, vi, tmax), intervals[k].node_ref);
+            if (include_portals && intervals.data[k].node_ref != INVALID_NODE_REF) {
+                float tmin = (float)intervals.data[k].tmin / 255.0f;
+                float tmax = (float)intervals.data[k].tmax / 255.0f;
+                push_segment(writer, vec3::lerp(vj, vi, tmin), vec3::lerp(vj, vi, tmax), intervals.data[k].node_ref);
             }
 
-            int imin = intervals[k - 1].tmax;
-            int imax = intervals[k].tmin;
+            int imin = intervals.data[k - 1].tmax;
+            int imax = intervals.data[k].tmin;
             if (imin != imax) {
                 float tmin = (float)imin / 255.0f;
                 float tmax = (float)imax / 255.0f;
-                push_segment(result, vec3::lerp(vj, vi, tmin), vec3::lerp(vj, vi, tmax), INVALID_NODE_REF);
+                push_segment(writer, vec3::lerp(vj, vi, tmin), vec3::lerp(vj, vi, tmax), INVALID_NODE_REF);
             }
         }
     }
 
-    intervals.release();
+    intervals.overflow.release();
     result.success = true;
-}
-
-PolyWallSegmentsResult get_poly_wall_segments(const NavMesh &nav_mesh, NodeRef node_ref, const QueryFilter &filter, bool include_portals) {
-    PolyWallSegmentsResult result = {};
-    get_poly_wall_segments_into(nav_mesh, node_ref, filter, include_portals, result);
-    return result;
-}
-
-void release(PolyWallSegmentsResult &result) {
-    result.segment_vertices.release();
-    result.segment_refs.release();
+    result.full_segment_count = writer.count;
+    result.segment_count = writer.count < max_segments ? writer.count : max_segments;
 }
 
 }

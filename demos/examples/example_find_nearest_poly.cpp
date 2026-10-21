@@ -23,7 +23,8 @@ static void update_nearest_poly(const NavMesh &nav_mesh, Vec3 point) {
     FindNearestPolyExample &state = find_nearest_poly_example;
     state.query_point = point;
 
-    FindNearestPolyResult nearest = nav_mesh_api::find_nearest_poly(nav_mesh, point, {0.5f, 0.5f, 0.5f}, nav_mesh_api::DEFAULT_QUERY_FILTER);
+    FindNearestPolyResult nearest = {};
+    nav_mesh_api::find_nearest_poly(nearest, nav_mesh, point, {0.5f, 0.5f, 0.5f}, nav_mesh_api::DEFAULT_QUERY_FILTER);
     if (!nearest.success) return;
 
     state.nearest_position = nearest.position;

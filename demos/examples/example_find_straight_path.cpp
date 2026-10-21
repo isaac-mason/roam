@@ -29,6 +29,8 @@ struct FindStraightPathExample {
     uint32_t point_count;
     double straight_milliseconds;
     SearchWorkspace workspace;
+    NodeRef node_path[MAX_NODE_PATH];
+    StraightPathPoint points[MAX_PATH_POINTS];
 };
 
 static FindStraightPathExample find_straight_path_example;
@@ -49,18 +51,21 @@ static void update_path() {
     flag(list, state.end, {0, 1, 0, 1});
 
     const Vec3 half_extents = {1, 1, 1};
-    FindNearestPolyResult start = nav_mesh_api::find_nearest_poly(nav_mesh, state.start, half_extents, nav_mesh_api::DEFAULT_QUERY_FILTER);
-    FindNearestPolyResult end = nav_mesh_api::find_nearest_poly(nav_mesh, state.end, half_extents, nav_mesh_api::DEFAULT_QUERY_FILTER);
+    FindNearestPolyResult start = {};
+    nav_mesh_api::find_nearest_poly(start, nav_mesh, state.start, half_extents, nav_mesh_api::DEFAULT_QUERY_FILTER);
+    FindNearestPolyResult end = {};
+    nav_mesh_api::find_nearest_poly(end, nav_mesh, state.end, half_extents, nav_mesh_api::DEFAULT_QUERY_FILTER);
 
     if (start.success && end.success) {
         double begin = app::now_milliseconds();
-        FindNodePathResult path = nav_mesh_search::find_node_path(nav_mesh, start.node_ref, end.node_ref, start.position, end.position,
-                                                                  nav_mesh_api::DEFAULT_QUERY_FILTER, {}, &state.workspace);
+        FindNodePathResult path = {};
+        nav_mesh_search::find_node_path(path, state.workspace, nav_mesh, start.node_ref, end.node_ref, start.position, end.position,
+                                        nav_mesh_api::DEFAULT_QUERY_FILTER, state.node_path, MAX_NODE_PATH);
         state.query_milliseconds = app::now_milliseconds() - begin;
         state.searched = true;
         state.success = path.success;
         state.flags = path.flags;
-        state.node_count = path.path.length;
+        state.node_count = path.path_count;
         state.search_node_count = state.workspace.nodes.nodes.length;
 
         if (path.success) {
@@ -68,7 +73,8 @@ static void update_path() {
             renderer::add_primitives(list, nodes);
             debug::release(nodes);
 
-            for (NodeRef node_ref : path.path) {
+            for (uint32_t i = 0; i < path.path_count; i++) {
+                NodeRef node_ref = state.node_path[i];
                 if (node::get_node_ref_type(node_ref) != NODE_TYPE_POLY) continue;
                 DebugPrimitives poly = debug::create_nav_mesh_poly_helper(nav_mesh, node_ref);
                 app::lift(poly, 0.15f);
@@ -79,22 +85,20 @@ static void update_path() {
 
         if (path.success) {
             begin = app::now_milliseconds();
-            FindStraightPathResult straight =
-                find_straight_path::find_straight_path(nav_mesh, start.position, end.position, path.path.data, path.path.length);
+            FindStraightPathResult straight = {};
+            find_straight_path::find_straight_path(straight, nav_mesh, start.position, end.position, state.node_path, path.path_count, state.points,
+                                                   MAX_PATH_POINTS);
             state.straight_milliseconds = app::now_milliseconds() - begin;
             state.straight_success = straight.success;
             state.straight_flags = straight.flags;
-            state.point_count = straight.path.length;
+            state.point_count = straight.point_count;
 
-            for (uint32_t i = 0; i < straight.path.length; i++) {
-                Vec3 position = straight.path[i].position;
+            for (uint32_t i = 0; i < straight.point_count; i++) {
+                Vec3 position = state.points[i].position;
                 renderer::point(list, position, 0.2f, {1, 0, 0, 1});
-                if (i > 0) renderer::thick_line(list, straight.path[i - 1].position, position, 0.1f, {1, 1, 0, 1});
+                if (i > 0) renderer::thick_line(list, state.points[i - 1].position, position, 0.1f, {1, 1, 0, 1});
             }
-            find_straight_path::release(straight);
         }
-
-        nav_mesh_search::release(path);
     }
 
     state.path_drawing = renderer::create_static(list);
@@ -104,6 +108,7 @@ static void update_path() {
 static void init(App &app) {
     FindStraightPathExample &state = find_straight_path_example;
     state = {};
+    state.workspace = nav_mesh_search::create_search_workspace();
     state.start = {-3.94f, 0.26f, 4.71f};
     state.end = {2.52f, 2.39f, -2.2f};
     app.want_hover = true;

@@ -57,6 +57,8 @@ struct DoorsAndKeysExample {
     bool path_success;
     bool path_partial;
     SearchWorkspace workspace;
+    StraightPathPoint points[MAX_PATH_POINTS];
+    NodeRef node_path[MAX_NODE_PATH];
 };
 
 static DoorsAndKeysExample doors_and_keys_example;
@@ -165,7 +167,9 @@ static void update_path() {
     renderer::release(state.path_drawing);
     const NavMesh &nav_mesh = state.result.nav_mesh;
 
-    FindPathResult path = find_path::find_path(nav_mesh, state.start, state.end, {1, 1, 1}, state.filter, {}, &state.workspace);
+    FindPathResult path = {};
+    find_path::find_path(path, state.workspace, nav_mesh, state.start, state.end, {1, 1, 1}, state.filter, state.points, MAX_PATH_POINTS,
+                         {.node_path = state.node_path, .max_node_path = MAX_NODE_PATH});
     state.path_success = path.success;
     state.path_partial = (path.straight_path_flags & FIND_STRAIGHT_PATH_RESULT_PARTIAL_PATH) != 0;
 
@@ -177,7 +181,8 @@ static void update_path() {
     renderer::add_primitives(list, nodes);
     debug::release(nodes);
 
-    for (NodeRef node_ref : path.node_path.path) {
+    for (uint32_t n = 0; n < path.node_path_count; n++) {
+        NodeRef node_ref = state.node_path[n];
         if (node::get_node_ref_type(node_ref) != NODE_TYPE_POLY) continue;
         DebugPrimitives poly = debug::create_nav_mesh_poly_helper(nav_mesh, node_ref);
         app::lift(poly, 0.2f);
@@ -185,14 +190,13 @@ static void update_path() {
         debug::release(poly);
     }
 
-    for (uint32_t i = 0; i < path.path.length; i++) {
-        renderer::point(list, path.path[i].position, 0.2f, {1, 0, 0, 1});
-        if (i > 0) renderer::line(list, path.path[i - 1].position, path.path[i].position, {1, 1, 0, 1});
+    for (uint32_t i = 0; i < path.point_count; i++) {
+        renderer::point(list, state.points[i].position, 0.2f, {1, 0, 0, 1});
+        if (i > 0) renderer::line(list, state.points[i - 1].position, state.points[i].position, {1, 1, 0, 1});
     }
 
     state.path_drawing = renderer::create_static(list);
     renderer::release(list);
-    find_path::release(path);
 }
 
 static void update_keys(App &app) {
@@ -211,6 +215,7 @@ static void update_keys(App &app) {
 static void init(App &app) {
     DoorsAndKeysExample &state = doors_and_keys_example;
     state = {};
+    state.workspace = nav_mesh_search::create_search_workspace();
     state.start = {-20.6f, 0.2f, -6.8f};
     state.end = {-5.4f, 0.3f, -2.9f};
     state.filter = nav_mesh_api::DEFAULT_QUERY_FILTER;

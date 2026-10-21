@@ -147,3 +147,15 @@ Median ms, M1 Pro:
 - Generation: on par with recast on nav-test (1.02-1.06x), 1.3-1.5x faster on the big levels. Rasterization is about 1.3x faster everywhere; the rest of the gap is recast having the same stuck contour walks (game-level contours 8.5 vs 1.8 ms) and cubic poly merging (FPS map 22.9 vs 3.9 ms) that roam fixed. Distance field and regions are 5-30% slower than recast.
 - Queries are where recast wins: find path 0.68-0.81x, nearest poly 0.72-0.81x, raycast about 0.45-0.5x (twice as slow). Detour writes into caller buffers and uses a fixed node pool; roam allocates result arrays and walks nodes through `get_node_by_ref`/links. These are the next targets.
 - Crowd: on par on the big levels (1.03-1.05x), slower on nav-test (0.75x). Detour caps neighbours at 6 by default; roam's default (navcat's) is unlimited.
+
+### Queries after the caller-buffer API (2026-10-21)
+
+Same machine and rig, median ms. Queries now write into caller buffers through a reused `SearchWorkspace`, so they don't allocate.
+
+| bench | nav-test recast | nav-test roam | game-level recast | game-level roam | FPS map recast | FPS map roam |
+|---|---:|---:|---:|---:|---:|---:|
+| find path (100 pairs) | 0.478 | 0.573 | 1.719 | 1.863 | 0.617 | 0.865 |
+| raycast (100 rays) | 0.0078 | 0.0069 | 0.0080 | 0.0077 | 0.0092 | 0.0090 |
+| find nearest poly (200 points) | 0.162 | 0.181 | 0.120 | 0.163 | 0.085 | 0.097 |
+
+Raycast's whole gap was allocation. Find path and nearest poly still trail by 8-30%, and that is compute inside the query: the next round should profile A* (node lookups, `get_tile_and_poly_by_ref` per expansion) and nearest poly's detail-edge distance.

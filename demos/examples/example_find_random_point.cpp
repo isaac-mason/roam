@@ -26,8 +26,8 @@ static float next_random(void *user_data) {
 
 static void update_random_point() {
     FindRandomPointExample &state = find_random_point_example;
-    FindRandomPointResult point =
-        nav_mesh_search::find_random_point(state.result.nav_mesh, nav_mesh_api::DEFAULT_QUERY_FILTER, next_random, &state.random_state);
+    FindRandomPointResult point = {};
+    nav_mesh_search::find_random_point(point, state.result.nav_mesh, nav_mesh_api::DEFAULT_QUERY_FILTER, next_random, &state.random_state);
     if (!point.success) return;
     state.found = true;
     state.position = point.position;

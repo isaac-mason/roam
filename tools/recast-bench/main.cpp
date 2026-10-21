@@ -416,6 +416,26 @@ static void run_find_path() {
     }
 }
 
+static void run_path_ends() {
+    const float half_extents[3] = {1, 1, 1};
+    for (int i = 0; i < QUERY_COUNT; i++) {
+        dtPolyRef ref = 0;
+        float point[3];
+        state.query->findNearestPoly(center(i), half_extents, &state.filter, &ref, point);
+        state.query->findNearestPoly(center(pair_end(i)), half_extents, &state.filter, &ref, point);
+    }
+}
+
+static void run_node_paths() {
+    dtPolyRef path[MAX_PATH];
+    for (int i = 0; i < QUERY_COUNT; i++) {
+        int a = i % center_count();
+        int b = pair_end(i);
+        int path_count = 0;
+        state.query->findPath(state.center_refs[(size_t)a], state.center_refs[(size_t)b], center(a), center(b), &state.filter, path, &path_count, MAX_PATH);
+    }
+}
+
 static void run_raycast() {
     dtPolyRef path[MAX_PATH];
     for (int i = 0; i < QUERY_COUNT; i++) {
@@ -553,6 +573,8 @@ int main(int argc, char **argv) {
     cases.push_back({"generate solo nav mesh", nullptr, run_solo, nullptr});
     cases.push_back({"generate tiled nav mesh", nullptr, run_tiled, nullptr});
     cases.push_back({"find path (100 pairs)", nullptr, run_find_path, nullptr});
+    cases.push_back({"path ends (200 nearest)", nullptr, run_path_ends, nullptr});
+    cases.push_back({"node paths (100 pairs)", nullptr, run_node_paths, nullptr});
     cases.push_back({"raycast (100 rays)", nullptr, run_raycast, nullptr});
     cases.push_back({"find nearest poly (200 points)", nullptr, run_find_nearest_poly, nullptr});
     cases.push_back({"crowd (100 agents, 60 updates)", prepare_crowd, run_crowd, finish_crowd});

@@ -96,7 +96,8 @@ TEST(path_corridor_move_over_off_mesh_connection_lands_on_the_far_side) {
     path_corridor::reset(corridor, path[0], {1.5f, 0, 1});
     path_corridor::set_path(corridor, {8, 0, 1}, path, 3);
 
-    MoveOverOffMeshConnectionResult result = path_corridor::move_over_off_mesh_connection(corridor, attachment.off_mesh_node, nav_mesh);
+    MoveOverOffMeshConnectionResult result = {};
+    path_corridor::move_over_off_mesh_connection(result, corridor, attachment.off_mesh_node, nav_mesh);
     REQUIRE(result.success);
     CHECK(result.end_node_ref == attachment.end_poly_node);
     CHECK(result.end_position.x == 7.5f);
@@ -148,7 +149,8 @@ TEST(crowd_agent_crosses_an_off_mesh_connection_to_its_target) {
     Crowd crowd = crowd::create(0.5f);
 
     uint32_t agent_id = crowd::add_agent(crowd, nav_mesh, {0.5f, 0, 1}, test_agent_params());
-    FindNearestPolyResult target = nav_mesh_api::find_nearest_poly(nav_mesh, {8.5f, 0, 1}, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
+    FindNearestPolyResult target = {};
+    nav_mesh_api::find_nearest_poly(target, nav_mesh, {8.5f, 0, 1}, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
     REQUIRE(target.success);
     CHECK(crowd::request_move_target(crowd, agent_id, target.node_ref, target.position));
 

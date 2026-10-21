@@ -36,19 +36,13 @@ enum FindStraightPathResultFlags : uint32_t {
 struct FindStraightPathResult {
     uint32_t flags;
     bool success;
-    Array<StraightPathPoint> path;
+    uint32_t point_count;
 };
-
-constexpr int UNLIMITED_POINTS = -1;
 
 namespace find_straight_path {
 
-FindStraightPathResult find_straight_path(const NavMesh &nav_mesh, Vec3 start, Vec3 end, const NodeRef *path_node_refs, uint32_t path_node_count,
-                                          int max_points = UNLIMITED_POINTS, uint32_t straight_path_options = 0);
-
-void find_straight_path_into(const NavMesh &nav_mesh, Vec3 start, Vec3 end, const NodeRef *path_node_refs, uint32_t path_node_count, int max_points,
-                             uint32_t straight_path_options, FindStraightPathResult &result);
-void release(FindStraightPathResult &result);
+void find_straight_path(FindStraightPathResult &out, const NavMesh &nav_mesh, Vec3 start, Vec3 end, const NodeRef *path_node_refs,
+                        uint32_t path_node_count, StraightPathPoint *points, uint32_t max_points, uint32_t straight_path_options = 0);
 
 }
 

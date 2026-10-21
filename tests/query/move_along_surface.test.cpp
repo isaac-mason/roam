@@ -31,84 +31,91 @@ static NavMesh create_long_corridor_nav_mesh() {
     return nav_mesh;
 }
 
-static MoveAlongSurfaceResult move(const NavMesh &nav_mesh, Vec3 start, Vec3 end) {
-    return nav_mesh_search::move_along_surface(nav_mesh, nav_mesh.nodes[0].ref, start, end, nav_mesh_api::DEFAULT_QUERY_FILTER);
+static const uint32_t MAX_VISITED = 16;
+
+static MoveAlongSurfaceResult move(const NavMesh &nav_mesh, Vec3 start, Vec3 end, NodeRef *visited) {
+    SearchWorkspace workspace = nav_mesh_search::create_search_workspace();
+    MoveAlongSurfaceResult result;
+    nav_mesh_search::move_along_surface(result, workspace, nav_mesh, nav_mesh.nodes[0].ref, start, end, nav_mesh_api::DEFAULT_QUERY_FILTER, visited,
+                                        MAX_VISITED);
+    nav_mesh_search::release(workspace);
+    return result;
 }
 
 TEST(move_along_surface_within_single_polygon) {
     NavMesh nav_mesh = create_simple_quad_nav_mesh();
-    MoveAlongSurfaceResult result = move(nav_mesh, {0.5f, 0, 0.5f}, {0.8f, 0, 0.8f});
+    NodeRef visited[MAX_VISITED];
+    MoveAlongSurfaceResult result = move(nav_mesh, {0.5f, 0, 0.5f}, {0.8f, 0, 0.8f}, visited);
     CHECK(result.success);
-    REQUIRE(result.visited.length == 1);
-    CHECK(result.visited[0] == nav_mesh.nodes[0].ref);
+    REQUIRE(result.visited_count == 1);
+    CHECK(visited[0] == nav_mesh.nodes[0].ref);
     CHECK(vec3::distance(result.position, {0.8f, 0, 0.8f}) < 0.01f);
-    nav_mesh_search::release(result);
     nav_mesh_api::release_nav_mesh(nav_mesh);
 }
 
 TEST(move_along_surface_across_two_adjacent_triangles) {
     NavMesh nav_mesh = create_simple_quad_nav_mesh();
-    MoveAlongSurfaceResult result = move(nav_mesh, {1.5f, 0, 0.5f}, {0.5f, 0, 1.5f});
+    NodeRef visited[MAX_VISITED];
+    MoveAlongSurfaceResult result = move(nav_mesh, {1.5f, 0, 0.5f}, {0.5f, 0, 1.5f}, visited);
     CHECK(result.success);
-    CHECK(result.visited.length == 2);
+    CHECK(result.visited_count == 2);
     CHECK(vec3::distance(result.position, {0.5f, 0, 1.5f}) < 0.1f);
-    nav_mesh_search::release(result);
     nav_mesh_api::release_nav_mesh(nav_mesh);
 }
 
 TEST(move_along_surface_small_movement_within_polygon) {
     NavMesh nav_mesh = create_simple_quad_nav_mesh();
-    MoveAlongSurfaceResult result = move(nav_mesh, {1.0f, 0, 1.0f}, {1.015f, 0, 1.0f});
+    NodeRef visited[MAX_VISITED];
+    MoveAlongSurfaceResult result = move(nav_mesh, {1.0f, 0, 1.0f}, {1.015f, 0, 1.0f}, visited);
     CHECK(result.success);
-    CHECK(result.visited.length >= 1);
-    nav_mesh_search::release(result);
+    CHECK(result.visited_count >= 1);
     nav_mesh_api::release_nav_mesh(nav_mesh);
 }
 
 TEST(move_along_surface_across_long_thin_corridor) {
     NavMesh nav_mesh = create_long_corridor_nav_mesh();
-    MoveAlongSurfaceResult result = move(nav_mesh, {0.5f, 0, 0.5f}, {9.5f, 0, 0.5f});
+    NodeRef visited[MAX_VISITED];
+    MoveAlongSurfaceResult result = move(nav_mesh, {0.5f, 0, 0.5f}, {9.5f, 0, 0.5f}, visited);
     CHECK(result.success);
-    CHECK(result.visited.length > 1);
-    nav_mesh_search::release(result);
+    CHECK(result.visited_count > 1);
     nav_mesh_api::release_nav_mesh(nav_mesh);
 }
 
 TEST(move_along_surface_small_movement_crossing_polygon_boundary) {
     NavMesh nav_mesh = create_simple_quad_nav_mesh();
-    MoveAlongSurfaceResult result = move(nav_mesh, {1.0f, 0, 0.5f}, {1.0f, 0, 1.5f});
+    NodeRef visited[MAX_VISITED];
+    MoveAlongSurfaceResult result = move(nav_mesh, {1.0f, 0, 0.5f}, {1.0f, 0, 1.5f}, visited);
     CHECK(result.success);
-    CHECK(result.visited.length == 2);
-    nav_mesh_search::release(result);
+    CHECK(result.visited_count == 2);
     nav_mesh_api::release_nav_mesh(nav_mesh);
 }
 
 TEST(move_along_surface_very_small_movement_crossing_polygon_boundary) {
     NavMesh nav_mesh = create_simple_quad_nav_mesh();
-    MoveAlongSurfaceResult result = move(nav_mesh, {1.0f, 0, 0.9925f}, {1.0f, 0, 1.0075f});
+    NodeRef visited[MAX_VISITED];
+    MoveAlongSurfaceResult result = move(nav_mesh, {1.0f, 0, 0.9925f}, {1.0f, 0, 1.0075f}, visited);
     CHECK(result.success);
-    CHECK(result.visited.length == 2);
-    nav_mesh_search::release(result);
+    CHECK(result.visited_count == 2);
     nav_mesh_api::release_nav_mesh(nav_mesh);
 }
 
 TEST(move_along_surface_stops_at_wall_when_target_is_outside) {
     NavMesh nav_mesh = create_simple_quad_nav_mesh();
-    MoveAlongSurfaceResult result = move(nav_mesh, {1.0f, 0, 1.0f}, {5.0f, 0, 1.0f});
+    NodeRef visited[MAX_VISITED];
+    MoveAlongSurfaceResult result = move(nav_mesh, {1.0f, 0, 1.0f}, {5.0f, 0, 1.0f}, visited);
     CHECK(result.success);
     CHECK(result.position.x <= 2.0f);
     CHECK(result.position.x > 1.9f);
-    nav_mesh_search::release(result);
     nav_mesh_api::release_nav_mesh(nav_mesh);
 }
 
 TEST(move_along_surface_snaps_to_nearest_wall_when_start_is_outside_start_polygon) {
     NavMesh nav_mesh = create_simple_quad_nav_mesh();
-    MoveAlongSurfaceResult result = move(nav_mesh, {1.0f, 0, 1.5f}, {1.0f, 0, 1.52f});
+    NodeRef visited[MAX_VISITED];
+    MoveAlongSurfaceResult result = move(nav_mesh, {1.0f, 0, 1.5f}, {1.0f, 0, 1.52f}, visited);
     CHECK(result.success);
-    CHECK(result.visited.length == 1);
+    CHECK(result.visited_count == 1);
     CHECK(vec3::distance({1.0f, 0, 1.5f}, result.position) > 0.9f);
-    nav_mesh_search::release(result);
     nav_mesh_api::release_nav_mesh(nav_mesh);
 }
 
@@ -116,12 +123,12 @@ TEST(move_along_surface_stops_at_wall_edge_matching_off_mesh_link_edge) {
     NavMesh nav_mesh = create_simple_quad_nav_mesh();
     nav_mesh_api::add_off_mesh_connection(nav_mesh, {{1.5f, 0, 0.4f}, {0.5f, 0, 1.8f}, 0.1f, OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL, 1, 0});
 
-    MoveAlongSurfaceResult result = move(nav_mesh, {1.5f, 0, 0.5f}, {1.5f, 0, -3.0f});
+    NodeRef visited[MAX_VISITED];
+    MoveAlongSurfaceResult result = move(nav_mesh, {1.5f, 0, 0.5f}, {1.5f, 0, -3.0f}, visited);
     CHECK(result.success);
-    REQUIRE(result.visited.length == 1);
-    CHECK(result.visited[0] == nav_mesh.nodes[0].ref);
+    REQUIRE(result.visited_count == 1);
+    CHECK(visited[0] == nav_mesh.nodes[0].ref);
     CHECK_NEAR(result.position.x, 1.5, 1e-2);
     CHECK_NEAR(result.position.z, 0, 1e-2);
-    nav_mesh_search::release(result);
     nav_mesh_api::release_nav_mesh(nav_mesh);
 }

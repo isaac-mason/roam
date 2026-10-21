@@ -49,6 +49,9 @@ struct FindShortestPathsExample {
     ShortestPathsMoving moving;
     uint32_t path_count;
     double query_milliseconds;
+    SearchWorkspace workspace;
+    NodeRef node_path[MAX_NODE_PATH];
+    StraightPathPoint points[MAX_PATH_POINTS];
 };
 
 static FindShortestPathsExample find_shortest_paths_example;
@@ -106,27 +109,27 @@ static float calculate_path_cost(const NavMesh &nav_mesh, const Array<NodeRef> &
     return total_cost;
 }
 
-static Array<ShortestNodePath> find_shortest_paths(const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 half_extents, const QueryFilter &base_filter,
-                                                   int k) {
+static Array<ShortestNodePath> find_shortest_paths(SearchWorkspace &workspace, NodeRef *buffer, const NavMesh &nav_mesh, Vec3 start, Vec3 end,
+                                                   Vec3 half_extents, const QueryFilter &base_filter, int k) {
     Array<ShortestNodePath> accepted = {};
     Array<ShortestNodePath> candidates = {};
 
-    FindNearestPolyResult start_nearest = nav_mesh_api::find_nearest_poly(nav_mesh, start, half_extents, base_filter);
+    FindNearestPolyResult start_nearest = {};
+    nav_mesh_api::find_nearest_poly(start_nearest, nav_mesh, start, half_extents, base_filter);
     if (!start_nearest.success) return accepted;
-    FindNearestPolyResult end_nearest = nav_mesh_api::find_nearest_poly(nav_mesh, end, half_extents, base_filter);
+    FindNearestPolyResult end_nearest = {};
+    nav_mesh_api::find_nearest_poly(end_nearest, nav_mesh, end, half_extents, base_filter);
     if (!end_nearest.success) return accepted;
 
     NodeRef start_node_ref = start_nearest.node_ref;
     NodeRef end_node_ref = end_nearest.node_ref;
 
-    FindNodePathResult first_path = nav_mesh_search::find_node_path(nav_mesh, start_node_ref, end_node_ref, start, end, base_filter);
-    if (!first_path.success) {
-        nav_mesh_search::release(first_path);
-        return accepted;
-    }
-    ShortestNodePath first = {first_path.path, calculate_path_cost(nav_mesh, first_path.path, start, end)};
-    first_path.path = {};
-    nav_mesh_search::release(first_path);
+    FindNodePathResult first_path = {};
+    nav_mesh_search::find_node_path(first_path, workspace, nav_mesh, start_node_ref, end_node_ref, start, end, base_filter, buffer, MAX_NODE_PATH);
+    if (!first_path.success) return accepted;
+    Array<NodeRef> first_node_path = {};
+    for (uint32_t i = 0; i < first_path.path_count; i++) first_node_path.push(buffer[i]);
+    ShortestNodePath first = {first_node_path, calculate_path_cost(nav_mesh, first_node_path, start, end)};
     accepted.push(first);
 
     Map<NodeRef, uint8_t> blocked_nodes = {};
@@ -164,11 +167,13 @@ static Array<ShortestNodePath> find_shortest_paths(const NavMesh &nav_mesh, Vec3
                 spur_node_position = midpoint;
             }
 
-            FindNodePathResult spur = nav_mesh_search::find_node_path(nav_mesh, spur_node, end_node_ref, spur_node_position, end, spur_filter);
+            FindNodePathResult spur = {};
+            nav_mesh_search::find_node_path(spur, workspace, nav_mesh, spur_node, end_node_ref, spur_node_position, end, spur_filter, buffer,
+                                            MAX_NODE_PATH);
             if (spur.success) {
                 Array<NodeRef> total_path = {};
                 for (uint32_t j = 0; j <= i; j++) total_path.push(previous_path[j]);
-                for (uint32_t j = 1; j < spur.path.length; j++) total_path.push(spur.path[j]);
+                for (uint32_t j = 1; j < spur.path_count; j++) total_path.push(buffer[j]);
 
                 bool duplicate = false;
                 for (const ShortestNodePath &route : accepted) duplicate = duplicate || paths_equal(route.path, total_path);
@@ -180,7 +185,6 @@ static Array<ShortestNodePath> find_shortest_paths(const NavMesh &nav_mesh, Vec3
                     candidates.push({total_path, calculate_path_cost(nav_mesh, total_path, start, end)});
                 }
             }
-            nav_mesh_search::release(spur);
         }
 
         if (candidates.length == 0) break;
@@ -209,7 +213,8 @@ static void update_path() {
     flag(list, state.end, {0, 1, 0, 1});
 
     double started = app::now_milliseconds();
-    Array<ShortestNodePath> node_paths = find_shortest_paths(nav_mesh, state.start, state.end, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER, state.k);
+    Array<ShortestNodePath> node_paths = find_shortest_paths(state.workspace, state.node_path, nav_mesh, state.start, state.end, {1, 1, 1},
+                                                             nav_mesh_api::DEFAULT_QUERY_FILTER, state.k);
     state.query_milliseconds = app::now_milliseconds() - started;
     state.path_count = node_paths.length;
 
@@ -227,16 +232,17 @@ static void update_path() {
             }
         }
 
-        FindStraightPathResult straight = find_straight_path::find_straight_path(nav_mesh, state.start, state.end, node_path.data, node_path.length);
+        FindStraightPathResult straight = {};
+        find_straight_path::find_straight_path(straight, nav_mesh, state.start, state.end, node_path.data, node_path.length, state.points,
+                                               MAX_PATH_POINTS);
         if (straight.success) {
             const Vec3 lift = {0, 0.1f, 0};
-            for (uint32_t i = 0; i < straight.path.length; i++) {
-                Vec3 position = vec3::add(straight.path[i].position, lift);
+            for (uint32_t i = 0; i < straight.point_count; i++) {
+                Vec3 position = vec3::add(state.points[i].position, lift);
                 renderer::point(list, position, path_index == 0 ? 0.2f : 0.15f, route_color);
-                if (i > 0) renderer::line(list, vec3::add(straight.path[i - 1].position, lift), position, route_color);
+                if (i > 0) renderer::line(list, vec3::add(state.points[i - 1].position, lift), position, route_color);
             }
         }
-        find_straight_path::release(straight);
     }
 
     for (ShortestNodePath &node_path : node_paths) node_path.path.release();
@@ -249,6 +255,7 @@ static void update_path() {
 static void init(App &app) {
     FindShortestPathsExample &state = find_shortest_paths_example;
     state = {};
+    state.workspace = nav_mesh_search::create_search_workspace();
     state.start = {-3.94f, 0.26f, 4.71f};
     state.end = {2.52f, 2.39f, -2.2f};
     state.k = 3;
@@ -309,6 +316,7 @@ static void shutdown(App &) {
     FindShortestPathsExample &state = find_shortest_paths_example;
     renderer::release(state.nav_mesh_drawing);
     renderer::release(state.path_drawing);
+    nav_mesh_search::release(state.workspace);
     if (state.generated) {
         generate_tiled_nav_mesh::release(state.result.intermediates);
         nav_mesh_api::release_nav_mesh(state.result.nav_mesh);

@@ -105,8 +105,8 @@ static void scatter() {
     CrowdExample &state = crowd_example;
     for (uint32_t id = 0; id < state.crowd.agents.length; id++) {
         if (!crowd::is_agent(state.crowd, id) || is_selected(id)) continue;
-        FindRandomPointResult point =
-            nav_mesh_search::find_random_point(state.result.nav_mesh, nav_mesh_api::DEFAULT_QUERY_FILTER, next_random, &state.random_state);
+        FindRandomPointResult point = {};
+        nav_mesh_search::find_random_point(point, state.result.nav_mesh, nav_mesh_api::DEFAULT_QUERY_FILTER, next_random, &state.random_state);
         if (point.success) crowd::request_move_target(state.crowd, id, point.node_ref, point.position);
     }
 }
@@ -117,8 +117,8 @@ static void spawn_agents() {
     state.selected.clear();
     state.crowd = crowd::create(1);
     for (int i = 0; i < state.agent_count; i++) {
-        FindRandomPointResult point =
-            nav_mesh_search::find_random_point(state.result.nav_mesh, nav_mesh_api::DEFAULT_QUERY_FILTER, next_random, &state.random_state);
+        FindRandomPointResult point = {};
+        nav_mesh_search::find_random_point(point, state.result.nav_mesh, nav_mesh_api::DEFAULT_QUERY_FILTER, next_random, &state.random_state);
         if (point.success) crowd::add_agent(state.crowd, state.result.nav_mesh, point.position, agent_params());
     }
     scatter();
@@ -204,8 +204,8 @@ static void handle_click(const App &app) {
 
     if (click.secondary) {
         if (!click.hit || selected_count() == 0) return;
-        FindNearestPolyResult nearest =
-            nav_mesh_api::find_nearest_poly(state.result.nav_mesh, click.point, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
+        FindNearestPolyResult nearest = {};
+        nav_mesh_api::find_nearest_poly(nearest, state.result.nav_mesh, click.point, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
         if (!nearest.success) return;
         for (uint32_t id = 0; id < state.crowd.agents.length; id++) {
             if (crowd::is_agent(state.crowd, id) && is_selected(id)) crowd::request_move_target(state.crowd, id, nearest.node_ref, nearest.position);
@@ -306,17 +306,18 @@ static void draw_agent(DrawList &list, uint32_t agent_id, uint32_t index) {
     if (is_selected(agent_id)) renderer::circle(list, vec3::add(agent.position, {0, 0.05f, 0}), agent.radius * 1.5f, {0, 0.67f, 1, 1});
 
     if (state.show_path_line) {
-        FindCornersResult corners = path_corridor::find_corners(agent.corridor, state.result.nav_mesh, 3);
-        if (corners.success && corners.corners.length > 1) {
+        StraightPathPoint corners[3];
+        FindCornersResult found = {};
+        path_corridor::find_corners(found, agent.corridor, state.result.nav_mesh, corners, 3);
+        if (found.success && found.corner_count > 1) {
             const Vec3 lift = {0, 0.2f, 0};
             Vec3 previous = vec3::add(agent.position, lift);
-            for (const StraightPathPoint &corner : corners.corners) {
-                Vec3 point = vec3::add(corner.position, lift);
+            for (uint32_t i = 0; i < found.corner_count; i++) {
+                Vec3 point = vec3::add(corners[i].position, lift);
                 renderer::line(list, previous, point, color);
                 previous = point;
             }
         }
-        path_corridor::release(corners);
     }
 
     if (state.show_obstacle_segments) {

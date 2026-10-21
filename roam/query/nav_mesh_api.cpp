@@ -266,74 +266,70 @@ static uint32_t gather_poly_vertices(const NavMeshTile &tile, const NavMeshPoly 
     return poly.vertex_count;
 }
 
-static const uint32_t INLINE_POLY_VERTICES = 32;
-
-struct PolyVertices {
-    float inline_values[INLINE_POLY_VERTICES * 3];
-    Array<float> overflow;
-    float *data;
-};
-
-static void gather_poly_vertices(const NavMeshTile &tile, const NavMeshPoly &poly, PolyVertices &vertices) {
-    vertices.overflow = {};
+uint32_t gather_poly_vertices(const NavMeshTile &tile, const NavMeshPoly &poly, PolyVertices &vertices) {
     vertices.data = vertices.inline_values;
     if (poly.vertex_count > INLINE_POLY_VERTICES) {
         vertices.overflow.resize(poly.vertex_count * 3);
         vertices.data = vertices.overflow.data;
     }
-    gather_poly_vertices(tile, poly, vertices.data);
+    return gather_poly_vertices(tile, poly, vertices.data);
 }
 
-GetPolyHeightResult get_poly_height(const NavMeshTile &tile, const NavMeshPoly &poly, int poly_index, Vec3 position) {
-    PolyVertices vertices;
+void release(PolyVertices &vertices) {
+    vertices.overflow.release();
+    vertices.data = vertices.inline_values;
+}
+
+void get_poly_height(GetPolyHeightResult &out, const NavMeshTile &tile, const NavMeshPoly &poly, int poly_index, Vec3 position) {
+    PolyVertices vertices = {};
     gather_poly_vertices(tile, poly, vertices);
 
-    GetPolyHeightResult result = {false, 0};
+    out = {false, 0};
     if (geometry::point_in_poly(position, vertices.data, (int)poly.vertex_count)) {
-        result.height = get_detail_mesh_height(tile, poly, poly_index, position);
-        result.success = true;
+        out.height = get_detail_mesh_height(tile, poly, poly_index, position);
+        out.success = true;
     }
 
-    vertices.overflow.release();
-    return result;
+    release(vertices);
 }
 
-GetClosestPointOnPolyResult get_closest_point_on_poly(const NavMesh &nav_mesh, NodeRef node_ref, Vec3 position) {
-    GetClosestPointOnPolyResult result = {false, false, position};
+void get_closest_point_on_poly(GetClosestPointOnPolyResult &out, const NavMesh &nav_mesh, NodeRef node_ref, Vec3 position) {
+    out = {false, false, position};
 
     TileAndPoly tile_and_poly = get_tile_and_poly_by_ref(node_ref, nav_mesh);
-    if (!tile_and_poly.success) return result;
+    if (!tile_and_poly.success) return;
 
-    result.success = true;
+    out.success = true;
 
-    GetPolyHeightResult poly_height = get_poly_height(*tile_and_poly.tile, *tile_and_poly.poly, tile_and_poly.poly_index, position);
+    GetPolyHeightResult poly_height;
+    get_poly_height(poly_height, *tile_and_poly.tile, *tile_and_poly.poly, tile_and_poly.poly_index, position);
     if (poly_height.success) {
-        result.position = {position.x, poly_height.height, position.z};
-        result.is_over_poly = true;
-        return result;
+        out.position = {position.x, poly_height.height, position.z};
+        out.is_over_poly = true;
+        return;
     }
 
-    result.position = get_closest_point_on_detail_edges(*tile_and_poly.tile, *tile_and_poly.poly, tile_and_poly.poly_index, position, true).point;
-    return result;
+    out.position = get_closest_point_on_detail_edges(*tile_and_poly.tile, *tile_and_poly.poly, tile_and_poly.poly_index, position, true).point;
 }
 
-ClosestPointOnPolyBoundary get_closest_point_on_poly_boundary(const NavMesh &nav_mesh, NodeRef node_ref, Vec3 point) {
+void get_closest_point_on_poly_boundary(ClosestPointOnPolyBoundary &out, const NavMesh &nav_mesh, NodeRef node_ref, Vec3 point) {
+    out = {false, point};
     TileAndPoly tile_and_poly = get_tile_and_poly_by_ref(node_ref, nav_mesh);
-    if (!tile_and_poly.success || !vec3::finite(point)) return {false, point};
+    if (!tile_and_poly.success || !vec3::finite(point)) return;
 
     const NavMeshTile &tile = *tile_and_poly.tile;
     const NavMeshPoly &poly = *tile_and_poly.poly;
 
-    PolyVertices vertices;
+    PolyVertices vertices = {};
     gather_poly_vertices(tile, poly, vertices);
     uint32_t vertex_count = poly.vertex_count;
 
-    ClosestPointOnPolyBoundary result = {true, point};
+    out.success = true;
 
     if (geometry::point_in_poly(point, vertices.data, (int)vertex_count)) {
-        result.point.y = get_detail_mesh_height(tile, poly, tile_and_poly.poly_index, point);
-        vertices.overflow.release();
-        return result;
+        out.point.y = get_detail_mesh_height(tile, poly, tile_and_poly.poly_index, point);
+        release(vertices);
+        return;
     }
 
     float dmin = FLT_MAX;
@@ -363,49 +359,14 @@ ClosestPointOnPolyBoundary get_closest_point_on_poly_boundary(const NavMesh &nav
         t = 1;
     }
 
-    result.point = {va.x + (vb.x - va.x) * t, va.y + (vb.y - va.y) * t, va.z + (vb.z - va.z) * t};
-    vertices.overflow.release();
-    return result;
+    out.point = {va.x + (vb.x - va.x) * t, va.y + (vb.y - va.y) * t, va.z + (vb.z - va.z) * t};
+    release(vertices);
 }
 
-FindNearestPolyResult find_nearest_poly(const NavMesh &nav_mesh, Vec3 center, Vec3 half_extents, const QueryFilter &filter) {
-    FindNearestPolyResult result = {false, INVALID_NODE_REF, center};
+using PolyVisitor = void (*)(NodeRef ref, void *user_data);
 
-    Box3 bounds = {vec3::subtract(center, half_extents), vec3::add(center, half_extents)};
-    Array<NodeRef> polys = query_polygons(nav_mesh, bounds, filter);
-
-    float nearest_distance_sqr = FLT_MAX;
-
-    for (NodeRef ref : polys) {
-        GetClosestPointOnPolyResult closest_point = get_closest_point_on_poly(nav_mesh, ref, center);
-        if (!closest_point.success) continue;
-
-        const NavMeshTile *tile = tile_by_id(nav_mesh, get_node_by_ref(nav_mesh, ref).tile_id);
-        if (!tile) continue;
-
-        Vec3 difference = vec3::subtract(center, closest_point.position);
-
-        float distance_sqr;
-        if (closest_point.is_over_poly) {
-            float height_difference = fabsf(difference.y) - tile->walkable_climb;
-            distance_sqr = height_difference > 0 ? height_difference * height_difference : 0;
-        } else {
-            distance_sqr = vec3::squared_length(difference);
-        }
-
-        if (distance_sqr < nearest_distance_sqr) {
-            nearest_distance_sqr = distance_sqr;
-            result.node_ref = ref;
-            result.position = closest_point.position;
-            result.success = true;
-        }
-    }
-
-    polys.release();
-    return result;
-}
-
-void query_polygons_in_tile(Array<NodeRef> &out, const NavMesh &nav_mesh, const NavMeshTile &tile, Box3 bounds, const QueryFilter &filter) {
+static void visit_polygons_in_tile(const NavMesh &nav_mesh, const NavMeshTile &tile, Box3 bounds, const QueryFilter &filter, PolyVisitor visit,
+                                   void *user_data) {
     const Array<NavMeshBvNode> &nodes = tile.bv_tree.nodes;
     float quant_factor = tile.bv_tree.quant_factor;
     Vec3 tile_min = tile.bounds.min;
@@ -428,7 +389,7 @@ void query_polygons_in_tile(Array<NodeRef> &out, const NavMesh &nav_mesh, const 
 
         if (is_leaf_node && overlap) {
             NodeRef ref = get_node_by_tile_and_poly(nav_mesh, tile, bv_node.i).ref;
-            if (filter.pass_filter(filter, ref, nav_mesh)) out.push(ref);
+            if (filter.pass_filter(filter, ref, nav_mesh)) visit(ref, user_data);
         }
 
         if (overlap || is_leaf_node) {
@@ -439,23 +400,93 @@ void query_polygons_in_tile(Array<NodeRef> &out, const NavMesh &nav_mesh, const 
     }
 }
 
-Array<NodeRef> query_polygons(const NavMesh &nav_mesh, Box3 bounds, const QueryFilter &filter) {
-    Array<NodeRef> result = {};
-
+static void visit_polygons(const NavMesh &nav_mesh, Box3 bounds, const QueryFilter &filter, PolyVisitor visit, void *user_data) {
     Vec2 min_tile = world_to_tile_position(nav_mesh, bounds.min);
     Vec2 max_tile = world_to_tile_position(nav_mesh, bounds.max);
 
-    if (!vec2::finite(min_tile) || !vec2::finite(max_tile)) return result;
+    if (!vec2::finite(min_tile) || !vec2::finite(max_tile)) return;
 
     for (int x = (int)min_tile.x; x <= (int)max_tile.x; x++) {
         for (int y = (int)min_tile.y; y <= (int)max_tile.y; y++) {
             const Array<uint32_t> *column = tile_column(nav_mesh, x, y);
             if (!column) continue;
-            for (uint32_t tile_id : *column) query_polygons_in_tile(result, nav_mesh, nav_mesh.tiles[tile_id], bounds, filter);
+            for (uint32_t tile_id : *column) visit_polygons_in_tile(nav_mesh, nav_mesh.tiles[tile_id], bounds, filter, visit, user_data);
         }
     }
+}
 
-    return result;
+struct NearestPolySearch {
+    const NavMesh *nav_mesh;
+    Vec3 center;
+    float nearest_distance_sqr;
+    FindNearestPolyResult *out;
+};
+
+static void visit_nearest_poly(NodeRef ref, void *user_data) {
+    NearestPolySearch &search = *(NearestPolySearch *)user_data;
+    const NavMesh &nav_mesh = *search.nav_mesh;
+
+    GetClosestPointOnPolyResult closest_point;
+    get_closest_point_on_poly(closest_point, nav_mesh, ref, search.center);
+    if (!closest_point.success) return;
+
+    const NavMeshTile *tile = tile_by_id(nav_mesh, get_node_by_ref(nav_mesh, ref).tile_id);
+    if (!tile) return;
+
+    Vec3 difference = vec3::subtract(search.center, closest_point.position);
+
+    float distance_sqr;
+    if (closest_point.is_over_poly) {
+        float height_difference = fabsf(difference.y) - tile->walkable_climb;
+        distance_sqr = height_difference > 0 ? height_difference * height_difference : 0;
+    } else {
+        distance_sqr = vec3::squared_length(difference);
+    }
+
+    if (distance_sqr < search.nearest_distance_sqr) {
+        search.nearest_distance_sqr = distance_sqr;
+        search.out->node_ref = ref;
+        search.out->position = closest_point.position;
+        search.out->success = true;
+    }
+}
+
+void find_nearest_poly(FindNearestPolyResult &out, const NavMesh &nav_mesh, Vec3 center, Vec3 half_extents, const QueryFilter &filter) {
+    out = {false, INVALID_NODE_REF, center};
+
+    Box3 bounds = {vec3::subtract(center, half_extents), vec3::add(center, half_extents)};
+    NearestPolySearch search = {&nav_mesh, center, FLT_MAX, &out};
+    visit_polygons(nav_mesh, bounds, filter, visit_nearest_poly, &search);
+}
+
+struct PolyWriter {
+    NodeRef *polys;
+    uint32_t capacity;
+    uint32_t count;
+};
+
+static void write_poly(NodeRef ref, void *user_data) {
+    PolyWriter &writer = *(PolyWriter *)user_data;
+    if (writer.count < writer.capacity) writer.polys[writer.count] = ref;
+    writer.count++;
+}
+
+static void finish_query(QueryPolygonsResult &out, const PolyWriter &writer) {
+    out.full_poly_count = writer.count;
+    out.poly_count = writer.count < writer.capacity ? writer.count : writer.capacity;
+}
+
+void query_polygons_in_tile(QueryPolygonsResult &out, const NavMesh &nav_mesh, const NavMeshTile &tile, Box3 bounds, const QueryFilter &filter,
+                            NodeRef *polys, uint32_t max_polys) {
+    PolyWriter writer = {polys, max_polys, 0};
+    visit_polygons_in_tile(nav_mesh, tile, bounds, filter, write_poly, &writer);
+    finish_query(out, writer);
+}
+
+void query_polygons(QueryPolygonsResult &out, const NavMesh &nav_mesh, Box3 bounds, const QueryFilter &filter, NodeRef *polys, uint32_t max_polys) {
+    PolyWriter writer = {polys, max_polys, 0};
+    visit_polygons(nav_mesh, bounds, filter, write_poly, &writer);
+    finish_query(out, writer);
 }
 
 static uint32_t allocate_node(NavMesh &nav_mesh) {
@@ -722,8 +753,10 @@ static bool connect_off_mesh_connection(NavMesh &nav_mesh, uint32_t id) {
     OffMeshConnection connection = nav_mesh.off_mesh_connections[id];
     Vec3 half_extents = {connection.radius, connection.radius, connection.radius};
 
-    FindNearestPolyResult start = find_nearest_poly(nav_mesh, connection.start, half_extents, DEFAULT_QUERY_FILTER);
-    FindNearestPolyResult end = find_nearest_poly(nav_mesh, connection.end, half_extents, DEFAULT_QUERY_FILTER);
+    FindNearestPolyResult start = {};
+    find_nearest_poly(start, nav_mesh, connection.start, half_extents, DEFAULT_QUERY_FILTER);
+    FindNearestPolyResult end = {};
+    find_nearest_poly(end, nav_mesh, connection.end, half_extents, DEFAULT_QUERY_FILTER);
 
     if (!start.success || !end.success) return false;
 

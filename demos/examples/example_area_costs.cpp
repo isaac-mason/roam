@@ -57,6 +57,8 @@ struct AreaCostsExample {
     AreaCostsMoving moving;
     bool success;
     uint32_t point_count;
+    SearchWorkspace workspace;
+    StraightPathPoint points[MAX_PATH_POINTS];
 };
 
 static AreaCostsExample area_costs_example;
@@ -226,24 +228,25 @@ static void update_path() {
     flag(list, state.start, {0.129f, 0.588f, 0.953f, 1});
     flag(list, state.end, GREEN_COLOR);
 
-    FindPathResult path = find_path::find_path(state.nav_mesh, state.start, state.end, {0.6f, 1, 0.6f}, state.filter);
+    FindPathResult path = {};
+    find_path::find_path(path, state.workspace, state.nav_mesh, state.start, state.end, {0.6f, 1, 0.6f}, state.filter, state.points, MAX_PATH_POINTS);
     state.success = path.success;
-    state.point_count = path.path.length;
+    state.point_count = path.point_count;
 
-    for (uint32_t i = 0; i < path.path.length; i++) {
-        Vec3 position = path.path[i].position;
+    for (uint32_t i = 0; i < path.point_count; i++) {
+        Vec3 position = state.points[i].position;
         renderer::point(list, position, 0.2f, {1, 1, 1, 1});
-        if (i > 0) renderer::line(list, path.path[i - 1].position, position, {1, 1, 1, 1});
+        if (i > 0) renderer::line(list, state.points[i - 1].position, position, {1, 1, 1, 1});
     }
 
     state.path_drawing = renderer::create_static(list);
     renderer::release(list);
-    find_path::release(path);
 }
 
 static void init(App &app) {
     AreaCostsExample &state = area_costs_example;
     state = {};
+    state.workspace = nav_mesh_search::create_search_workspace();
     state.costs = {1.0f, 3.0f, 0.45f};
     state.filter = {pass_all, area_cost, 0xffffffffu, 0, &state.costs};
     state.start = {-6, 0, -10};
@@ -309,6 +312,7 @@ static void shutdown(App &) {
     AreaCostsExample &state = area_costs_example;
     renderer::release(state.overlay_drawing);
     renderer::release(state.path_drawing);
+    nav_mesh_search::release(state.workspace);
     if (state.generated) nav_mesh_api::release_nav_mesh(state.nav_mesh);
     state.generated = false;
 }

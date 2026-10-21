@@ -19,6 +19,7 @@ struct FindRandomPointAroundCircleExample {
     bool has_center;
     Vec3 center;
     Array<Vec3> points;
+    SearchWorkspace workspace;
 };
 
 static FindRandomPointAroundCircleExample find_random_point_around_circle_example;
@@ -33,7 +34,8 @@ static void update_random_points(Vec3 point) {
     FindRandomPointAroundCircleExample &state = find_random_point_around_circle_example;
     const NavMesh &nav_mesh = state.result.nav_mesh;
 
-    FindNearestPolyResult nearest = nav_mesh_api::find_nearest_poly(nav_mesh, point, {0.5f, 0.5f, 0.5f}, nav_mesh_api::DEFAULT_QUERY_FILTER);
+    FindNearestPolyResult nearest = {};
+    nav_mesh_api::find_nearest_poly(nearest, nav_mesh, point, {0.5f, 0.5f, 0.5f}, nav_mesh_api::DEFAULT_QUERY_FILTER);
     if (!nearest.success) return;
 
     state.has_center = true;
@@ -41,8 +43,9 @@ static void update_random_points(Vec3 point) {
     state.points.clear();
 
     for (int i = 0; i < state.point_count; i++) {
-        FindRandomPointResult result = nav_mesh_search::find_random_point_around_circle(
-            nav_mesh, nearest.node_ref, nearest.position, state.radius, nav_mesh_api::DEFAULT_QUERY_FILTER, next_random, &state.random_state);
+        FindRandomPointResult result = {};
+        nav_mesh_search::find_random_point_around_circle(result, state.workspace, nav_mesh, nearest.node_ref, nearest.position, state.radius,
+                                                         nav_mesh_api::DEFAULT_QUERY_FILTER, next_random, &state.random_state);
         if (result.success) state.points.push(result.position);
     }
 }
@@ -50,6 +53,7 @@ static void update_random_points(Vec3 point) {
 static void init(App &app) {
     FindRandomPointAroundCircleExample &state = find_random_point_around_circle_example;
     state = {};
+    state.workspace = nav_mesh_search::create_search_workspace();
     state.random_state = 42;
     state.radius = 1.0f;
     state.point_count = 100;
@@ -100,6 +104,7 @@ static void shutdown(App &) {
     FindRandomPointAroundCircleExample &state = find_random_point_around_circle_example;
     renderer::release(state.nav_mesh_drawing);
     state.points.release();
+    nav_mesh_search::release(state.workspace);
     if (state.generated) {
         generate_tiled_nav_mesh::release(state.result.intermediates);
         nav_mesh_api::release_nav_mesh(state.result.nav_mesh);
