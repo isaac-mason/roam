@@ -18,13 +18,13 @@ static const int NULL_NEI = 0xffff;
 using compact_heightfield::get_con;
 
 static uint32_t neighbor_index(const CompactHeightfield &compact_heightfield, int x, int y, int direction, const CompactHeightfieldSpan &span) {
-    int ax = x + DIR_OFFSETS[direction][0];
-    int ay = y + DIR_OFFSETS[direction][1];
+    int ax = x + common::DIR_OFFSETS[direction][0];
+    int ay = y + common::DIR_OFFSETS[direction][1];
     return compact_heightfield.cells[(uint32_t)(ax + ay * compact_heightfield.width)].index + (uint32_t)get_con(span, direction);
 }
 
 static size_t neighbor_span_index(const CompactHeightfield &compact_heightfield, int x, int y, int direction, const CompactHeightfieldSpan &span) {
-    size_t cell = (size_t)(x + DIR_OFFSETS[direction][0]) + (size_t)(y + DIR_OFFSETS[direction][1]) * (size_t)compact_heightfield.width;
+    size_t cell = (size_t)(x + common::DIR_OFFSETS[direction][0]) + (size_t)(y + common::DIR_OFFSETS[direction][1]) * (size_t)compact_heightfield.width;
     return (size_t)compact_heightfield.cells.data[cell].index + (size_t)get_con(span, direction);
 }
 
@@ -39,7 +39,7 @@ static void relax_distance(const CompactHeightfield &compact_heightfield, uint16
     const CompactHeightfieldSpan &a_span = compact_heightfield.spans.data[ai];
     if (get_con(a_span, diagonal_direction) == NOT_CONNECTED) return;
 
-    size_t aai = neighbor_span_index(compact_heightfield, x + DIR_OFFSETS[direction][0], y + DIR_OFFSETS[direction][1], diagonal_direction, a_span);
+    size_t aai = neighbor_span_index(compact_heightfield, x + common::DIR_OFFSETS[direction][0], y + common::DIR_OFFSETS[direction][1], diagonal_direction, a_span);
     if (distances[aai] + 3 < distances[i]) distances[i] = (uint16_t)(distances[aai] + 3);
 }
 
@@ -129,7 +129,7 @@ static void box_blur(const CompactHeightfield &compact_heightfield, int threshol
                     const CompactHeightfieldSpan &a_span = spans[ai];
                     int direction_2 = (direction + 1) & 0x3;
                     if (get_con(a_span, direction_2) != NOT_CONNECTED) {
-                        d += source_distances[neighbor_span_index(compact_heightfield, x + DIR_OFFSETS[direction][0], y + DIR_OFFSETS[direction][1],
+                        d += source_distances[neighbor_span_index(compact_heightfield, x + common::DIR_OFFSETS[direction][0], y + common::DIR_OFFSETS[direction][1],
                                                                 direction_2, a_span)];
                     } else {
                         d += cd;
@@ -267,8 +267,8 @@ static bool flood_region(int x, int y, int i, int level, int r, const CompactHei
         for (int direction = 0; direction < 4; direction++) {
             if (get_con(span, direction) == NOT_CONNECTED) continue;
 
-            int ax = cx + DIR_OFFSETS[direction][0];
-            int ay = cy + DIR_OFFSETS[direction][1];
+            int ax = cx + common::DIR_OFFSETS[direction][0];
+            int ay = cy + common::DIR_OFFSETS[direction][1];
             size_t ai = neighbor_span_index(compact_heightfield, cx, cy, direction, span);
 
             if (areas[ai] != area) continue;
@@ -305,8 +305,8 @@ static bool flood_region(int x, int y, int i, int level, int r, const CompactHei
         for (int direction = 0; direction < 4; direction++) {
             if (get_con(span, direction) == NOT_CONNECTED) continue;
 
-            int ax = cx + DIR_OFFSETS[direction][0];
-            int ay = cy + DIR_OFFSETS[direction][1];
+            int ax = cx + common::DIR_OFFSETS[direction][0];
+            int ay = cy + common::DIR_OFFSETS[direction][1];
             size_t ai = neighbor_span_index(compact_heightfield, cx, cy, direction, span);
 
             if (areas[ai] != area) continue;
@@ -581,8 +581,8 @@ static void walk_contour(BuildContext &context, int x, int y, uint32_t i, int di
                 return;
             }
             uint32_t ni = neighbor_index(compact_heightfield, current_x, current_y, current_direction, span);
-            current_x += DIR_OFFSETS[current_direction][0];
-            current_y += DIR_OFFSETS[current_direction][1];
+            current_x += common::DIR_OFFSETS[current_direction][0];
+            current_y += common::DIR_OFFSETS[current_direction][1];
             current_i = ni;
             current_direction = (current_direction + 3) & 0x3;
         }

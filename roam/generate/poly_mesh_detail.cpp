@@ -443,7 +443,7 @@ static void seed_array_with_poly_center(BuildContext &context, const CompactHeig
 
         if (cx == pcx && cy == pcy) break;
 
-        int direct_direction = cx == pcx ? get_dir_for_offset(0, pcy > cy ? 1 : -1) : get_dir_for_offset(pcx > cx ? 1 : -1, 0);
+        int direct_direction = cx == pcx ? common::get_dir_for_offset(0, pcy > cy ? 1 : -1) : common::get_dir_for_offset(pcx > cx ? 1 : -1, 0);
 
         int swap = directions[direct_direction];
         directions[direct_direction] = directions[3];
@@ -454,8 +454,8 @@ static void seed_array_with_poly_center(BuildContext &context, const CompactHeig
             int direction = directions[i];
             if (get_con(cs, direction) == NOT_CONNECTED) continue;
 
-            int new_x = cx + get_dir_offset_x(direction);
-            int new_y = cy + get_dir_offset_y(direction);
+            int new_x = cx + common::get_dir_offset_x(direction);
+            int new_y = cy + common::get_dir_offset_y(direction);
 
             int hpx = new_x - hp.xmin;
             int hpy = new_y - hp.ymin;
@@ -487,7 +487,7 @@ static void get_height_data(BuildContext &context, const CompactHeightfield &chf
 
     bool empty = true;
 
-    if (region != MULTIPLE_REGS) {
+    if (region != common::MULTIPLE_REGS) {
         for (int hy = 0; hy < hp.height; hy++) {
             int y = hp.ymin + hy + border_size;
             for (int hx = 0; hx < hp.width; hx++) {
@@ -503,8 +503,8 @@ static void get_height_data(BuildContext &context, const CompactHeightfield &chf
                     bool border = false;
                     for (int direction = 0; direction < 4; ++direction) {
                         if (get_con(s, direction) == NOT_CONNECTED) continue;
-                        int ax = x + get_dir_offset_x(direction);
-                        int ay = y + get_dir_offset_y(direction);
+                        int ax = x + common::get_dir_offset_x(direction);
+                        int ay = y + common::get_dir_offset_y(direction);
                         uint32_t ai = chf.cells[(uint32_t)(ax + ay * chf.width)].index + (uint32_t)get_con(s, direction);
                         if (chf.spans[ai].region != region) {
                             border = true;
@@ -540,8 +540,8 @@ static void get_height_data(BuildContext &context, const CompactHeightfield &chf
         for (int direction = 0; direction < 4; ++direction) {
             if (get_con(cs, direction) == NOT_CONNECTED) continue;
 
-            int ax = cx + get_dir_offset_x(direction);
-            int ay = cy + get_dir_offset_y(direction);
+            int ax = cx + common::get_dir_offset_x(direction);
+            int ay = cy + common::get_dir_offset_y(direction);
             int hx = ax - hp.xmin - border_size;
             int hy = ay - hp.ymin - border_size;
 

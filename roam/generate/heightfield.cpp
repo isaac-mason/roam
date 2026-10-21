@@ -270,14 +270,14 @@ static bool rasterize_triangle(Vec3 v0, Vec3 v1, Vec3 v2, uint8_t area_id, Heigh
     for (int z = z0; z <= z1; ++z) {
         float cell_z = heightfield.bounds.min.z + (float)z * cell_size;
         int row_vertex_count = 0;
-        if (z == z1 && all_on_near_side(in_vertices, in_vertex_count, cell_z + cell_size, AXIS_Z)) {
+        if (z == z1 && all_on_near_side(in_vertices, in_vertex_count, cell_z + cell_size, common::AXIS_Z)) {
             float *swap = in_row;
             in_row = in_vertices;
             in_vertices = swap;
             row_vertex_count = in_vertex_count;
             in_vertex_count = 0;
         } else {
-            DividedPoly row = divide_poly(in_vertices, in_vertex_count, in_row, p1, cell_z + cell_size, AXIS_Z);
+            DividedPoly row = divide_poly(in_vertices, in_vertex_count, in_row, p1, cell_z + cell_size, common::AXIS_Z);
 
             float *swap = in_vertices;
             in_vertices = p1;
@@ -307,7 +307,7 @@ static bool rasterize_triangle(Vec3 v0, Vec3 v1, Vec3 v2, uint8_t area_id, Heigh
         for (int x = x0; x <= x1; ++x) {
             float cx = heightfield.bounds.min.x + (float)x * cell_size;
             CellPiece piece;
-            if (x == x1 && all_on_near_side(in_row, remaining_row_vertex_count, cx + cell_size, AXIS_X)) {
+            if (x == x1 && all_on_near_side(in_row, remaining_row_vertex_count, cx + cell_size, common::AXIS_X)) {
                 piece = {0, 0, 0};
                 for (int vertex = 0; vertex < remaining_row_vertex_count; ++vertex) include_cell_height(piece, in_row[vertex * 3 + 1]);
                 remaining_row_vertex_count = 0;
@@ -424,8 +424,8 @@ void filter_ledge_spans(Heightfield &heightfield, int walkable_height, int walka
                 int highest_traversable_neighbor_floor = span->max;
 
                 for (int direction = 0; direction < 4; ++direction) {
-                    int neighbor_x = x + get_dir_offset_x(direction);
-                    int neighbor_z = z + get_dir_offset_y(direction);
+                    int neighbor_x = x + common::get_dir_offset_x(direction);
+                    int neighbor_z = z + common::get_dir_offset_y(direction);
 
                     if (neighbor_x < 0 || neighbor_z < 0 || neighbor_x >= x_size || neighbor_z >= z_size) {
                         lowest_neighbor_floor_difference = -walkable_climb - 1;

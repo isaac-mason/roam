@@ -637,7 +637,7 @@ static bool remove_vertex(BuildContext &context, PolyMesh &mesh, int removed_ver
             polys[(uint32_t)(poly_count * nvp + 2)] = hole[(uint32_t)t2];
 
             if (hole_regions[(uint32_t)t0] != hole_regions[(uint32_t)t1] || hole_regions[(uint32_t)t1] != hole_regions[(uint32_t)t2]) {
-                poly_regions[(uint32_t)poly_count] = MULTIPLE_REGS;
+                poly_regions[(uint32_t)poly_count] = common::MULTIPLE_REGS;
             } else {
                 poly_regions[(uint32_t)poly_count] = hole_regions[(uint32_t)t0];
             }
@@ -656,7 +656,7 @@ static bool remove_vertex(BuildContext &context, PolyMesh &mesh, int removed_ver
                     uint32_t pb_start = (uint32_t)(best.pb * nvp);
                     merge_poly_vertices(polys.data, pa_start, pb_start, best.ea, best.eb, (uint32_t)(triangle_count * nvp), nvp);
 
-                    if (poly_regions[(uint32_t)best.pa] != poly_regions[(uint32_t)best.pb]) poly_regions[(uint32_t)best.pa] = MULTIPLE_REGS;
+                    if (poly_regions[(uint32_t)best.pa] != poly_regions[(uint32_t)best.pb]) poly_regions[(uint32_t)best.pa] = common::MULTIPLE_REGS;
 
                     uint32_t last_start = (uint32_t)((poly_count - 1) * nvp);
                     if (pb_start != last_start) {

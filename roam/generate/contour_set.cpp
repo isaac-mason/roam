@@ -21,8 +21,8 @@ struct ContourPoint {
 };
 
 static uint32_t neighbor_index(const CompactHeightfield &chf, int x, int y, int direction, const CompactHeightfieldSpan &span) {
-    int ax = x + get_dir_offset_x(direction);
-    int ay = y + get_dir_offset_y(direction);
+    int ax = x + common::get_dir_offset_x(direction);
+    int ay = y + common::get_dir_offset_y(direction);
     return chf.cells[(uint32_t)(ax + ay * chf.width)].index + (uint32_t)get_con(span, direction);
 }
 
@@ -38,8 +38,8 @@ static int get_corner_height(int x, int y, uint32_t i, int direction, const Comp
     regs[0] = region_and_area(chf, i);
 
     if (get_con(s, direction) != NOT_CONNECTED) {
-        int ax = x + get_dir_offset_x(direction);
-        int ay = y + get_dir_offset_y(direction);
+        int ax = x + common::get_dir_offset_x(direction);
+        int ay = y + common::get_dir_offset_y(direction);
         uint32_t ai = neighbor_index(chf, x, y, direction, s);
         const CompactHeightfieldSpan &as = chf.spans[ai];
         ch = scalar::max(ch, as.y);
@@ -51,8 +51,8 @@ static int get_corner_height(int x, int y, uint32_t i, int direction, const Comp
         }
     }
     if (get_con(s, direction_p) != NOT_CONNECTED) {
-        int ax = x + get_dir_offset_x(direction_p);
-        int ay = y + get_dir_offset_y(direction_p);
+        int ax = x + common::get_dir_offset_x(direction_p);
+        int ay = y + common::get_dir_offset_y(direction_p);
         uint32_t ai = neighbor_index(chf, x, y, direction_p, s);
         const CompactHeightfieldSpan &as = chf.spans[ai];
         ch = scalar::max(ch, as.y);
@@ -152,8 +152,8 @@ static void walk_contour(BuildContext &context, int x, int y, uint32_t i, const 
                 return;
             }
             uint32_t ni = neighbor_index(chf, current_x, current_y, direction, s);
-            current_x += get_dir_offset_x(direction);
-            current_y += get_dir_offset_y(direction);
+            current_x += common::get_dir_offset_x(direction);
+            current_y += common::get_dir_offset_y(direction);
             current_i = ni;
             direction = (direction + 3) & 0x3;
 

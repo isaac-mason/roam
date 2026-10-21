@@ -82,8 +82,8 @@ CompactHeightfield build(BuildContext &context, const Heightfield &heightfield, 
                 for (int direction = 0; direction < 4; ++direction) {
                     set_con(span, direction, NOT_CONNECTED);
 
-                    int neighbor_x = x + DIR_OFFSETS[direction][0];
-                    int neighbor_z = z + DIR_OFFSETS[direction][1];
+                    int neighbor_x = x + common::DIR_OFFSETS[direction][0];
+                    int neighbor_z = z + common::DIR_OFFSETS[direction][1];
 
                     if (neighbor_x < 0 || neighbor_z < 0 || neighbor_x >= x_size || neighbor_z >= z_size) continue;
 
@@ -96,7 +96,7 @@ CompactHeightfield build(BuildContext &context, const Heightfield &heightfield, 
 
                         if (top - bottom >= walkable_height_voxels && scalar::abs(neighbor_span.y - span.y) <= walkable_climb_voxels) {
                             int layer_index = (int)(k - neighbor_cell.index);
-                            if (layer_index < 0 || layer_index > MAX_LAYERS) {
+                            if (layer_index < 0 || layer_index > common::MAX_LAYERS) {
                                 max_layer_index = scalar::max(max_layer_index, layer_index);
                                 continue;
                             }
@@ -109,8 +109,8 @@ CompactHeightfield build(BuildContext &context, const Heightfield &heightfield, 
         }
     }
 
-    if (max_layer_index > MAX_LAYERS) {
-        build_context::warn(context, "buildCompactHeightfield: Heightfield has too many layers %d (max: %d)", max_layer_index, MAX_LAYERS);
+    if (max_layer_index > common::MAX_LAYERS) {
+        build_context::warn(context, "buildCompactHeightfield: Heightfield has too many layers %d (max: %d)", max_layer_index, common::MAX_LAYERS);
     }
 
     return compact_heightfield;
@@ -126,8 +126,8 @@ void release(CompactHeightfield &compact_heightfield) {
 static const uint8_t MAX_DISTANCE = 255;
 
 static uint32_t neighbor_span_index(const CompactHeightfield &compact_heightfield, int x, int z, int direction, int connection) {
-    int neighbor_x = x + DIR_OFFSETS[direction][0];
-    int neighbor_z = z + DIR_OFFSETS[direction][1];
+    int neighbor_x = x + common::DIR_OFFSETS[direction][0];
+    int neighbor_z = z + common::DIR_OFFSETS[direction][1];
     return compact_heightfield.cells[(uint32_t)(neighbor_x + neighbor_z * compact_heightfield.width)].index + (uint32_t)connection;
 }
 
@@ -141,8 +141,8 @@ static void relax_from_direction(const CompactHeightfield &compact_heightfield, 
     const CompactHeightfieldSpan &span = compact_heightfield.spans[span_index];
     if (get_con(span, direction) == NOT_CONNECTED) return;
 
-    int ax = x + DIR_OFFSETS[direction][0];
-    int az = z + DIR_OFFSETS[direction][1];
+    int ax = x + common::DIR_OFFSETS[direction][0];
+    int az = z + common::DIR_OFFSETS[direction][1];
     uint32_t a_index = neighbor_span_index(compact_heightfield, x, z, direction, get_con(span, direction));
     relax_distance(distance_to_boundary, span_index, a_index, 2);
 
@@ -435,8 +435,8 @@ bool median_filter_walkable_area(CompactHeightfield &compact_heightfield) {
                 for (int direction = 0; direction < 4; ++direction) {
                     if (get_con(span, direction) == NOT_CONNECTED) continue;
 
-                    int ax = x + DIR_OFFSETS[direction][0];
-                    int az = z + DIR_OFFSETS[direction][1];
+                    int ax = x + common::DIR_OFFSETS[direction][0];
+                    int az = z + common::DIR_OFFSETS[direction][1];
                     uint32_t a_index = neighbor_span_index(compact_heightfield, x, z, direction, get_con(span, direction));
 
                     if (compact_heightfield.areas[a_index] != NULL_AREA) neighbor_areas[direction * 2 + 0] = compact_heightfield.areas[a_index];
