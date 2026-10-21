@@ -20,7 +20,16 @@
 #include <time.h>
 #endif
 
+static bool use_cpu_time = false;
+
+static double cpu_milliseconds() {
+    timespec time;
+    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &time);
+    return (double)time.tv_sec * 1000.0 + (double)time.tv_nsec / 1e6;
+}
+
 static double now_milliseconds() {
+    if (use_cpu_time) return cpu_milliseconds();
 #if defined(__APPLE__)
     static mach_timebase_info_data_t timebase = {0, 0};
     if (timebase.denom == 0) mach_timebase_info(&timebase);
@@ -517,6 +526,8 @@ int main(int argc, char **argv) {
             points = argv[++i];
         } else if (strcmp(argv[i], "--time") == 0 && i + 1 < argc) {
             min_total_milliseconds = atof(argv[++i]);
+        } else if (strcmp(argv[i], "--cpu") == 0) {
+            use_cpu_time = true;
         } else {
             filter = argv[i];
         }

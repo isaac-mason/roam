@@ -183,3 +183,11 @@ Alternating runs against recast_bench (median ms, nav-test / game-level / FPS ma
 | crowd, 6 neighbours (Detour's default cap) | 28.2 / - / - | 30.5 / - / - |
 
 roam is now ahead of Detour on every workload. The one exception is the crowd with navcat's default unlimited neighbours, which does more work by design: 34.5 vs Detour's capped 31.4 on nav-test, about even on the FPS map. Individual generation stages still trail Detour on small levels (distance field, regions, contours, detail on the FPS map), but every whole build is ahead. The machine was loaded during these runs (load average around 10), so only the alternating pairs are comparable.
+
+### Generation stages against Detour, and measuring on a busy machine (2026-10-21)
+
+- **Mark walkable** was 0.65x of Detour. The arithmetic matches recast's `rcMarkWalkableTriangles`; the cost was computing a full normalized normal through `vec3::normalize` (with its zero-length branch) and 32-bit index arithmetic. roam now computes only the normal's y, always takes `1/sqrt`, and picks the loop once by the threshold's sign, so degenerate triangles keep their old result. 0.25 → 0.18 ms on the FPS map (Detour 0.17).
+- **Contours** copied each contour's vertices with `push` (several reallocations); they now allocate the exact size and `memcpy`, like recast.
+- Both verified bit-identical by hashing contours, poly meshes and detail meshes on nav-test, game-level and the FPS map against the previous commit.
+- roam builds with `-ffp-contract=off` to keep float results identical to navcat, while recast_bench uses clang's default (FMA contraction on arm64). Rebuilding recast_bench without contraction changed nothing measurable (mark walkable, detail, find path), so FMA isn't behind any gap.
+- Both benches take `--cpu` to time samples with thread CPU time instead of wall time. It helps when other processes are busy, but at load averages around 50 even CPU time drifts (threads land on efficiency cores), so stage comparisons within a few percent need a quiet machine.

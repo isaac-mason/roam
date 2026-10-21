@@ -5,6 +5,7 @@
 
 #if defined(__APPLE__)
 #include <mach/mach_time.h>
+#include <time.h>
 #elif defined(_WIN32)
 #include <windows.h>
 #else
@@ -14,6 +15,27 @@
 using namespace roam;
 
 namespace bench {
+
+static bool use_cpu_time = false;
+
+void measure_cpu_time(bool enabled) { use_cpu_time = enabled; }
+
+static double cpu_milliseconds() {
+#if defined(_WIN32)
+    FILETIME creation, exit, kernel, user;
+    GetThreadTimes(GetCurrentThread(), &creation, &exit, &kernel, &user);
+    ULARGE_INTEGER total;
+    total.LowPart = user.dwLowDateTime;
+    total.HighPart = user.dwHighDateTime;
+    return (double)total.QuadPart / 1e4;
+#else
+    timespec time;
+    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &time);
+    return (double)time.tv_sec * 1000.0 + (double)time.tv_nsec / 1e6;
+#endif
+}
+
+static double clock_milliseconds() { return use_cpu_time ? cpu_milliseconds() : now_milliseconds(); }
 
 double now_milliseconds() {
 #if defined(__APPLE__)
@@ -35,9 +57,9 @@ double now_milliseconds() {
 
 static double sample(const BenchCase &bench_case) {
     if (bench_case.prepare) bench_case.prepare();
-    double start = now_milliseconds();
+    double start = clock_milliseconds();
     bench_case.run();
-    double elapsed = now_milliseconds() - start;
+    double elapsed = clock_milliseconds() - start;
     if (bench_case.finish) bench_case.finish();
     return elapsed;
 }

@@ -359,6 +359,8 @@ int main(int argc, char **argv) {
             dump_points = argv[++i];
         } else if (strcmp(argv[i], "--time") == 0 && i + 1 < argc) {
             min_total_milliseconds = atof(argv[++i]);
+        } else if (strcmp(argv[i], "--cpu") == 0) {
+            bench::measure_cpu_time(true);
         } else {
             filter = argv[i];
         }

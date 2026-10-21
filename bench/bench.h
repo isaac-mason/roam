@@ -18,6 +18,7 @@ struct BenchResult {
 namespace bench {
 
 double now_milliseconds();
+void measure_cpu_time(bool enabled);
 BenchResult run(const BenchCase &bench_case, double min_total_milliseconds = 500);
 
 }
