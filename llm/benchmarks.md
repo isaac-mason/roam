@@ -276,3 +276,20 @@ Thread CPU time minimums, roam / Detour (ms), nav-test / game-level / FPS map:
 | straight paths (100 node paths) | 0.023 / 0.027 (1.17x) | 0.061 / 0.076 (1.25x) | 0.070 / 0.090 (1.28x) |
 
 Move along surface is the remaining clear gap: about 2,950 instructions per move for the search against Detour's roughly 2,050, at the same IPC. Collecting each poly's links once instead of per edge, and dropping the height snap, were measured and are not the cause.
+
+### Regions ahead of Detour, mark walkable revisited (2026-10-21)
+
+Regions retire the same instructions as Detour on the FPS map (62.9M vs 63.6M) but 11.6% more on game-level, and timed 0.85x there. Throwaway per-phase timers on game-level: expand 1.7 ms, merge and filter 1.37 ms, sorting cells into level stacks 1.15 ms, flood 0.4 ms per build. Three exact changes, each verified by hashing regions, contours, poly mesh and detail mesh on all three levels against the previous commit:
+
+- **16-bit scratch.** `source_regions` and `source_distances` are `uint16_t`, like recast's. Region ids are capped at 0xffff and `CompactHeightfieldSpan::region` is already 16 bits; distances stay at or below 0xfffe. Halves the memory flood and expand walk.
+- **Sort only unassigned spans.** Every 8 levels, `sort_cells_by_level` rescanned every span of the heightfield. A span only returns to region 0 inside the flood that set it, so between sorts "assigned" is permanent; the build now keeps the unassigned spans in scan order and compacts that list as each sort walks it. Stacks get the same entries in the same order.
+- **Drop resolved entries during expansion.** Each expand iteration re-walked entries resolved in earlier iterations. Updates are applied together after each pass, so order inside a pass doesn't matter; resolved entries are now removed as the pass goes. "Nothing resolved this pass" is the same stopping rule as "every entry failed", and the flood and append that read the stack afterwards skipped those entries anyway.
+
+| build regions, roam / Detour (ms) | nav-test | game-level | FPS map |
+|---|---|---|---|
+| before | 0.390 / 0.381 (0.98x) | 4.67 / 3.98 (0.85x) | 6.07 / 5.92 (0.98x) |
+| after | 0.350 / 0.388 (1.11x) | 3.92 / 4.02 (1.03x) | 4.92 / 5.94 (1.21x) |
+
+Solo builds are now 1.16x / 1.42x / 1.71x faster than Detour.
+
+**Mark walkable** stays at about 0.95-1.0x. Detour runs about 37 instructions per triangle, roam about 45, of which the fills before the stage are part. Blocking the loop (gathering edges into flat arrays, then a plain loop the compiler vectorizes 4 wide with vector `sqrt` and divide, bit-identical across 181 slope angles on all three levels) didn't change the time, so the stage is bound by the indexed vertex loads, which both libraries do the same way. Kept the simple loop.

@@ -163,19 +163,19 @@ struct LevelStackEntry {
 using LevelStack = Array<LevelStackEntry>;
 
 static void paint_rect_region(int min_x, int max_x, int min_y, int max_y, int region_id, const CompactHeightfield &compact_heightfield,
-                              int *source_regions) {
+                              uint16_t *source_regions) {
     int w = compact_heightfield.width;
     for (int y = min_y; y < max_y; y++) {
         for (int x = min_x; x < max_x; x++) {
             CompactHeightfieldCell cell = compact_heightfield.cells[(uint32_t)(x + y * w)];
             for (uint32_t i = cell.index; i < cell.index + cell.count; i++) {
-                if (compact_heightfield.areas[i] != NULL_AREA) source_regions[i] = region_id;
+                if (compact_heightfield.areas[i] != NULL_AREA) source_regions[i] = (uint16_t)region_id;
             }
         }
     }
 }
 
-static int paint_border_regions(int border_size, int region_id, const CompactHeightfield &compact_heightfield, int *source_regions) {
+static int paint_border_regions(int border_size, int region_id, const CompactHeightfield &compact_heightfield, uint16_t *source_regions) {
     if (border_size <= 0) return region_id;
 
     int w = compact_heightfield.width;
@@ -195,40 +195,53 @@ static int paint_border_regions(int border_size, int region_id, const CompactHei
     return region_id;
 }
 
-static void sort_cells_by_level(int start_level, const CompactHeightfield &compact_heightfield, const int *source_regions, int stack_count,
-                                LevelStack *stacks, int log_levels_per_stack) {
+static void gather_unassigned_spans(const CompactHeightfield &compact_heightfield, const uint16_t *source_regions, LevelStack &unassigned) {
     int w = compact_heightfield.width;
     int h = compact_heightfield.height;
-    int adjusted_start_level = start_level >> log_levels_per_stack;
-
-    for (int j = 0; j < stack_count; j++) stacks[j].clear();
-
+    unassigned.clear();
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
             CompactHeightfieldCell cell = compact_heightfield.cells[(uint32_t)(x + y * w)];
             for (uint32_t i = cell.index; i < cell.index + cell.count; i++) {
                 if (compact_heightfield.areas[i] == NULL_AREA || source_regions[i] != 0) continue;
-
-                int level = compact_heightfield.distances[i] >> log_levels_per_stack;
-                int stack_id = adjusted_start_level - level;
-                if (stack_id >= stack_count) continue;
-                if (stack_id < 0) stack_id = 0;
-
-                stacks[stack_id].push({x, y, (int)i});
+                unassigned.push({x, y, (int)i});
             }
         }
     }
 }
 
-static void append_stacks(const LevelStack &source_stack, LevelStack &destination_stack, const int *source_regions) {
+static void sort_cells_by_level(int start_level, const CompactHeightfield &compact_heightfield, const uint16_t *source_regions, int stack_count,
+                                LevelStack *stacks, int log_levels_per_stack, LevelStack &unassigned) {
+    const uint16_t *distances = compact_heightfield.distances.data;
+    int adjusted_start_level = start_level >> log_levels_per_stack;
+
+    for (int j = 0; j < stack_count; j++) stacks[j].clear();
+
+    uint32_t kept = 0;
+    for (uint32_t k = 0; k < unassigned.length; k++) {
+        LevelStackEntry entry = unassigned[k];
+        if (source_regions[entry.index] != 0) continue;
+        unassigned[kept++] = entry;
+
+        int level = distances[entry.index] >> log_levels_per_stack;
+        int stack_id = adjusted_start_level - level;
+        if (stack_id >= stack_count) continue;
+        if (stack_id < 0) stack_id = 0;
+
+        stacks[stack_id].push(entry);
+    }
+    unassigned.resize(kept);
+}
+
+static void append_stacks(const LevelStack &source_stack, LevelStack &destination_stack, const uint16_t *source_regions) {
     for (const LevelStackEntry &entry : source_stack) {
         if (entry.index < 0 || source_regions[entry.index] != 0) continue;
         destination_stack.push(entry);
     }
 }
 
-static bool flood_region(int x, int y, int i, int level, int r, const CompactHeightfield &compact_heightfield, int *source_regions,
-                         int *source_distances, LevelStack &stack) {
+static bool flood_region(int x, int y, int i, int level, int r, const CompactHeightfield &compact_heightfield, uint16_t *source_regions,
+                         uint16_t *source_distances, LevelStack &stack) {
     const CompactHeightfieldSpan *spans = compact_heightfield.spans.data;
     const uint8_t *areas = compact_heightfield.areas.data;
     const uint16_t *distances = compact_heightfield.distances.data;
@@ -236,7 +249,7 @@ static bool flood_region(int x, int y, int i, int level, int r, const CompactHei
 
     stack.clear();
     stack.push({x, y, i});
-    source_regions[i] = r;
+    source_regions[i] = (uint16_t)r;
     source_distances[i] = 0;
 
     int lev = level >= 2 ? level - 2 : 0;
@@ -298,7 +311,7 @@ static bool flood_region(int x, int y, int i, int level, int r, const CompactHei
 
             if (areas[ai] != area) continue;
             if (distances[ai] >= lev && source_regions[ai] == 0) {
-                source_regions[ai] = r;
+                source_regions[ai] = (uint16_t)r;
                 source_distances[ai] = 0;
                 stack.push({ax, ay, (int)ai});
             }
@@ -314,8 +327,8 @@ struct DirtyEntry {
     int distance_2;
 };
 
-static void expand_regions(int max_iterations, int level, const CompactHeightfield &compact_heightfield, int *source_regions,
-                           int *source_distances, LevelStack &stack, bool fill_stack, Array<DirtyEntry> &dirty_entries) {
+static void expand_regions(int max_iterations, int level, const CompactHeightfield &compact_heightfield, uint16_t *source_regions,
+                           uint16_t *source_distances, LevelStack &stack, bool fill_stack, Array<DirtyEntry> &dirty_entries) {
     const CompactHeightfieldCell *cells = compact_heightfield.cells.data;
     const CompactHeightfieldSpan *spans = compact_heightfield.spans.data;
     const uint8_t *areas = compact_heightfield.areas.data;
@@ -345,18 +358,17 @@ static void expand_regions(int max_iterations, int level, const CompactHeightfie
     int iteration = 0;
 
     while (stack.length > 0) {
-        uint32_t failed = 0;
+        uint32_t kept = 0;
+        uint32_t resolved = 0;
         dirty_entries.clear();
 
-        for (LevelStackEntry &entry : stack) {
+        for (uint32_t k = 0; k < stack.length; k++) {
+            LevelStackEntry entry = stack[k];
             int x = entry.x;
             int y = entry.y;
             int i = entry.index;
 
-            if (i < 0) {
-                failed++;
-                continue;
-            }
+            if (i < 0) continue;
 
             int r = source_regions[i];
             int d2 = 0xffff;
@@ -379,19 +391,20 @@ static void expand_regions(int max_iterations, int level, const CompactHeightfie
             }
 
             if (r) {
-                entry.index = -1;
+                resolved++;
                 dirty_entries.push({i, r, d2});
             } else {
-                failed++;
+                stack[kept++] = entry;
             }
         }
+        stack.resize(kept);
 
         for (const DirtyEntry &entry : dirty_entries) {
-            source_regions[entry.index] = entry.region;
-            source_distances[entry.index] = entry.distance_2;
+            source_regions[entry.index] = (uint16_t)entry.region;
+            source_distances[entry.index] = (uint16_t)entry.distance_2;
         }
 
-        if (failed == stack.length) break;
+        if (resolved == 0) break;
 
         if (level > 0) {
             iteration++;
@@ -527,18 +540,18 @@ static void replace_neighbor(Region &region, int old_id, int new_id) {
     if (neighbors_changed) remove_adjacent_duplicates(region.connections);
 }
 
-static int neighbor_region(const CompactHeightfield &compact_heightfield, const int *source_regions, int x, int y, uint32_t i, int direction) {
+static int neighbor_region(const CompactHeightfield &compact_heightfield, const uint16_t *source_regions, int x, int y, uint32_t i, int direction) {
     const CompactHeightfieldSpan &span = compact_heightfield.spans[i];
     if (get_con(span, direction) == NOT_CONNECTED) return 0;
     return source_regions[neighbor_index(compact_heightfield, x, y, direction, span)];
 }
 
-static bool is_solid_edge(const CompactHeightfield &compact_heightfield, const int *source_regions, int x, int y, uint32_t i, int direction) {
+static bool is_solid_edge(const CompactHeightfield &compact_heightfield, const uint16_t *source_regions, int x, int y, uint32_t i, int direction) {
     return neighbor_region(compact_heightfield, source_regions, x, y, i, direction) != source_regions[i];
 }
 
 static void walk_contour(BuildContext &context, int x, int y, uint32_t i, int direction, const CompactHeightfield &compact_heightfield,
-                         const int *source_regions, Array<int> &contour) {
+                         const uint16_t *source_regions, Array<int> &contour) {
     int start_direction = direction;
     uint32_t start_i = i;
 
@@ -604,14 +617,14 @@ static void compress_region_ids(Array<Region> &regions, int &out_max_regions) {
     out_max_regions = region_id_generator;
 }
 
-static void remap_source_regions(const CompactHeightfield &compact_heightfield, const Array<Region> &regions, int *source_regions) {
+static void remap_source_regions(const CompactHeightfield &compact_heightfield, const Array<Region> &regions, uint16_t *source_regions) {
     for (uint32_t i = 0; i < compact_heightfield.span_count; i++) {
-        if ((source_regions[i] & BORDER_REG) == 0) source_regions[i] = regions[(uint32_t)source_regions[i]].id;
+        if ((source_regions[i] & BORDER_REG) == 0) source_regions[i] = (uint16_t)regions[(uint32_t)source_regions[i]].id;
     }
 }
 
 static bool merge_and_filter_regions(BuildContext &context, int min_region_area, int merge_region_size, CompactHeightfield &compact_heightfield,
-                                     int *source_regions, Array<int> &overlaps) {
+                                     uint16_t *source_regions, Array<int> &overlaps) {
     Array<int> merged_connections = {};
     int w = compact_heightfield.width;
     int h = compact_heightfield.height;
@@ -754,14 +767,14 @@ static bool merge_and_filter_regions(BuildContext &context, int min_region_area,
     return true;
 }
 
-static void store_regions(CompactHeightfield &compact_heightfield, const int *source_regions) {
+static void store_regions(CompactHeightfield &compact_heightfield, const uint16_t *source_regions) {
     for (uint32_t i = 0; i < compact_heightfield.span_count; i++) compact_heightfield.spans[i].region = source_regions[i];
 }
 
 bool build_regions(BuildContext &context, CompactHeightfield &compact_heightfield, int border_size, int min_region_area,
                    int merge_region_area) {
-    Array<int> source_regions = {};
-    Array<int> source_distances = {};
+    Array<uint16_t> source_regions = {};
+    Array<uint16_t> source_distances = {};
     source_regions.resize(compact_heightfield.span_count, 0);
     source_distances.resize(compact_heightfield.span_count, 0);
 
@@ -770,10 +783,12 @@ bool build_regions(BuildContext &context, CompactHeightfield &compact_heightfiel
 
     LevelStack level_stacks[NB_STACKS] = {};
     LevelStack stack = {};
+    LevelStack unassigned = {};
     Array<DirtyEntry> dirty_entries = {};
 
     region_id = paint_border_regions(border_size, region_id, compact_heightfield, source_regions.data);
     compact_heightfield.border_size = border_size;
+    gather_unassigned_spans(compact_heightfield, source_regions.data, unassigned);
 
     bool ok = true;
     int stack_id = -1;
@@ -782,7 +797,7 @@ bool build_regions(BuildContext &context, CompactHeightfield &compact_heightfiel
         stack_id = (stack_id + 1) & (NB_STACKS - 1);
 
         if (stack_id == 0) {
-            sort_cells_by_level(level, compact_heightfield, source_regions.data, NB_STACKS, level_stacks, 1);
+            sort_cells_by_level(level, compact_heightfield, source_regions.data, NB_STACKS, level_stacks, 1, unassigned);
         } else {
             append_stacks(level_stacks[stack_id - 1], level_stacks[stack_id], source_regions.data);
         }
@@ -823,6 +838,7 @@ bool build_regions(BuildContext &context, CompactHeightfield &compact_heightfiel
 
     for (LevelStack &level_stack : level_stacks) level_stack.release();
     stack.release();
+    unassigned.release();
     dirty_entries.release();
     source_regions.release();
     source_distances.release();
@@ -836,7 +852,7 @@ struct SweepSpan {
     int nei;
 };
 
-static int sweep_monotone_rows(const CompactHeightfield &compact_heightfield, int border_size, int id, int *source_regions) {
+static int sweep_monotone_rows(const CompactHeightfield &compact_heightfield, int border_size, int id, uint16_t *source_regions) {
     int w = compact_heightfield.width;
     int h = compact_heightfield.height;
 
@@ -888,7 +904,7 @@ static int sweep_monotone_rows(const CompactHeightfield &compact_heightfield, in
                     }
                 }
 
-                source_regions[i] = previous_id;
+                source_regions[i] = (uint16_t)previous_id;
             }
         }
 
@@ -904,7 +920,7 @@ static int sweep_monotone_rows(const CompactHeightfield &compact_heightfield, in
         for (int x = border_size; x < w - border_size; x++) {
             CompactHeightfieldCell cell = compact_heightfield.cells[(uint32_t)(x + y * w)];
             for (uint32_t i = cell.index; i < cell.index + cell.count; i++) {
-                if (source_regions[i] > 0 && source_regions[i] < rid) source_regions[i] = sweeps[(uint32_t)source_regions[i]].id;
+                if (source_regions[i] > 0 && source_regions[i] < rid) source_regions[i] = (uint16_t)sweeps[(uint32_t)source_regions[i]].id;
             }
         }
     }
@@ -916,7 +932,7 @@ static int sweep_monotone_rows(const CompactHeightfield &compact_heightfield, in
 
 bool build_regions_monotone(BuildContext &context, CompactHeightfield &compact_heightfield, int border_size, int min_region_area,
                             int merge_region_area) {
-    Array<int> source_regions = {};
+    Array<uint16_t> source_regions = {};
     source_regions.resize(compact_heightfield.span_count, 0);
 
     int id = paint_border_regions(border_size, 1, compact_heightfield, source_regions.data);
@@ -942,7 +958,7 @@ static void add_unique_connection(Region &region, int n) {
     region.connections.push(n);
 }
 
-static bool merge_and_filter_layer_regions(int min_region_area, const CompactHeightfield &compact_heightfield, int *source_regions,
+static bool merge_and_filter_layer_regions(int min_region_area, const CompactHeightfield &compact_heightfield, uint16_t *source_regions,
                                            int &max_region_id) {
     int w = compact_heightfield.width;
     int h = compact_heightfield.height;
@@ -1053,7 +1069,7 @@ static bool merge_and_filter_layer_regions(int min_region_area, const CompactHei
 }
 
 bool build_layer_regions(BuildContext &, CompactHeightfield &compact_heightfield, int border_size, int min_region_area) {
-    Array<int> source_regions = {};
+    Array<uint16_t> source_regions = {};
     source_regions.resize(compact_heightfield.span_count, 0);
 
     int id = paint_border_regions(border_size, 1, compact_heightfield, source_regions.data);

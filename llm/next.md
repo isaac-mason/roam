@@ -23,6 +23,6 @@ A working checklist. Tick items as they land, and record findings and numbers in
 - [x] **Wall segments** (0.7x → 0.87-1.0x), **local neighbourhood** (→ 1.01-1.07x), **query polygons** (→ 0.94-1.02x): inline node lookups and a leaner wall segment loop.
 - [ ] **Move along surface** (0.73x with equal work): about 900 more instructions per move than Detour; the link walk and height snap are ruled out. Needs a profile.
 - [ ] **Parallel tiled builds.** Tiles are independent. Expose per-tile generation as a thread-safe public function, and show a threaded build in the bench and a demo. roam itself stays single-threaded.
-- [ ] **Regions (0.97x of Detour): a closer look.** Beyond the level stack allocation, profile flood, expand and merge at the instruction level, and compare the data layouts and loop structure with Detour.
-- [ ] **Mark walkable (0.95x of Detour): a closer look.** Check the generated code against Detour's loop: bounds checks, index widths, aliasing, and whether the area write blocks vectorization.
+- [x] **Regions: a closer look.** Now 1.03-1.21x ahead of Detour: 16-bit scratch, sorting only unassigned spans, and expansion drops resolved entries.
+- [x] **Mark walkable: a closer look.** Bound by indexed vertex loads; vectorizing the arithmetic didn't change the time.
 - [ ] Deferred: SIMD (obstacle avoidance, detail sampling, triangle setup), a generation workspace, Detour's 6-vertex poly cap.
