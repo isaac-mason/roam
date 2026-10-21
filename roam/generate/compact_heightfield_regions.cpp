@@ -1,6 +1,7 @@
 #include "roam/generate/compact_heightfield_regions.h"
 
 #include <stddef.h>
+#include <string.h>
 
 #include "roam/generate/common.h"
 #include "roam/math/scalar.h"
@@ -22,7 +23,7 @@ static uint32_t neighbor_index(const CompactHeightfield &compact_heightfield, in
     return compact_heightfield.cells[(uint32_t)(ax + ay * compact_heightfield.width)].index + (uint32_t)get_con(span, direction);
 }
 
-static size_t distance_neighbor(const CompactHeightfield &compact_heightfield, int x, int y, int direction, const CompactHeightfieldSpan &span) {
+static size_t neighbor_span_index(const CompactHeightfield &compact_heightfield, int x, int y, int direction, const CompactHeightfieldSpan &span) {
     size_t cell = (size_t)(x + DIR_OFFSETS[direction][0]) + (size_t)(y + DIR_OFFSETS[direction][1]) * (size_t)compact_heightfield.width;
     return (size_t)compact_heightfield.cells.data[cell].index + (size_t)get_con(span, direction);
 }
@@ -32,13 +33,13 @@ static void relax_distance(const CompactHeightfield &compact_heightfield, uint16
     const CompactHeightfieldSpan &span = compact_heightfield.spans.data[i];
     if (get_con(span, direction) == NOT_CONNECTED) return;
 
-    size_t ai = distance_neighbor(compact_heightfield, x, y, direction, span);
+    size_t ai = neighbor_span_index(compact_heightfield, x, y, direction, span);
     if (distances[ai] + 2 < distances[i]) distances[i] = (uint16_t)(distances[ai] + 2);
 
     const CompactHeightfieldSpan &a_span = compact_heightfield.spans.data[ai];
     if (get_con(a_span, diagonal_direction) == NOT_CONNECTED) return;
 
-    size_t aai = distance_neighbor(compact_heightfield, x + DIR_OFFSETS[direction][0], y + DIR_OFFSETS[direction][1], diagonal_direction, a_span);
+    size_t aai = neighbor_span_index(compact_heightfield, x + DIR_OFFSETS[direction][0], y + DIR_OFFSETS[direction][1], diagonal_direction, a_span);
     if (distances[aai] + 3 < distances[i]) distances[i] = (uint16_t)(distances[aai] + 3);
 }
 
@@ -62,7 +63,7 @@ static int calculate_distance_field(const CompactHeightfield &compact_heightfiel
                 int neighbor_count = 0;
                 for (int direction = 0; direction < 4; ++direction) {
                     if (get_con(span, direction) == NOT_CONNECTED) continue;
-                    if (area == areas[distance_neighbor(compact_heightfield, x, y, direction, span)]) neighbor_count++;
+                    if (area == areas[neighbor_span_index(compact_heightfield, x, y, direction, span)]) neighbor_count++;
                 }
                 if (neighbor_count != 4) distances[i] = 0;
             }
@@ -122,13 +123,13 @@ static void box_blur(const CompactHeightfield &compact_heightfield, int threshol
                         continue;
                     }
 
-                    size_t ai = distance_neighbor(compact_heightfield, x, y, direction, span);
+                    size_t ai = neighbor_span_index(compact_heightfield, x, y, direction, span);
                     d += source_distances[ai];
 
                     const CompactHeightfieldSpan &a_span = spans[ai];
                     int direction_2 = (direction + 1) & 0x3;
                     if (get_con(a_span, direction_2) != NOT_CONNECTED) {
-                        d += source_distances[distance_neighbor(compact_heightfield, x + DIR_OFFSETS[direction][0], y + DIR_OFFSETS[direction][1],
+                        d += source_distances[neighbor_span_index(compact_heightfield, x + DIR_OFFSETS[direction][0], y + DIR_OFFSETS[direction][1],
                                                                 direction_2, a_span)];
                     } else {
                         d += cd;
@@ -228,7 +229,10 @@ static void append_stacks(const LevelStack &source_stack, LevelStack &destinatio
 
 static bool flood_region(int x, int y, int i, int level, int r, const CompactHeightfield &compact_heightfield, int *source_regions,
                          int *source_distances, LevelStack &stack) {
-    uint8_t area = compact_heightfield.areas[(uint32_t)i];
+    const CompactHeightfieldSpan *spans = compact_heightfield.spans.data;
+    const uint8_t *areas = compact_heightfield.areas.data;
+    const uint16_t *distances = compact_heightfield.distances.data;
+    uint8_t area = areas[(size_t)i];
 
     stack.clear();
     stack.push({x, y, i});
@@ -244,7 +248,7 @@ static bool flood_region(int x, int y, int i, int level, int r, const CompactHei
         int cy = current.y;
         int ci = current.index;
 
-        const CompactHeightfieldSpan &span = compact_heightfield.spans[(uint32_t)ci];
+        const CompactHeightfieldSpan &span = spans[(size_t)ci];
 
         int ar = 0;
         for (int direction = 0; direction < 4; direction++) {
@@ -252,9 +256,9 @@ static bool flood_region(int x, int y, int i, int level, int r, const CompactHei
 
             int ax = cx + DIR_OFFSETS[direction][0];
             int ay = cy + DIR_OFFSETS[direction][1];
-            uint32_t ai = neighbor_index(compact_heightfield, cx, cy, direction, span);
+            size_t ai = neighbor_span_index(compact_heightfield, cx, cy, direction, span);
 
-            if (compact_heightfield.areas[ai] != area) continue;
+            if (areas[ai] != area) continue;
 
             int nr = source_regions[ai];
             if (nr & BORDER_REG) continue;
@@ -263,12 +267,12 @@ static bool flood_region(int x, int y, int i, int level, int r, const CompactHei
                 break;
             }
 
-            const CompactHeightfieldSpan &a_span = compact_heightfield.spans[ai];
+            const CompactHeightfieldSpan &a_span = spans[ai];
             int direction_2 = (direction + 1) & 0x3;
             if (get_con(a_span, direction_2) != NOT_CONNECTED) {
-                uint32_t ai2 = neighbor_index(compact_heightfield, ax, ay, direction_2, a_span);
+                size_t ai2 = neighbor_span_index(compact_heightfield, ax, ay, direction_2, a_span);
 
-                if (compact_heightfield.areas[ai2] != area) continue;
+                if (areas[ai2] != area) continue;
 
                 int nr2 = source_regions[ai2];
                 if (nr2 != 0 && nr2 != r) {
@@ -290,10 +294,10 @@ static bool flood_region(int x, int y, int i, int level, int r, const CompactHei
 
             int ax = cx + DIR_OFFSETS[direction][0];
             int ay = cy + DIR_OFFSETS[direction][1];
-            uint32_t ai = neighbor_index(compact_heightfield, cx, cy, direction, span);
+            size_t ai = neighbor_span_index(compact_heightfield, cx, cy, direction, span);
 
-            if (compact_heightfield.areas[ai] != area) continue;
-            if (compact_heightfield.distances[ai] >= lev && source_regions[ai] == 0) {
+            if (areas[ai] != area) continue;
+            if (distances[ai] >= lev && source_regions[ai] == 0) {
                 source_regions[ai] = r;
                 source_distances[ai] = 0;
                 stack.push({ax, ay, (int)ai});
@@ -312,6 +316,10 @@ struct DirtyEntry {
 
 static void expand_regions(int max_iterations, int level, const CompactHeightfield &compact_heightfield, int *source_regions,
                            int *source_distances, LevelStack &stack, bool fill_stack, Array<DirtyEntry> &dirty_entries) {
+    const CompactHeightfieldCell *cells = compact_heightfield.cells.data;
+    const CompactHeightfieldSpan *spans = compact_heightfield.spans.data;
+    const uint8_t *areas = compact_heightfield.areas.data;
+    const uint16_t *distances = compact_heightfield.distances.data;
     int w = compact_heightfield.width;
     int h = compact_heightfield.height;
 
@@ -319,9 +327,9 @@ static void expand_regions(int max_iterations, int level, const CompactHeightfie
         stack.clear();
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
-                CompactHeightfieldCell cell = compact_heightfield.cells[(uint32_t)(x + y * w)];
+                CompactHeightfieldCell cell = cells[(size_t)x + (size_t)y * (size_t)w];
                 for (uint32_t i = cell.index; i < cell.index + cell.count; i++) {
-                    if (compact_heightfield.distances[i] >= level && source_regions[i] == 0 && compact_heightfield.areas[i] != NULL_AREA) {
+                    if (distances[i] >= level && source_regions[i] == 0 && areas[i] != NULL_AREA) {
                         stack.push({x, y, (int)i});
                     }
                 }
@@ -352,15 +360,15 @@ static void expand_regions(int max_iterations, int level, const CompactHeightfie
 
             int r = source_regions[i];
             int d2 = 0xffff;
-            uint8_t area = compact_heightfield.areas[(uint32_t)i];
-            const CompactHeightfieldSpan &span = compact_heightfield.spans[(uint32_t)i];
+            uint8_t area = areas[(size_t)i];
+            const CompactHeightfieldSpan &span = spans[(size_t)i];
 
             for (int direction = 0; direction < 4; direction++) {
                 if (get_con(span, direction) == NOT_CONNECTED) continue;
 
-                uint32_t ai = neighbor_index(compact_heightfield, x, y, direction, span);
+                size_t ai = neighbor_span_index(compact_heightfield, x, y, direction, span);
 
-                if (compact_heightfield.areas[ai] != area) continue;
+                if (areas[ai] != area) continue;
 
                 if (source_regions[ai] > 0 && (source_regions[ai] & BORDER_REG) == 0) {
                     if (source_distances[ai] + 2 < d2) {
@@ -464,12 +472,12 @@ static void remove_adjacent_duplicates(Array<int> &values) {
     }
 }
 
-static bool merge_regions(Region &region_a, Region &region_b) {
+static bool merge_regions(Region &region_a, Region &region_b, Array<int> &merged) {
     int aid = region_a.id;
     int bid = region_b.id;
 
-    Array<int> a_connections = region_a.connections;
-    Array<int> b_connections = region_b.connections;
+    const Array<int> &a_connections = region_a.connections;
+    const Array<int> &b_connections = region_b.connections;
 
     int insert_a = -1;
     for (uint32_t i = 0; i < region_a.connections.length; i++) {
@@ -489,10 +497,11 @@ static bool merge_regions(Region &region_a, Region &region_b) {
     }
     if (insert_b == -1) return false;
 
-    region_a.connections = {};
-    for (uint32_t i = 0; i < a_connections.length - 1; i++) region_a.connections.push(a_connections[((uint32_t)insert_a + 1 + i) % a_connections.length]);
-    for (uint32_t i = 0; i < b_connections.length - 1; i++) region_a.connections.push(b_connections[((uint32_t)insert_b + 1 + i) % b_connections.length]);
-    a_connections.release();
+    merged.clear();
+    for (uint32_t i = 0; i < a_connections.length - 1; i++) merged.push(a_connections[((uint32_t)insert_a + 1 + i) % a_connections.length]);
+    for (uint32_t i = 0; i < b_connections.length - 1; i++) merged.push(b_connections[((uint32_t)insert_b + 1 + i) % b_connections.length]);
+    region_a.connections.resize(merged.length);
+    memcpy(region_a.connections.data, merged.data, merged.length * sizeof(int));
 
     remove_adjacent_duplicates(region_a.connections);
 
@@ -603,6 +612,7 @@ static void remap_source_regions(const CompactHeightfield &compact_heightfield, 
 
 static bool merge_and_filter_regions(BuildContext &context, int min_region_area, int merge_region_size, CompactHeightfield &compact_heightfield,
                                      int *source_regions, Array<int> &overlaps) {
+    Array<int> merged_connections = {};
     int w = compact_heightfield.width;
     int h = compact_heightfield.height;
     int region_count = compact_heightfield.max_regions + 1;
@@ -717,7 +727,7 @@ static bool merge_and_filter_regions(BuildContext &context, int min_region_area,
                 int old_id = region.id;
                 Region &target = regions[(uint32_t)merge_id];
 
-                if (merge_regions(target, region)) {
+                if (merge_regions(target, region, merged_connections)) {
                     for (int j = 0; j < region_count; j++) {
                         Region &other = regions[(uint32_t)j];
                         if (other.id == 0 || other.id & BORDER_REG) continue;
@@ -740,6 +750,7 @@ static bool merge_and_filter_regions(BuildContext &context, int min_region_area,
     stack.release();
     trace.release();
     release_regions(regions);
+    merged_connections.release();
     return true;
 }
 
