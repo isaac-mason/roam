@@ -489,22 +489,25 @@ static void write_poly(const NavMeshTile &, int, NodeRef ref, void *user_data) {
 }
 
 static void finish_query(QueryPolygonsResult &out, const PolyWriter &writer) {
-    out.full_poly_count = writer.count;
+    out.poly_total = writer.count;
     out.poly_count = writer.count < writer.capacity ? writer.count : writer.capacity;
+    out.truncated = writer.count > writer.capacity;
 }
 
 void query_polygons_in_tile(QueryPolygonsResult &out, const NavMesh &nav_mesh, const NavMeshTile &tile, Box3 bounds, const QueryFilter &filter,
-                            NodeRef *polys, uint32_t max_polys) {
-    PolyWriter writer = {polys, max_polys, 0};
+                            Span<NodeRef> polys) {
+    PolyWriter writer = {polys.data, polys.capacity, 0};
     visit_polygons_in_tile(nav_mesh, tile, bounds, filter, write_poly, &writer);
     finish_query(out, writer);
 }
 
-void query_polygons(QueryPolygonsResult &out, const NavMesh &nav_mesh, Box3 bounds, const QueryFilter &filter, NodeRef *polys, uint32_t max_polys) {
-    PolyWriter writer = {polys, max_polys, 0};
+void query_polygons(QueryPolygonsResult &out, const NavMesh &nav_mesh, Box3 bounds, const QueryFilter &filter, Span<NodeRef> polys) {
+    PolyWriter writer = {polys.data, polys.capacity, 0};
     visit_polygons(nav_mesh, bounds, filter, write_poly, &writer);
     finish_query(out, writer);
 }
+
+uint32_t get_max_node_count(const NavMesh &nav_mesh) { return nav_mesh.nodes.length; }
 
 static uint32_t allocate_node(NavMesh &nav_mesh) {
     uint32_t node_index = index_pool::request(nav_mesh.node_index_pool);

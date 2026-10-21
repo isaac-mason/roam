@@ -163,12 +163,12 @@ TEST(queries_match_navcat_on_nav_test) {
     Array<StraightPathPoint> other_points = {};
     Array<NodeRef> node_path = {};
     Array<NodeRef> other_refs = {};
-    Array<float> segment_vertices = {};
+    Array<WallSegment> segments = {};
     points.resize(MAX_POINTS);
     other_points.resize(MAX_POINTS);
     node_path.resize(MAX_REFS);
     other_refs.resize(MAX_REFS);
-    segment_vertices.resize(MAX_REFS * 6);
+    segments.resize(MAX_REFS);
     SearchWorkspace workspace = nav_mesh_search::create_search_workspace();
     SlicedNodePathQuery query = nav_mesh_search::create_sliced_node_path_query();
 
@@ -178,27 +178,27 @@ TEST(queries_match_navcat_on_nav_test) {
         Vec3 end = {(float)ends.data[pair * 3], (float)ends.data[pair * 3 + 1], (float)ends.data[pair * 3 + 2]};
 
         FindPathResult path;
-        find_path::find_path(path, workspace, nav_mesh, start, end, half_extents, filter, points.data, MAX_POINTS,
-                             {.node_path = node_path.data, .max_node_path = MAX_REFS});
+        find_path::find_path(path, workspace, nav_mesh, start, end, half_extents, filter, points,
+                             {.node_path = node_path});
         paths.record(path.success == (path_success.data[pair] != 0) && (int32_t)path.flags == path_flags.data[pair], pair);
         node_paths.record(same_refs(node_path.data, path.node_path_count, node_path_refs, node_path_cursor, (uint32_t)node_path_counts.data[pair]), pair);
         straight_paths.record(same_points(points.data, path.point_count, straight, (uint32_t)straight.count.data[pair]), pair);
 
         FindPathResult any_angle;
-        find_path::find_path(any_angle, workspace, nav_mesh, start, end, half_extents, filter, other_points.data, MAX_POINTS,
-                             {.raycast_distance = 10, .node_path = other_refs.data, .max_node_path = MAX_REFS});
+        find_path::find_path(any_angle, workspace, nav_mesh, start, end, half_extents, filter, other_points,
+                             {.raycast_distance = 10, .node_path = other_refs});
         any_angle_paths.record(
             same_refs(other_refs.data, any_angle.node_path_count, any_angle_refs, any_angle_cursor, (uint32_t)any_angle_counts.data[pair]), pair);
 
         if (path.success) {
             FindStraightPathResult crossing;
             find_straight_path::find_straight_path(crossing, nav_mesh, path.start_position, path.end_position, node_path.data, path.node_path_count,
-                                                   other_points.data, MAX_POINTS, FIND_STRAIGHT_PATH_ALL_CROSSINGS);
+                                                   other_points, FIND_STRAIGHT_PATH_ALL_CROSSINGS);
             crossing_paths.record(same_points(other_points.data, crossing.point_count, crossings, (uint32_t)crossings.count.data[pair]), pair);
         }
 
         FindSmoothPathResult smooth_path;
-        find_smooth_path::find_smooth_path(smooth_path, workspace, nav_mesh, start, end, half_extents, filter, other_points.data, 256,
+        find_smooth_path::find_smooth_path(smooth_path, workspace, nav_mesh, start, end, half_extents, filter, other_points,
                                            {.step_size = 0.5f, .slop = 0.01f});
         smooth_paths.record(
             smooth_path.success && same_end_point(other_points.data, smooth_path.point_count, smooth, (uint32_t)smooth.count.data[pair]), pair);
@@ -206,33 +206,33 @@ TEST(queries_match_navcat_on_nav_test) {
         NodeRef start_ref = path.start_node_ref;
 
         RaycastResult ray;
-        nav_mesh_search::raycast(ray, nav_mesh, start_ref, path.start_position, end, filter, other_refs.data, MAX_REFS);
+        nav_mesh_search::raycast(ray, nav_mesh, start_ref, path.start_position, end, filter, other_refs);
         bool same_ray = (ray_t.data[pair] > 1e30 ? ray.t > 1e30f : near(ray.t, ray_t.data[pair], 1e-4)) && ray.hit_edge_index == ray_edge.data[pair] &&
                         near3(ray.hit_normal, &ray_normal.data[pair * 3], 1e-4);
         same_ray = same_refs(other_refs.data, ray.path_count, ray_refs, ray_cursor, (uint32_t)ray_counts.data[pair]) && same_ray;
         rays.record(same_ray, pair);
 
         MoveAlongSurfaceResult move;
-        nav_mesh_search::move_along_surface(move, workspace, nav_mesh, start_ref, path.start_position, end, filter, other_refs.data, MAX_REFS);
+        nav_mesh_search::move_along_surface(move, workspace, nav_mesh, start_ref, path.start_position, end, filter, other_refs);
         bool same_move = move.success == (move_success.data[pair] != 0) && near3(move.position, &move_positions.data[pair * 3], 1e-3) &&
                          move.node_ref == ref_from_f64(move_refs.data[pair]);
         same_move = same_refs(other_refs.data, move.visited_count, move_visited, move_cursor, (uint32_t)move_counts.data[pair]) && same_move;
         moves.record(same_move, pair);
 
         FindLocalNeighbourhoodResult neighbourhood;
-        local_neighbourhood::find_local_neighbourhood(neighbourhood, workspace, nav_mesh, start_ref, path.start_position, 2, filter, other_refs.data,
-                                                      MAX_REFS);
-        neighbourhoods.record(same_refs(other_refs.data, neighbourhood.node_ref_count, neighbourhood_refs, neighbourhood_cursor,
+        local_neighbourhood::find_local_neighbourhood(neighbourhood, workspace, nav_mesh, start_ref, path.start_position, 2, filter, other_refs);
+        neighbourhoods.record(same_refs(other_refs.data, neighbourhood.poly_count, neighbourhood_refs, neighbourhood_cursor,
                                         (uint32_t)neighbourhood_counts.data[pair]),
                               pair);
 
         PolyWallSegmentsResult wall;
-        local_neighbourhood::get_poly_wall_segments(wall, nav_mesh, start_ref, filter, true, segment_vertices.data, other_refs.data, MAX_REFS);
+        local_neighbourhood::get_poly_wall_segments(wall, nav_mesh, start_ref, filter, true, segments, other_refs);
         uint32_t wall_count = (uint32_t)wall_counts.data[pair];
         bool same_wall = wall.segment_count == wall_count;
         for (uint32_t k = 0; same_wall && k < wall_count; k++) {
             same_wall = other_refs[k] == ref_from_f64(wall_refs.data[wall_cursor + k]);
-            for (uint32_t c = 0; same_wall && c < 6; c++) same_wall = near(segment_vertices[k * 6 + c], wall_vertices.data[(wall_cursor + k) * 6 + c], 1e-4);
+            same_wall = same_wall && near3(segments[k].start, &wall_vertices.data[(wall_cursor + k) * 6], 1e-4) &&
+                        near3(segments[k].end, &wall_vertices.data[(wall_cursor + k) * 6 + 3], 1e-4);
         }
         wall_cursor += wall_count;
         walls.record(same_wall, pair);
@@ -241,7 +241,7 @@ TEST(queries_match_navcat_on_nav_test) {
                                                     SLICED_FIND_NODE_PATH_ANY_ANGLE);
         while (query.status & SLICED_FIND_NODE_PATH_IN_PROGRESS) nav_mesh_search::update_sliced_find_node_path(nav_mesh, query, 7);
         SlicedFindNodePathResult sliced;
-        nav_mesh_search::finalize_sliced_find_node_path(sliced, nav_mesh, query, other_refs.data, MAX_REFS);
+        nav_mesh_search::finalize_sliced_find_node_path(sliced, nav_mesh, query, other_refs);
         bool same_sliced = (int32_t)sliced.status == sliced_status.data[pair];
         same_sliced = same_refs(other_refs.data, sliced.path_count, sliced_refs, sliced_cursor, (uint32_t)sliced_counts.data[pair]) && same_sliced;
         sliced_paths.record(same_sliced, pair);
@@ -253,7 +253,7 @@ TEST(queries_match_navcat_on_nav_test) {
     other_points.release();
     node_path.release();
     other_refs.release();
-    segment_vertices.release();
+    segments.release();
 
     uint32_t allowed_ties = pair_count / 20;
     report("find_path result", paths.mismatches, paths.first, pair_count);

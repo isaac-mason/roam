@@ -51,7 +51,7 @@ static void update_move_along_surface() {
         double begin = app::now_milliseconds();
         MoveAlongSurfaceResult result = {};
         nav_mesh_search::move_along_surface(result, state.workspace, nav_mesh, start.node_ref, state.start, state.end,
-                                            nav_mesh_api::DEFAULT_QUERY_FILTER, state.visited, MAX_NODE_PATH);
+                                            nav_mesh_api::DEFAULT_QUERY_FILTER, state.visited);
         state.query_milliseconds = app::now_milliseconds() - begin;
         state.success = result.success;
         state.visited_count = result.visited_count;

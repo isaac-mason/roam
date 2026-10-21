@@ -168,8 +168,8 @@ static void update_path() {
     const NavMesh &nav_mesh = state.result.nav_mesh;
 
     FindPathResult path = {};
-    find_path::find_path(path, state.workspace, nav_mesh, state.start, state.end, {1, 1, 1}, state.filter, state.points, MAX_PATH_POINTS,
-                         {.node_path = state.node_path, .max_node_path = MAX_NODE_PATH});
+    find_path::find_path(path, state.workspace, nav_mesh, state.start, state.end, {1, 1, 1}, state.filter, state.points,
+                         {.node_path = state.node_path});
     state.path_success = path.success;
     state.path_partial = (path.straight_path_flags & FIND_STRAIGHT_PATH_RESULT_PARTIAL_PATH) != 0;
 
@@ -177,7 +177,7 @@ static void update_path() {
     flag(list, state.start, {0.13f, 0.59f, 0.95f, 1});
     flag(list, state.end, {0, 1, 0, 1});
 
-    DebugPrimitives nodes = debug::create_search_nodes_helper(state.workspace.nodes);
+    DebugPrimitives nodes = debug::create_search_nodes_helper(state.workspace);
     renderer::add_primitives(list, nodes);
     debug::release(nodes);
 

@@ -103,7 +103,7 @@ TEST(flood_fill_nav_mesh_splits_disconnected_islands) {
     NodeRef reachable[8];
     NodeRef unreachable[8];
     FloodFillNavMeshResult result;
-    flood_fill_nav_mesh::flood_fill_nav_mesh(result, nav_mesh, &seed, 1, reachable, 8, unreachable, 8);
+    flood_fill_nav_mesh::flood_fill_nav_mesh(result, nav_mesh, &seed, 1, reachable, unreachable);
     CHECK(result.reachable_count == 2);
     CHECK(result.unreachable_count == 2);
     CHECK(reachable[0] == seed);
@@ -141,7 +141,7 @@ TEST(generate_solo_nav_mesh_covers_a_plane) {
     SearchWorkspace workspace = nav_mesh_search::create_search_workspace();
     StraightPathPoint points[64];
     FindPathResult path;
-    find_path::find_path(path, workspace, result.nav_mesh, {1, 0, 1}, {9, 0, 9}, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER, points, 64);
+    find_path::find_path(path, workspace, result.nav_mesh, {1, 0, 1}, {9, 0, 9}, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER, points);
     CHECK(path.success);
 
     nav_mesh_search::release(workspace);
@@ -183,8 +183,8 @@ TEST(generate_tiled_nav_mesh_connects_tiles_across_a_plane) {
     StraightPathPoint points[64];
     NodeRef node_path[256];
     FindPathResult path;
-    find_path::find_path(path, workspace, result.nav_mesh, {1, 0, 1}, {9, 0, 9}, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER, points, 64,
-                         {.node_path = node_path, .max_node_path = 256});
+    find_path::find_path(path, workspace, result.nav_mesh, {1, 0, 1}, {9, 0, 9}, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER, points,
+                         {.node_path = node_path});
     CHECK(path.success);
     REQUIRE(path.node_path_count > 0);
     const NavMeshNode &first = nav_mesh_api::get_node_by_ref(result.nav_mesh, node_path[0]);

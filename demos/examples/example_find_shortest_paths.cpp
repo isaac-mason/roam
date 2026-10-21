@@ -109,7 +109,7 @@ static float calculate_path_cost(const NavMesh &nav_mesh, const Array<NodeRef> &
     return total_cost;
 }
 
-static Array<ShortestNodePath> find_shortest_paths(SearchWorkspace &workspace, NodeRef *buffer, const NavMesh &nav_mesh, Vec3 start, Vec3 end,
+static Array<ShortestNodePath> find_shortest_paths(SearchWorkspace &workspace, Span<NodeRef> buffer, const NavMesh &nav_mesh, Vec3 start, Vec3 end,
                                                    Vec3 half_extents, const QueryFilter &base_filter, int k) {
     Array<ShortestNodePath> accepted = {};
     Array<ShortestNodePath> candidates = {};
@@ -125,7 +125,7 @@ static Array<ShortestNodePath> find_shortest_paths(SearchWorkspace &workspace, N
     NodeRef end_node_ref = end_nearest.node_ref;
 
     FindNodePathResult first_path = {};
-    nav_mesh_search::find_node_path(first_path, workspace, nav_mesh, start_node_ref, end_node_ref, start, end, base_filter, buffer, MAX_NODE_PATH);
+    nav_mesh_search::find_node_path(first_path, workspace, nav_mesh, start_node_ref, end_node_ref, start, end, base_filter, buffer);
     if (!first_path.success) return accepted;
     Array<NodeRef> first_node_path = {};
     for (uint32_t i = 0; i < first_path.path_count; i++) first_node_path.push(buffer[i]);
@@ -168,8 +168,7 @@ static Array<ShortestNodePath> find_shortest_paths(SearchWorkspace &workspace, N
             }
 
             FindNodePathResult spur = {};
-            nav_mesh_search::find_node_path(spur, workspace, nav_mesh, spur_node, end_node_ref, spur_node_position, end, spur_filter, buffer,
-                                            MAX_NODE_PATH);
+            nav_mesh_search::find_node_path(spur, workspace, nav_mesh, spur_node, end_node_ref, spur_node_position, end, spur_filter, buffer);
             if (spur.success) {
                 Array<NodeRef> total_path = {};
                 for (uint32_t j = 0; j <= i; j++) total_path.push(previous_path[j]);
@@ -233,8 +232,7 @@ static void update_path() {
         }
 
         FindStraightPathResult straight = {};
-        find_straight_path::find_straight_path(straight, nav_mesh, state.start, state.end, node_path.data, node_path.length, state.points,
-                                               MAX_PATH_POINTS);
+        find_straight_path::find_straight_path(straight, nav_mesh, state.start, state.end, node_path.data, node_path.length, state.points);
         if (straight.success) {
             const Vec3 lift = {0, 0.1f, 0};
             for (uint32_t i = 0; i < straight.point_count; i++) {

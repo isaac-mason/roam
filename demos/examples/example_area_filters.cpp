@@ -210,13 +210,13 @@ static void update_path() {
                                                                       : area_only_query_filter(AREA_FILTERS_WATER);
 
     FindPathResult path = {};
-    find_path::find_path(path, state.workspace, nav_mesh, state.start, state.end, {1, 1, 1}, filter, state.points, MAX_PATH_POINTS,
-                         {.node_path = state.node_path, .max_node_path = MAX_NODE_PATH});
+    find_path::find_path(path, state.workspace, nav_mesh, state.start, state.end, {1, 1, 1}, filter, state.points,
+                         {.node_path = state.node_path});
     state.success = path.success;
     state.partial = (path.straight_path_flags & FIND_STRAIGHT_PATH_RESULT_PARTIAL_PATH) != 0;
     state.point_count = path.point_count;
 
-    DebugPrimitives nodes = debug::create_search_nodes_helper(state.workspace.nodes);
+    DebugPrimitives nodes = debug::create_search_nodes_helper(state.workspace);
     renderer::add_primitives(list, nodes);
     debug::release(nodes);
 

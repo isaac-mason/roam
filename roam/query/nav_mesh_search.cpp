@@ -255,6 +255,12 @@ static void pop_ref(RefWriter &writer) {
 
 static uint32_t written(uint32_t count, uint32_t capacity) { return count < capacity ? count : capacity; }
 
+static void set_counts(uint32_t &count, uint32_t &total, bool &truncated, uint32_t all, uint32_t capacity) {
+    total = all;
+    count = written(all, capacity);
+    truncated = all > capacity;
+}
+
 static int32_t path_parent(const SearchNodePool &pool, int32_t current) {
     const SearchNode &node = pool.nodes[(uint32_t)current];
     return node.parent_node_ref != INVALID_NODE_REF && node.parent_state != NO_PARENT_STATE
@@ -292,7 +298,8 @@ static int32_t search_node_path(FindNodePathResult &out, SearchWorkspace &worksp
     out.success = false;
     out.flags = FIND_NODE_PATH_RESULT_NONE;
     out.path_count = 0;
-    out.full_path_count = 0;
+    out.path_total = 0;
+    out.truncated = false;
     float raycast_distance = options.raycast_distance;
     SearchNodePool &nodes = workspace.nodes;
     SearchNodeQueue &open_list = workspace.open_list;
@@ -426,23 +433,10 @@ static int32_t search_node_path(FindNodePathResult &out, SearchWorkspace &worksp
 }
 
 void find_node_path(FindNodePathResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref, NodeRef end_node_ref,
-                    Vec3 start_position, Vec3 end_position, const QueryFilter &filter, NodeRef *path, uint32_t max_path, FindNodePathOptions options) {
+                    Vec3 start_position, Vec3 end_position, const QueryFilter &filter, Span<NodeRef> path, FindNodePathOptions options) {
     int32_t last_node = search_node_path(out, workspace, nav_mesh, start_node_ref, end_node_ref, start_position, end_position, filter, options);
     if (last_node == NULL_SEARCH_NODE) return;
-    out.full_path_count = collect_path(workspace.nodes, last_node, path, max_path);
-    out.path_count = written(out.full_path_count, max_path);
-}
-
-void find_node_path_to_workspace(FindNodePathResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
-                         NodeRef end_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter, FindNodePathOptions options) {
-    Array<NodeRef> &path = workspace.node_path;
-    path.clear();
-    int32_t last_node = search_node_path(out, workspace, nav_mesh, start_node_ref, end_node_ref, start_position, end_position, filter, options);
-    if (last_node == NULL_SEARCH_NODE) return;
-    path.resize(collect_path(workspace.nodes, last_node, nullptr, 0));
-    collect_path(workspace.nodes, last_node, path.data, path.length);
-    out.full_path_count = path.length;
-    out.path_count = path.length;
+    set_counts(out.path_count, out.path_total, out.truncated, collect_path(workspace.nodes, last_node, path.data, path.capacity), path.capacity);
 }
 
 SlicedNodePathQuery create_sliced_node_path_query() {
@@ -465,6 +459,7 @@ uint32_t init_sliced_find_node_path(const NavMesh &nav_mesh, SlicedNodePathQuery
     query.filter = filter;
 
     query.status = SLICED_FIND_NODE_PATH_FAILURE;
+    query.finalized_status = SLICED_FIND_NODE_PATH_NOT_INITIALIZED;
     clear(query.nodes);
     query.open_list.items.clear();
     query.last_best_node = NULL_SEARCH_NODE;
@@ -651,24 +646,21 @@ static void build_sliced_path(RefWriter &path, const NavMesh &nav_mesh, SlicedNo
 }
 
 static void finish_sliced_path(SlicedFindNodePathResult &out, const NavMesh &nav_mesh, SlicedNodePathQuery &query, int32_t last_node,
-                               NodeRef *path, uint32_t max_path) {
-    RefWriter writer = {path, max_path, 0, INVALID_NODE_REF};
+                               Span<NodeRef> path) {
+    RefWriter writer = {path.data, path.capacity, 0, INVALID_NODE_REF};
     build_sliced_path(writer, nav_mesh, query, last_node);
-    out.full_path_count = writer.count;
-    out.path_count = written(writer.count, max_path);
+    set_counts(out.path_count, out.path_total, out.truncated, writer.count, path.capacity);
 }
 
-static void single_node_path(SlicedFindNodePathResult &out, SlicedNodePathQuery &query, NodeRef *path, uint32_t max_path) {
-    if (max_path > 0) path[0] = query.start_node_ref;
-    out.full_path_count = 1;
-    out.path_count = written(1, max_path);
+static void single_node_path(SlicedFindNodePathResult &out, SlicedNodePathQuery &query, Span<NodeRef> path) {
+    if (path.capacity > 0) path.data[0] = query.start_node_ref;
+    set_counts(out.path_count, out.path_total, out.truncated, 1, path.capacity);
     out.status = SLICED_FIND_NODE_PATH_SUCCESS;
     query.status = SLICED_FIND_NODE_PATH_NOT_INITIALIZED;
 }
 
-void finalize_sliced_find_node_path(SlicedFindNodePathResult &out, const NavMesh &nav_mesh, SlicedNodePathQuery &query, NodeRef *path,
-                                    uint32_t max_path) {
-    out = {SLICED_FIND_NODE_PATH_FAILURE, 0, 0};
+void finalize_sliced_find_node_path(SlicedFindNodePathResult &out, const NavMesh &nav_mesh, SlicedNodePathQuery &query, Span<NodeRef> path) {
+    out = {SLICED_FIND_NODE_PATH_FAILURE, 0, 0, false};
 
     if (query.last_best_node == NULL_SEARCH_NODE) {
         query.status = SLICED_FIND_NODE_PATH_FAILURE;
@@ -677,15 +669,17 @@ void finalize_sliced_find_node_path(SlicedFindNodePathResult &out, const NavMesh
     }
 
     if (query.start_node_ref == query.end_node_ref) {
-        single_node_path(out, query, path, max_path);
+        single_node_path(out, query, path);
         return;
     }
 
+    query.status |= query.finalized_status;
     if (query.nodes.nodes[(uint32_t)query.last_best_node].node_ref != query.end_node_ref) query.status |= SLICED_FIND_NODE_PATH_PARTIAL_RESULT;
 
-    finish_sliced_path(out, nav_mesh, query, query.last_best_node, path, max_path);
+    finish_sliced_path(out, nav_mesh, query, query.last_best_node, path);
     out.status = SLICED_FIND_NODE_PATH_SUCCESS | (query.status & SLICED_FIND_NODE_PATH_PARTIAL_RESULT);
 
+    query.finalized_status = query.status & SLICED_FIND_NODE_PATH_PARTIAL_RESULT;
     query.status = SLICED_FIND_NODE_PATH_NOT_INITIALIZED;
 }
 
@@ -698,8 +692,8 @@ static int32_t furthest_existing_node(const SlicedNodePathQuery &query, const No
 }
 
 void finalize_sliced_find_node_path_partial(SlicedFindNodePathResult &out, const NavMesh &nav_mesh, SlicedNodePathQuery &query,
-                                            const NodeRef *existing_path, uint32_t existing_path_count, NodeRef *path, uint32_t max_path) {
-    out = {SLICED_FIND_NODE_PATH_FAILURE, 0, 0};
+                                            const NodeRef *existing_path, uint32_t existing_path_count, Span<NodeRef> path) {
+    out = {SLICED_FIND_NODE_PATH_FAILURE, 0, 0, false};
 
     int32_t furthest_node = furthest_existing_node(query, existing_path, existing_path_count);
 
@@ -715,45 +709,16 @@ void finalize_sliced_find_node_path_partial(SlicedFindNodePathResult &out, const
     }
 
     if (query.start_node_ref == query.end_node_ref) {
-        single_node_path(out, query, path, max_path);
+        single_node_path(out, query, path);
         return;
     }
 
     query.status |= SLICED_FIND_NODE_PATH_PARTIAL_RESULT;
 
-    finish_sliced_path(out, nav_mesh, query, furthest_node, path, max_path);
+    finish_sliced_path(out, nav_mesh, query, furthest_node, path);
     out.status = SLICED_FIND_NODE_PATH_SUCCESS | SLICED_FIND_NODE_PATH_PARTIAL_RESULT;
 
     query.status = SLICED_FIND_NODE_PATH_NOT_INITIALIZED;
-}
-
-static void rebuild_into_workspace(SlicedFindNodePathResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh,
-                                   SlicedNodePathQuery &query, int32_t last_node) {
-    Array<NodeRef> &path = workspace.node_path;
-    if (out.full_path_count > path.capacity) {
-        path.reserve(out.full_path_count);
-        RefWriter writer = {path.data, path.capacity, 0, INVALID_NODE_REF};
-        build_sliced_path(writer, nav_mesh, query, last_node);
-        out.path_count = writer.count;
-    }
-    path.resize(out.path_count);
-}
-
-void finalize_sliced_find_node_path_to_workspace(SlicedFindNodePathResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh,
-                                                 SlicedNodePathQuery &query) {
-    Array<NodeRef> &path = workspace.node_path;
-    int32_t last_node = query.last_best_node;
-    finalize_sliced_find_node_path(out, nav_mesh, query, path.data, path.capacity);
-    rebuild_into_workspace(out, workspace, nav_mesh, query, last_node);
-}
-
-void finalize_sliced_find_node_path_partial_to_workspace(SlicedFindNodePathResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh,
-                                                         SlicedNodePathQuery &query, const NodeRef *existing_path, uint32_t existing_path_count) {
-    Array<NodeRef> &path = workspace.node_path;
-    int32_t last_node = furthest_existing_node(query, existing_path, existing_path_count);
-    if (last_node == NULL_SEARCH_NODE) last_node = query.last_best_node;
-    finalize_sliced_find_node_path_partial(out, nav_mesh, query, existing_path, existing_path_count, path.data, path.capacity);
-    rebuild_into_workspace(out, workspace, nav_mesh, query, last_node);
 }
 
 void release(SlicedNodePathQuery &query) {
@@ -775,9 +740,10 @@ static int32_t surface_parent(const SearchNodePool &pool, int32_t current) {
 }
 
 void move_along_surface(MoveAlongSurfaceResult &result, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
-                        Vec3 start_position, Vec3 end_position, const QueryFilter &filter, NodeRef *visited, uint32_t max_visited) {
+                        Vec3 start_position, Vec3 end_position, const QueryFilter &filter, Span<NodeRef> visited) {
     result.visited_count = 0;
-    result.full_visited_count = 0;
+    result.visited_total = 0;
+    result.truncated = false;
     result.success = false;
     result.position = start_position;
     result.node_ref = start_node_ref;
@@ -874,10 +840,9 @@ void move_along_surface(MoveAlongSurfaceResult &result, SearchWorkspace &workspa
     uint32_t index = visited_count;
     for (int32_t current = best_node; current != NULL_SEARCH_NODE; current = surface_parent(nodes, current)) {
         index--;
-        if (index < max_visited) visited[index] = nodes.nodes[(uint32_t)current].node_ref;
+        if (index < visited.capacity) visited.data[index] = nodes.nodes[(uint32_t)current].node_ref;
     }
-    result.full_visited_count = visited_count;
-    result.visited_count = written(visited_count, max_visited);
+    set_counts(result.visited_count, result.visited_total, result.truncated, visited_count, visited.capacity);
 
     result.position = best_position;
     result.node_ref = nodes.nodes[(uint32_t)best_node].node_ref;
@@ -895,7 +860,8 @@ static void raycast_base(RaycastResult &result, const NavMesh &nav_mesh, NodeRef
                          const QueryFilter &filter, bool calculate_costs, NodeRef previous_ref, RefWriter *path) {
     uint32_t path_start = path ? path->count : 0;
     result.path_count = 0;
-    result.full_path_count = 0;
+    result.path_total = 0;
+    result.truncated = false;
     result.t = 0;
     result.hit_normal = {0, 0, 0};
     result.hit_edge_index = -1;
@@ -1039,20 +1005,21 @@ static void raycast_base(RaycastResult &result, const NavMesh &nav_mesh, NodeRef
 
     nav_mesh_api::release(vertices);
     if (path) {
-        result.full_path_count = path->count - path_start;
+        result.path_total = path->count - path_start;
         result.path_count = written(path->count, path->capacity) - written(path_start, path->capacity);
+        result.truncated = path->count > path->capacity;
     }
 }
 
 void raycast(RaycastResult &out, const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter,
-             NodeRef *path, uint32_t max_path) {
-    RefWriter writer = {path, max_path, 0, INVALID_NODE_REF};
+             Span<NodeRef> path) {
+    RefWriter writer = {path.data, path.capacity, 0, INVALID_NODE_REF};
     raycast_base(out, nav_mesh, start_node_ref, start_position, end_position, filter, false, INVALID_NODE_REF, &writer);
 }
 
 void raycast_with_costs(RaycastResult &out, const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position,
-                        const QueryFilter &filter, NodeRef previous_ref, NodeRef *path, uint32_t max_path) {
-    RefWriter writer = {path, max_path, 0, INVALID_NODE_REF};
+                        const QueryFilter &filter, NodeRef previous_ref, Span<NodeRef> path) {
+    RefWriter writer = {path.data, path.capacity, 0, INVALID_NODE_REF};
     raycast_base(out, nav_mesh, start_node_ref, start_position, end_position, filter, true, previous_ref, &writer);
 }
 

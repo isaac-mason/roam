@@ -54,7 +54,7 @@ static void update_path() {
         double begin = app::now_milliseconds();
         FindNodePathResult path = {};
         nav_mesh_search::find_node_path(path, state.workspace, nav_mesh, start.node_ref, end.node_ref, start.position, end.position,
-                                        nav_mesh_api::DEFAULT_QUERY_FILTER, state.node_path, MAX_NODE_PATH);
+                                        nav_mesh_api::DEFAULT_QUERY_FILTER, state.node_path);
         state.query_milliseconds = app::now_milliseconds() - begin;
         state.searched = true;
         state.success = path.success;
@@ -62,7 +62,7 @@ static void update_path() {
         state.node_count = path.path_count;
         state.search_node_count = state.workspace.nodes.nodes.length;
 
-        DebugPrimitives nodes = debug::create_search_nodes_helper(state.workspace.nodes);
+        DebugPrimitives nodes = debug::create_search_nodes_helper(state.workspace);
         renderer::add_primitives(list, nodes);
         debug::release(nodes);
 

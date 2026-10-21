@@ -214,14 +214,14 @@ static void update_path() {
         double begin = app::now_milliseconds();
         FindPathResult path = {};
         find_path::find_path(path, upload.workspace, nav_mesh, upload.start, upload.end, upload.path_half_extents, nav_mesh_api::DEFAULT_QUERY_FILTER,
-                             upload.points, MAX_PATH_POINTS, {.node_path = upload.node_path, .max_node_path = MAX_NODE_PATH});
+                             upload.points, {.node_path = upload.node_path});
         upload.path_milliseconds = app::now_milliseconds() - begin;
         upload.path_success = path.success;
         upload.path_partial = (path.straight_path_flags & FIND_STRAIGHT_PATH_RESULT_PARTIAL_PATH) != 0;
         upload.path_points = path.point_count;
         upload.path_length = 0;
 
-        if (upload.show_search_nodes) add_helper(list, debug::create_search_nodes_helper(upload.workspace.nodes), 0);
+        if (upload.show_search_nodes) add_helper(list, debug::create_search_nodes_helper(upload.workspace), 0);
 
         for (uint32_t n = 0; n < path.node_path_count; n++) {
             NodeRef node_ref = upload.node_path[n];

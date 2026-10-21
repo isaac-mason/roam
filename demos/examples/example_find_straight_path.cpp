@@ -60,7 +60,7 @@ static void update_path() {
         double begin = app::now_milliseconds();
         FindNodePathResult path = {};
         nav_mesh_search::find_node_path(path, state.workspace, nav_mesh, start.node_ref, end.node_ref, start.position, end.position,
-                                        nav_mesh_api::DEFAULT_QUERY_FILTER, state.node_path, MAX_NODE_PATH);
+                                        nav_mesh_api::DEFAULT_QUERY_FILTER, state.node_path);
         state.query_milliseconds = app::now_milliseconds() - begin;
         state.searched = true;
         state.success = path.success;
@@ -69,7 +69,7 @@ static void update_path() {
         state.search_node_count = state.workspace.nodes.nodes.length;
 
         if (path.success) {
-            DebugPrimitives nodes = debug::create_search_nodes_helper(state.workspace.nodes);
+            DebugPrimitives nodes = debug::create_search_nodes_helper(state.workspace);
             renderer::add_primitives(list, nodes);
             debug::release(nodes);
 
@@ -86,8 +86,7 @@ static void update_path() {
         if (path.success) {
             begin = app::now_milliseconds();
             FindStraightPathResult straight = {};
-            find_straight_path::find_straight_path(straight, nav_mesh, start.position, end.position, state.node_path, path.path_count, state.points,
-                                                   MAX_PATH_POINTS);
+            find_straight_path::find_straight_path(straight, nav_mesh, start.position, end.position, state.node_path, path.path_count, state.points);
             state.straight_milliseconds = app::now_milliseconds() - begin;
             state.straight_success = straight.success;
             state.straight_flags = straight.flags;

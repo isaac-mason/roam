@@ -4,8 +4,20 @@ namespace roam {
 
 namespace find_path {
 
+static void find_node_path_into_workspace(FindNodePathResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
+                                          NodeRef end_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter,
+                                          FindNodePathOptions options) {
+    Array<NodeRef> &path = workspace.node_path;
+    nav_mesh_search::find_node_path(out, workspace, nav_mesh, start_node_ref, end_node_ref, start_position, end_position, filter, {path.data, path.capacity}, options);
+    if (out.truncated) {
+        path.reserve(out.path_total);
+        nav_mesh_search::find_node_path(out, workspace, nav_mesh, start_node_ref, end_node_ref, start_position, end_position, filter, {path.data, path.capacity}, options);
+    }
+    path.resize(out.path_count);
+}
+
 void find_path(FindPathResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 half_extents,
-               const QueryFilter &filter, StraightPathPoint *points, uint32_t max_points, FindPathOptions options) {
+               const QueryFilter &filter, Span<StraightPathPoint> points, FindPathOptions options) {
     out = {};
     out.flags = FIND_PATH_RESULT_NONE | FIND_PATH_RESULT_INVALID_INPUT;
     out.straight_path_flags = FIND_STRAIGHT_PATH_RESULT_NONE;
@@ -26,13 +38,14 @@ void find_path(FindPathResult &out, SearchWorkspace &workspace, const NavMesh &n
     out.end_node_ref = end_nearest.node_ref;
 
     FindNodePathResult node_path;
-    nav_mesh_search::find_node_path_to_workspace(node_path, workspace, nav_mesh, out.start_node_ref, out.end_node_ref, out.start_position, out.end_position,
-                                         filter, {options.raycast_distance});
+    find_node_path_into_workspace(node_path, workspace, nav_mesh, out.start_node_ref, out.end_node_ref, out.start_position, out.end_position, filter,
+                                  {options.raycast_distance});
     const Array<NodeRef> &node_refs = workspace.node_path;
     out.node_path_flags = node_path.flags;
-    out.full_node_path_count = node_refs.length;
-    out.node_path_count = node_refs.length < options.max_node_path ? node_refs.length : options.max_node_path;
-    for (uint32_t i = 0; i < out.node_path_count; i++) options.node_path[i] = node_refs[i];
+    out.node_path_total = node_refs.length;
+    out.node_path_count = node_refs.length < options.node_path.capacity ? node_refs.length : options.node_path.capacity;
+    out.truncated = out.node_path_count < out.node_path_total;
+    for (uint32_t i = 0; i < out.node_path_count; i++) options.node_path.data[i] = node_refs[i];
 
     if (!node_path.success) {
         out.flags = FIND_PATH_RESULT_FIND_NODE_PATH_FAILED;
@@ -40,8 +53,7 @@ void find_path(FindPathResult &out, SearchWorkspace &workspace, const NavMesh &n
     }
 
     FindStraightPathResult straight_path;
-    find_straight_path::find_straight_path(straight_path, nav_mesh, out.start_position, out.end_position, node_refs.data, node_refs.length, points,
-                                           max_points);
+    find_straight_path::find_straight_path(straight_path, nav_mesh, out.start_position, out.end_position, node_refs.data, node_refs.length, points);
 
     if (!straight_path.success) {
         out.flags = FIND_PATH_RESULT_FIND_STRAIGHT_PATH_FAILED;
@@ -50,6 +62,7 @@ void find_path(FindPathResult &out, SearchWorkspace &workspace, const NavMesh &n
 
     out.success = true;
     out.point_count = straight_path.point_count;
+    out.truncated = out.truncated || straight_path.truncated;
     out.straight_path_flags = straight_path.flags;
 
     uint32_t flags = FIND_PATH_RESULT_SUCCESS;

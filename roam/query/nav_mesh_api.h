@@ -7,6 +7,7 @@
 #include "roam/math/vec3.h"
 #include "roam/query/nav_mesh.h"
 #include "roam/query/node.h"
+#include "roam/util/span.h"
 
 namespace roam {
 
@@ -57,7 +58,8 @@ struct ClosestPointOnPolyBoundary {
 
 struct QueryPolygonsResult {
     uint32_t poly_count;
-    uint32_t full_poly_count;
+    uint32_t poly_total;
+    bool truncated;
 };
 
 struct FindNearestPolyResult {
@@ -115,8 +117,10 @@ void get_closest_point_on_poly_boundary(ClosestPointOnPolyBoundary &out, const N
 void find_nearest_poly(FindNearestPolyResult &out, const NavMesh &nav_mesh, Vec3 center, Vec3 half_extents, const QueryFilter &filter);
 
 void query_polygons_in_tile(QueryPolygonsResult &out, const NavMesh &nav_mesh, const NavMeshTile &tile, Box3 bounds, const QueryFilter &filter,
-                            NodeRef *polys, uint32_t max_polys);
-void query_polygons(QueryPolygonsResult &out, const NavMesh &nav_mesh, Box3 bounds, const QueryFilter &filter, NodeRef *polys, uint32_t max_polys);
+                            Span<NodeRef> polys);
+void query_polygons(QueryPolygonsResult &out, const NavMesh &nav_mesh, Box3 bounds, const QueryFilter &filter, Span<NodeRef> polys);
+
+uint32_t get_max_node_count(const NavMesh &nav_mesh);
 
 NavMeshTile build_tile(const NavMeshTileParams &params);
 uint32_t add_tile(NavMesh &nav_mesh, NavMeshTile tile);

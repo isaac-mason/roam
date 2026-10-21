@@ -89,10 +89,9 @@ static void perform_raycast() {
     RaycastResult raycast = {};
     if (state.calculate_costs) {
         nav_mesh_search::raycast_with_costs(raycast, nav_mesh, start.node_ref, start.position, end.position, nav_mesh_api::DEFAULT_QUERY_FILTER,
-                                            INVALID_NODE_REF, state.path, MAX_NODE_PATH);
+                                            INVALID_NODE_REF, state.path);
     } else {
-        nav_mesh_search::raycast(raycast, nav_mesh, start.node_ref, start.position, end.position, nav_mesh_api::DEFAULT_QUERY_FILTER, state.path,
-                                 MAX_NODE_PATH);
+        nav_mesh_search::raycast(raycast, nav_mesh, start.node_ref, start.position, end.position, nav_mesh_api::DEFAULT_QUERY_FILTER, state.path);
     }
 
     bool reached_end = raycast.t == FLT_MAX;

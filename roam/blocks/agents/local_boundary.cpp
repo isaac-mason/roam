@@ -72,34 +72,32 @@ void update_local_boundary(LocalBoundary &boundary, NodeRef node_ref, Vec3 posit
     boundary.center = position;
 
     FindLocalNeighbourhoodResult neighbourhood;
-    local_neighbourhood::find_local_neighbourhood(neighbourhood, workspace, nav_mesh, node_ref, position, collision_query_range, filter,
-                                                  boundary.polys, MAX_LOCAL_POLYS);
+    local_neighbourhood::find_local_neighbourhood(neighbourhood, workspace, nav_mesh, node_ref, position, collision_query_range, filter, boundary.polys);
 
     boundary.segment_count = 0;
     boundary.poly_count = 0;
 
     if (!neighbourhood.success) return;
 
-    boundary.poly_count = neighbourhood.node_ref_count;
+    boundary.poly_count = neighbourhood.poly_count;
 
     float collision_query_range_sqr = collision_query_range * collision_query_range;
 
-    float inline_segments[INLINE_WALL_SEGMENTS * 6];
-    Array<float> overflow_segments = {};
+    WallSegment inline_segments[INLINE_WALL_SEGMENTS];
+    Array<WallSegment> overflow_segments = {};
     for (uint32_t p = 0; p < boundary.poly_count; p++) {
         PolyWallSegmentsResult walls;
-        float *segments = inline_segments;
-        local_neighbourhood::get_poly_wall_segments(walls, nav_mesh, boundary.polys[p], filter, false, segments, nullptr, INLINE_WALL_SEGMENTS);
-        if (walls.full_segment_count > walls.segment_count) {
-            overflow_segments.resize(walls.full_segment_count * 6);
-            segments = overflow_segments.data;
-            local_neighbourhood::get_poly_wall_segments(walls, nav_mesh, boundary.polys[p], filter, false, segments, nullptr, walls.full_segment_count);
+        Span<WallSegment> segments = inline_segments;
+        local_neighbourhood::get_poly_wall_segments(walls, nav_mesh, boundary.polys[p], filter, false, segments);
+        if (walls.truncated) {
+            overflow_segments.resize(walls.segment_total);
+            segments = overflow_segments;
+            local_neighbourhood::get_poly_wall_segments(walls, nav_mesh, boundary.polys[p], filter, false, segments);
         }
         if (walls.success) {
             for (uint32_t k = 0; k < walls.segment_count; k++) {
-                const float *segment = &segments[k * 6];
-                Vec3 start = {segment[0], segment[1], segment[2]};
-                Vec3 end = {segment[3], segment[4], segment[5]};
+                Vec3 start = segments.data[k].start;
+                Vec3 end = segments.data[k].end;
 
                 float distance_sqr = distance_pt_seg_sqr_2d(position, start, end);
                 if (distance_sqr > collision_query_range_sqr) continue;

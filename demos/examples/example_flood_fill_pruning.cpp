@@ -250,10 +250,11 @@ static void update(App &app, float) {
         if (clicked_poly_ref != INVALID_NODE_REF) {
             clear_prune();
             Array<NodeRef> reachable = {};
-            reachable.resize(nav_mesh.nodes.length);
+            reachable.resize(nav_mesh_api::get_max_node_count(nav_mesh));
             FloodFillNavMeshResult flood = {};
-            flood_fill_nav_mesh::flood_fill_nav_mesh(flood, nav_mesh, &clicked_poly_ref, 1, reachable.data, reachable.length, nullptr, 0);
-            for (uint32_t i = 0; i < flood.reachable_count; i++) state.reachable.set(reachable[i], 1);
+            flood_fill_nav_mesh::flood_fill_nav_mesh(flood, nav_mesh, &clicked_poly_ref, 1, reachable);
+            reachable.resize(flood.reachable_count);
+            for (NodeRef ref : reachable) state.reachable.set(ref, 1);
             reachable.release();
             state.pruned_nav_mesh = prune_nav_mesh(nav_mesh, state.reachable);
             state.pruned = true;

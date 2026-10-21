@@ -58,6 +58,7 @@ DebugPrimitives create_nav_mesh_links_helper(const NavMesh &nav_mesh);
 DebugPrimitives create_nav_mesh_tile_portals_helper(const NavMeshTile &tile);
 DebugPrimitives create_nav_mesh_portals_helper(const NavMesh &nav_mesh);
 DebugPrimitives create_search_nodes_helper(const SearchNodePool &pool);
+DebugPrimitives create_search_nodes_helper(const SearchWorkspace &workspace);
 DebugPrimitives create_nav_mesh_off_mesh_connections_helper(const NavMesh &nav_mesh);
 
 }

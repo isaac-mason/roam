@@ -64,11 +64,11 @@ static void update_path() {
 
     FindPathResult path = {};
     find_path::find_path(path, state.workspace, state.nav_mesh, state.start, state.end, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER,
-                         state.points, MAX_PATH_POINTS, {.node_path = state.node_path, .max_node_path = MAX_NODE_PATH});
+                         state.points, {.node_path = state.node_path});
     state.success = path.success;
     state.point_count = path.point_count;
 
-    DebugPrimitives nodes = debug::create_search_nodes_helper(state.workspace.nodes);
+    DebugPrimitives nodes = debug::create_search_nodes_helper(state.workspace);
     renderer::add_primitives(list, nodes);
     debug::release(nodes);
 

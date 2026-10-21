@@ -26,7 +26,7 @@ static SteerTarget get_steer_target(const NavMesh &nav_mesh, Vec3 start, Vec3 en
     const uint32_t max_straight_path_points = 3;
     StraightPathPoint points[max_straight_path_points];
     FindStraightPathResult straight_path;
-    find_straight_path::find_straight_path(straight_path, nav_mesh, start, end, path_polys.data, path_polys.length, points, max_straight_path_points);
+    find_straight_path::find_straight_path(straight_path, nav_mesh, start, end, path_polys.data, path_polys.length, points);
 
     if (straight_path.success && straight_path.point_count > 0) {
         uint32_t ns = 0;
@@ -124,18 +124,18 @@ static void remove_front(Array<NodeRef> &values, uint32_t count) {
 static void move_with_visited(MoveAlongSurfaceResult &moved, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
                               Vec3 start_position, Vec3 end_position, const QueryFilter &filter) {
     Array<NodeRef> &visited = workspace.visited;
-    nav_mesh_search::move_along_surface(moved, workspace, nav_mesh, start_node_ref, start_position, end_position, filter, visited.data,
-                                        visited.capacity);
-    if (moved.full_visited_count > visited.capacity) {
-        visited.reserve(moved.full_visited_count);
-        nav_mesh_search::move_along_surface(moved, workspace, nav_mesh, start_node_ref, start_position, end_position, filter, visited.data,
-                                            visited.capacity);
+    nav_mesh_search::move_along_surface(moved, workspace, nav_mesh, start_node_ref, start_position, end_position, filter, {visited.data, visited.capacity});
+    if (moved.truncated) {
+        visited.reserve(moved.visited_total);
+        nav_mesh_search::move_along_surface(moved, workspace, nav_mesh, start_node_ref, start_position, end_position, filter, {visited.data, visited.capacity});
     }
     visited.resize(moved.visited_count);
 }
 
 void find_smooth_path(FindSmoothPathResult &result, SearchWorkspace &workspace, const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 half_extents,
-                      const QueryFilter &filter, SmoothPathPoint *points, uint32_t max_points, const FindSmoothPathOptions &options) {
+                      const QueryFilter &filter, Span<SmoothPathPoint> point_buffer, const FindSmoothPathOptions &options) {
+    SmoothPathPoint *points = point_buffer.data;
+    uint32_t max_points = point_buffer.capacity;
     result = {};
     result.flags = FIND_SMOOTH_PATH_RESULT_NONE | FIND_SMOOTH_PATH_RESULT_INVALID_INPUT;
     result.start_node_ref = INVALID_NODE_REF;
@@ -157,13 +157,19 @@ void find_smooth_path(FindSmoothPathResult &result, SearchWorkspace &workspace, 
     result.end_node_ref = end_nearest.node_ref;
 
     FindNodePathResult node_path;
-    nav_mesh_search::find_node_path_to_workspace(node_path, workspace, nav_mesh, result.start_node_ref, result.end_node_ref, result.start_position,
-                                         result.end_position, filter, {options.raycast_distance});
     Array<NodeRef> &polys = workspace.node_path;
+    nav_mesh_search::find_node_path(node_path, workspace, nav_mesh, result.start_node_ref, result.end_node_ref, result.start_position,
+                                    result.end_position, filter, {polys.data, polys.capacity}, {options.raycast_distance});
+    if (node_path.truncated) {
+        polys.reserve(node_path.path_total);
+        nav_mesh_search::find_node_path(node_path, workspace, nav_mesh, result.start_node_ref, result.end_node_ref, result.start_position,
+                                        result.end_position, filter, {polys.data, polys.capacity}, {options.raycast_distance});
+    }
+    polys.resize(node_path.path_count);
     result.node_path_flags = node_path.flags;
-    result.full_node_path_count = polys.length;
-    result.node_path_count = polys.length < options.max_node_path ? polys.length : options.max_node_path;
-    for (uint32_t i = 0; i < result.node_path_count; i++) options.node_path[i] = polys[i];
+    result.node_path_total = polys.length;
+    result.node_path_count = polys.length < options.node_path.capacity ? polys.length : options.node_path.capacity;
+    for (uint32_t i = 0; i < result.node_path_count; i++) options.node_path.data[i] = polys[i];
 
     if (!node_path.success || polys.length == 0) {
         result.flags = FIND_SMOOTH_PATH_RESULT_FIND_NODE_PATH_FAILED;
@@ -258,6 +264,8 @@ void find_smooth_path(FindSmoothPathResult &result, SearchWorkspace &workspace, 
 
     result.success = true;
     result.flags = flags;
+    bool ended = point_count > 0 && (points[point_count - 1].flags & STRAIGHT_PATH_POINT_END) != 0;
+    result.truncated = (point_count == max_points && !ended) || result.node_path_count < result.node_path_total;
 }
 
 

@@ -93,12 +93,11 @@ static void update_path() {
     double begin = app::now_milliseconds();
     FindSmoothPathResult path = {};
     find_smooth_path::find_smooth_path(path, state.workspace, nav_mesh, state.start, state.end, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER,
-                                       state.points, MAX_SMOOTH_PATH_POINTS,
+                                       state.points,
                                        {.step_size = state.step_size,
                                         .slop = state.slop,
                                         .raycast_distance = 0,
-                                        .node_path = state.node_path,
-                                        .max_node_path = MAX_NODE_PATH});
+                                        .node_path = state.node_path});
     state.query_milliseconds = app::now_milliseconds() - begin;
     state.success = path.success;
     state.flags = path.flags;
@@ -106,7 +105,7 @@ static void update_path() {
     state.point_count = path.point_count;
 
     if (path.success) {
-        DebugPrimitives nodes = debug::create_search_nodes_helper(state.workspace.nodes);
+        DebugPrimitives nodes = debug::create_search_nodes_helper(state.workspace);
         renderer::add_primitives(list, nodes);
         debug::release(nodes);
 

@@ -4,6 +4,7 @@
 
 #include "roam/query/nav_mesh.h"
 #include "roam/util/array.h"
+#include "roam/util/span.h"
 
 namespace roam {
 
@@ -34,15 +35,16 @@ enum FindStraightPathResultFlags : uint32_t {
 };
 
 struct FindStraightPathResult {
-    uint32_t flags;
     bool success;
+    uint32_t flags;
     uint32_t point_count;
+    bool truncated;
 };
 
 namespace find_straight_path {
 
 void find_straight_path(FindStraightPathResult &out, const NavMesh &nav_mesh, Vec3 start, Vec3 end, const NodeRef *path_node_refs,
-                        uint32_t path_node_count, StraightPathPoint *points, uint32_t max_points, uint32_t straight_path_options = 0);
+                        uint32_t path_node_count, Span<StraightPathPoint> points, uint32_t straight_path_options = 0);
 
 }
 

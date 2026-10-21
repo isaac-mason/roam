@@ -99,10 +99,11 @@ static void init(App &app) {
     nav_mesh_api::find_nearest_poly(seed, nav_mesh, {0, 0, 0}, {0.5f, 0.5f, 0.5f}, nav_mesh_api::DEFAULT_QUERY_FILTER);
     if (seed.success) {
         Array<NodeRef> unreachable = {};
-        unreachable.resize(nav_mesh.nodes.length);
+        unreachable.resize(nav_mesh_api::get_max_node_count(nav_mesh));
         FloodFillNavMeshResult flood = {};
-        flood_fill_nav_mesh::flood_fill_nav_mesh(flood, nav_mesh, &seed.node_ref, 1, nullptr, 0, unreachable.data, unreachable.length);
-        for (uint32_t i = 0; i < flood.unreachable_count; i++) nav_mesh.nodes[node::get_node_ref_index(unreachable[i])].flags = 0;
+        flood_fill_nav_mesh::flood_fill_nav_mesh(flood, nav_mesh, &seed.node_ref, 1, {}, unreachable);
+        unreachable.resize(flood.unreachable_count);
+        for (NodeRef ref : unreachable) nav_mesh.nodes[node::get_node_ref_index(ref)].flags = 0;
         unreachable.release();
     }
 

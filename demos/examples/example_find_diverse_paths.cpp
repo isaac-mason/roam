@@ -169,7 +169,7 @@ static void spread_penalty(const NavMesh &nav_mesh, Map<NodeRef, float> &penalty
     seen_order.release();
 }
 
-static Array<DiverseNodePath> find_diverse_paths(SearchWorkspace &workspace, NodeRef *buffer, const NavMesh &nav_mesh, Vec3 start, Vec3 end,
+static Array<DiverseNodePath> find_diverse_paths(SearchWorkspace &workspace, Span<NodeRef> buffer, const NavMesh &nav_mesh, Vec3 start, Vec3 end,
                                                  Vec3 half_extents, const QueryFilter &base_filter, const FindDiversePathsOptions &options) {
     Array<DiverseNodePath> accepted = {};
 
@@ -184,11 +184,11 @@ static Array<DiverseNodePath> find_diverse_paths(SearchWorkspace &workspace, Nod
     NodeRef end_node_ref = end_nearest.node_ref;
 
     FindNodePathResult best = {};
-    nav_mesh_search::find_node_path(best, workspace, nav_mesh, start_node_ref, end_node_ref, start, end, base_filter, buffer, MAX_NODE_PATH);
+    nav_mesh_search::find_node_path(best, workspace, nav_mesh, start_node_ref, end_node_ref, start, end, base_filter, buffer);
     if (!best.success) return accepted;
 
     Map<NodeRef, float> penalty = {};
-    Array<NodeRef> best_path = copy_path(buffer, best.path_count);
+    Array<NodeRef> best_path = copy_path(buffer.data, best.path_count);
     float best_cost = compute_unpenalized_cost(nav_mesh, best_path, start, end, base_filter);
     accepted.push({best_path, node_set_of(best_path), best_cost});
     spread_penalty(nav_mesh, penalty, accepted[0].path, options);
@@ -200,10 +200,10 @@ static Array<DiverseNodePath> find_diverse_paths(SearchWorkspace &workspace, Nod
     while ((int)accepted.length < options.k && tries < options.max_tries) {
         tries++;
         FindNodePathResult candidate = {};
-        nav_mesh_search::find_node_path(candidate, workspace, nav_mesh, start_node_ref, end_node_ref, start, end, penalized, buffer, MAX_NODE_PATH);
+        nav_mesh_search::find_node_path(candidate, workspace, nav_mesh, start_node_ref, end_node_ref, start, end, penalized, buffer);
         if (!candidate.success) continue;
 
-        Array<NodeRef> candidate_path = copy_path(buffer, candidate.path_count);
+        Array<NodeRef> candidate_path = copy_path(buffer.data, candidate.path_count);
         float cost = compute_unpenalized_cost(nav_mesh, candidate_path, start, end, base_filter);
         if (cost > (1 + options.max_stretch) * best_cost) {
             candidate_path.release();
@@ -263,8 +263,7 @@ static void update_path() {
         }
 
         FindStraightPathResult straight = {};
-        find_straight_path::find_straight_path(straight, nav_mesh, state.start, state.end, node_path.data, node_path.length, state.points,
-                                               MAX_PATH_POINTS);
+        find_straight_path::find_straight_path(straight, nav_mesh, state.start, state.end, node_path.data, node_path.length, state.points);
         if (straight.success) {
             const Vec3 lift = {0, 0.1f, 0};
             for (uint32_t i = 0; i < straight.point_count; i++) {

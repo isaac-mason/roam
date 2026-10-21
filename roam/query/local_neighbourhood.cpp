@@ -58,8 +58,8 @@ static bool links_to(const NavMesh &nav_mesh, const NavMeshNode &node, NodeRef r
 }
 
 void find_local_neighbourhood(FindLocalNeighbourhoodResult &result, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
-                              Vec3 position, float radius, const QueryFilter &filter, NodeRef *node_refs, uint32_t max_node_refs) {
-    result = {false, 0, 0};
+                              Vec3 position, float radius, const QueryFilter &filter, Span<NodeRef> polys) {
+    result = {false, 0, 0, false};
     Array<NodeRef> &found = workspace.local_refs;
     found.clear();
     SearchNodePool &nodes = workspace.local_nodes;
@@ -147,31 +147,28 @@ void find_local_neighbourhood(FindLocalNeighbourhoodResult &result, SearchWorksp
     }
 
     result.success = true;
-    result.full_node_ref_count = found.length;
-    result.node_ref_count = found.length < max_node_refs ? found.length : max_node_refs;
-    for (uint32_t i = 0; i < result.node_ref_count; i++) node_refs[i] = found[i];
+    result.poly_total = found.length;
+    result.poly_count = found.length < polys.capacity ? found.length : polys.capacity;
+    result.truncated = result.poly_count < result.poly_total;
+    for (uint32_t i = 0; i < result.poly_count; i++) polys.data[i] = found[i];
 }
 
 struct SegmentWriter {
-    float *vertices;
-    NodeRef *refs;
-    uint32_t capacity;
+    Span<WallSegment> segments;
+    Span<NodeRef> refs;
     uint32_t count;
 };
 
 static void push_segment(SegmentWriter &writer, Vec3 start, Vec3 end, NodeRef ref) {
-    if (writer.count < writer.capacity) {
-        vec3::store(writer.vertices, writer.count * 6, start);
-        vec3::store(writer.vertices, writer.count * 6 + 3, end);
-        if (writer.refs) writer.refs[writer.count] = ref;
-    }
+    if (writer.count < writer.segments.capacity) writer.segments.data[writer.count] = {start, end};
+    if (writer.count < writer.refs.capacity) writer.refs.data[writer.count] = ref;
     writer.count++;
 }
 
 void get_poly_wall_segments(PolyWallSegmentsResult &result, const NavMesh &nav_mesh, NodeRef node_ref, const QueryFilter &filter, bool include_portals,
-                            float *segment_vertices, NodeRef *segment_refs, uint32_t max_segments) {
-    result = {false, 0, 0};
-    SegmentWriter writer = {segment_vertices, segment_refs, max_segments, 0};
+                            Span<WallSegment> segments, Span<NodeRef> segment_refs) {
+    result = {false, 0, 0, false};
+    SegmentWriter writer = {segments, segment_refs, 0};
 
     TileAndPoly tile_and_poly = nav_mesh_api::get_tile_and_poly_by_ref(node_ref, nav_mesh);
     if (!tile_and_poly.success) return;
@@ -236,8 +233,9 @@ void get_poly_wall_segments(PolyWallSegmentsResult &result, const NavMesh &nav_m
 
     intervals.overflow.release();
     result.success = true;
-    result.full_segment_count = writer.count;
-    result.segment_count = writer.count < max_segments ? writer.count : max_segments;
+    result.segment_total = writer.count;
+    result.segment_count = writer.count < segments.capacity ? writer.count : segments.capacity;
+    result.truncated = result.segment_count < result.segment_total;
 }
 
 }

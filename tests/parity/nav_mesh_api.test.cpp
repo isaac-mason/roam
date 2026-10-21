@@ -60,8 +60,8 @@ TEST(nav_mesh_matches_navcat_on_nav_test) {
         NodeRef refs[256];
         QueryPolygonsResult polygons;
         nav_mesh_api::query_polygons(polygons, nav_mesh, {vec3::subtract(point, half_extents), vec3::add(point, half_extents)},
-                                     nav_mesh_api::DEFAULT_QUERY_FILTER, refs, 256);
-        bool same_polygons = polygons.full_poly_count == polygons.poly_count && polygons.poly_count == (uint32_t)polygon_counts.data[i];
+                                     nav_mesh_api::DEFAULT_QUERY_FILTER, refs);
+        bool same_polygons = polygons.poly_total == polygons.poly_count && polygons.poly_count == (uint32_t)polygon_counts.data[i];
         for (uint32_t k = 0; same_polygons && k < polygons.poly_count; k++) same_polygons = refs[k] == ref_from_f64(polygon_refs.data[polygon_cursor + k]);
         if (!same_polygons) polygon_mismatches++;
         polygon_cursor += (uint32_t)polygon_counts.data[i];
@@ -88,7 +88,7 @@ TEST(nav_mesh_matches_navcat_on_nav_test) {
         NodeRef candidates[1024];
         QueryPolygonsResult polygons;
         nav_mesh_api::query_polygons(polygons, nav_mesh, {vec3::subtract(point, half_extents), vec3::add(point, half_extents)},
-                                     nav_mesh_api::DEFAULT_QUERY_FILTER, candidates, 1024);
+                                     nav_mesh_api::DEFAULT_QUERY_FILTER, candidates);
         FindNearestPolyResult brute = {false, INVALID_NODE_REF, point};
         float best = FLT_MAX;
         for (uint32_t k = 0; k < polygons.poly_count; k++) {

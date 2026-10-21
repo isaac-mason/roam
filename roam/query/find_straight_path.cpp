@@ -72,7 +72,9 @@ static uint32_t append_portals(const NavMesh &nav_mesh, int start_index, int end
 }
 
 static FindStraightPathResult make_result(uint32_t flags, const PointBuffer &path) {
-    return {flags, (flags & FIND_STRAIGHT_PATH_RESULT_SUCCESS) != 0, path.length};
+    bool ended = path.length > 0 && (path.data[path.length - 1].flags & STRAIGHT_PATH_POINT_END) != 0;
+    bool truncated = (flags & FIND_STRAIGHT_PATH_RESULT_MAX_POINTS_REACHED) != 0 && !ended;
+    return {(flags & FIND_STRAIGHT_PATH_RESULT_SUCCESS) != 0, flags, path.length, truncated};
 }
 
 static FindStraightPathResult stopped(uint32_t status, uint32_t base_flags, const PointBuffer &path) {
@@ -293,8 +295,8 @@ static FindStraightPathResult find_straight_path_in(const NavMesh &nav_mesh, Vec
 }
 
 void find_straight_path(FindStraightPathResult &out, const NavMesh &nav_mesh, Vec3 start, Vec3 end, const NodeRef *path_node_refs,
-                        uint32_t path_node_count, StraightPathPoint *points, uint32_t max_points, uint32_t straight_path_options) {
-    PointBuffer buffer = {points, max_points, 0};
+                        uint32_t path_node_count, Span<StraightPathPoint> points, uint32_t straight_path_options) {
+    PointBuffer buffer = {points.data, points.capacity, 0};
     out = find_straight_path_in(nav_mesh, start, end, path_node_refs, path_node_count, straight_path_options, buffer);
 }
 

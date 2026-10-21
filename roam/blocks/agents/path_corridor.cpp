@@ -88,12 +88,10 @@ bool move_position(PathCorridor &corridor, SearchWorkspace &workspace, Vec3 new_
 
     Array<NodeRef> &visited = workspace.visited;
     MoveAlongSurfaceResult result;
-    nav_mesh_search::move_along_surface(result, workspace, nav_mesh, corridor.path[0], corridor.position, new_position, filter, visited.data,
-                                        visited.capacity);
-    if (result.full_visited_count > visited.capacity) {
-        visited.reserve(result.full_visited_count);
-        nav_mesh_search::move_along_surface(result, workspace, nav_mesh, corridor.path[0], corridor.position, new_position, filter, visited.data,
-                                            visited.capacity);
+    nav_mesh_search::move_along_surface(result, workspace, nav_mesh, corridor.path[0], corridor.position, new_position, filter, {visited.data, visited.capacity});
+    if (result.truncated) {
+        visited.reserve(result.visited_total);
+        nav_mesh_search::move_along_surface(result, workspace, nav_mesh, corridor.path[0], corridor.position, new_position, filter, {visited.data, visited.capacity});
     }
     visited.resize(result.visited_count);
 
@@ -105,13 +103,14 @@ bool move_position(PathCorridor &corridor, SearchWorkspace &workspace, Vec3 new_
     return moved;
 }
 
-void find_corners(FindCornersResult &out, const PathCorridor &corridor, const NavMesh &nav_mesh, StraightPathPoint *corners, uint32_t max_corners) {
-    out = {false, 0};
+void find_corners(FindCornersResult &out, const PathCorridor &corridor, const NavMesh &nav_mesh, Span<StraightPathPoint> corner_buffer) {
+    out = {false, 0, false};
+    StraightPathPoint *corners = corner_buffer.data;
     if (corridor.path.length == 0) return;
 
     FindStraightPathResult straight_path;
     find_straight_path::find_straight_path(straight_path, nav_mesh, corridor.position, corridor.target, corridor.path.data, corridor.path.length,
-                                           corners, max_corners);
+                                           corner_buffer);
     if (!straight_path.success || straight_path.point_count == 0) return;
 
     uint32_t count = straight_path.point_count;
@@ -133,6 +132,7 @@ void find_corners(FindCornersResult &out, const PathCorridor &corridor, const Na
     for (uint32_t i = first; i < end; i++) corners[i - first] = corners[i];
     out.success = true;
     out.corner_count = end - first;
+    out.truncated = straight_path.truncated;
 }
 
 bool corridor_is_valid(const PathCorridor &corridor, uint32_t max_look_ahead, const NavMesh &nav_mesh, const QueryFilter &filter) {
@@ -213,10 +213,16 @@ bool optimize_path_topology(PathCorridor &corridor, SlicedNodePathQuery &query, 
     nav_mesh_search::init_sliced_find_node_path(nav_mesh, query, corridor.path[0], corridor.path.back(), corridor.position, corridor.target, filter);
     nav_mesh_search::update_sliced_find_node_path(nav_mesh, query, MAX_ITERATIONS);
     SlicedFindNodePathResult result;
-    nav_mesh_search::finalize_sliced_find_node_path_partial_to_workspace(result, workspace, nav_mesh, query, corridor.path.data, corridor.path.length);
+    Array<NodeRef> &path = workspace.node_path;
+    nav_mesh_search::finalize_sliced_find_node_path_partial(result, nav_mesh, query, corridor.path.data, corridor.path.length, {path.data, path.capacity});
+    if (result.truncated) {
+        path.reserve(result.path_total);
+        nav_mesh_search::finalize_sliced_find_node_path_partial(result, nav_mesh, query, corridor.path.data, corridor.path.length, {path.data, path.capacity});
+    }
+    path.resize(result.path_count);
 
-    bool optimized = (result.status & SLICED_FIND_NODE_PATH_SUCCESS) != 0 && workspace.node_path.length > 0;
-    if (optimized) merge_start_shortcut(corridor.path, workspace.node_path);
+    bool optimized = (result.status & SLICED_FIND_NODE_PATH_SUCCESS) != 0 && path.length > 0;
+    if (optimized) merge_start_shortcut(corridor.path, path);
     return optimized;
 }
 
@@ -236,10 +242,10 @@ void optimize_path_visibility(PathCorridor &corridor, SearchWorkspace &workspace
 
     Array<NodeRef> &path = workspace.raycast_path;
     RaycastResult result;
-    nav_mesh_search::raycast(result, nav_mesh, corridor.path[0], corridor.position, goal, filter, path.data, path.capacity);
-    if (result.full_path_count > path.capacity) {
-        path.reserve(result.full_path_count);
-        nav_mesh_search::raycast(result, nav_mesh, corridor.path[0], corridor.position, goal, filter, path.data, path.capacity);
+    nav_mesh_search::raycast(result, nav_mesh, corridor.path[0], corridor.position, goal, filter, {path.data, path.capacity});
+    if (result.truncated) {
+        path.reserve(result.path_total);
+        nav_mesh_search::raycast(result, nav_mesh, corridor.path[0], corridor.position, goal, filter, {path.data, path.capacity});
     }
     path.resize(result.path_count);
     if (path.length > 1 && result.t > 0.99f) merge_start_shortcut(corridor.path, path);

@@ -1,4 +1,5 @@
 #include "roam/query/find_path.h"
+#include "roam/query/find_straight_path.h"
 #include "roam/query/local_neighbourhood.h"
 #include "roam/query/nav_mesh_search.h"
 #include "roam/util/memory.h"
@@ -84,11 +85,11 @@ TEST(search_workspace_reuse_matches_fresh_queries) {
         NodeRef fresh_refs[MAX_REFS];
         NodeRef reused_refs[MAX_REFS];
         FindPathResult fresh_path;
-        find_path::find_path(fresh_path, fresh, nav_mesh, {0.5f, 0, 0.5f}, {5.5f, 0, 1.5f}, {1, 1, 1}, filter, fresh_points, MAX_POINTS,
-                             {.node_path = fresh_refs, .max_node_path = MAX_REFS});
+        find_path::find_path(fresh_path, fresh, nav_mesh, {0.5f, 0, 0.5f}, {5.5f, 0, 1.5f}, {1, 1, 1}, filter, fresh_points,
+                             {.node_path = fresh_refs});
         FindPathResult reused_path;
-        find_path::find_path(reused_path, reused, nav_mesh, {0.5f, 0, 0.5f}, {5.5f, 0, 1.5f}, {1, 1, 1}, filter, reused_points, MAX_POINTS,
-                             {.node_path = reused_refs, .max_node_path = MAX_REFS});
+        find_path::find_path(reused_path, reused, nav_mesh, {0.5f, 0, 0.5f}, {5.5f, 0, 1.5f}, {1, 1, 1}, filter, reused_points,
+                             {.node_path = reused_refs});
         REQUIRE(fresh_path.success && reused_path.success);
         CHECK(fresh_path.node_path_count == reused_path.node_path_count);
         CHECK(fresh_path.point_count == reused_path.point_count);
@@ -98,18 +99,17 @@ TEST(search_workspace_reuse_matches_fresh_queries) {
         nav_mesh_api::find_nearest_poly(nearest, nav_mesh, {0.5f, 0, 0.5f}, {1, 1, 1}, filter);
         NodeRef start = nearest.node_ref;
         MoveAlongSurfaceResult fresh_move;
-        nav_mesh_search::move_along_surface(fresh_move, fresh, nav_mesh, start, {0.5f, 0, 0.5f}, {5.5f, 0, 1.5f}, filter, fresh_refs, MAX_REFS);
+        nav_mesh_search::move_along_surface(fresh_move, fresh, nav_mesh, start, {0.5f, 0, 0.5f}, {5.5f, 0, 1.5f}, filter, fresh_refs);
         MoveAlongSurfaceResult reused_move;
-        nav_mesh_search::move_along_surface(reused_move, reused, nav_mesh, start, {0.5f, 0, 0.5f}, {5.5f, 0, 1.5f}, filter, reused_refs, MAX_REFS);
+        nav_mesh_search::move_along_surface(reused_move, reused, nav_mesh, start, {0.5f, 0, 0.5f}, {5.5f, 0, 1.5f}, filter, reused_refs);
         CHECK(vec3::exactly_equals(fresh_move.position, reused_move.position));
         CHECK(fresh_move.visited_count == reused_move.visited_count);
 
         FindLocalNeighbourhoodResult fresh_neighbourhood;
-        local_neighbourhood::find_local_neighbourhood(fresh_neighbourhood, fresh, nav_mesh, start, {0.5f, 0, 0.5f}, 3, filter, fresh_refs, MAX_REFS);
+        local_neighbourhood::find_local_neighbourhood(fresh_neighbourhood, fresh, nav_mesh, start, {0.5f, 0, 0.5f}, 3, filter, fresh_refs);
         FindLocalNeighbourhoodResult reused_neighbourhood;
-        local_neighbourhood::find_local_neighbourhood(reused_neighbourhood, reused, nav_mesh, start, {0.5f, 0, 0.5f}, 3, filter, reused_refs,
-                                                      MAX_REFS);
-        CHECK(fresh_neighbourhood.node_ref_count == reused_neighbourhood.node_ref_count);
+        local_neighbourhood::find_local_neighbourhood(reused_neighbourhood, reused, nav_mesh, start, {0.5f, 0, 0.5f}, 3, filter, reused_refs);
+        CHECK(fresh_neighbourhood.poly_count == reused_neighbourhood.poly_count);
 
         nav_mesh_search::release(fresh);
     }
@@ -130,35 +130,89 @@ TEST(small_buffers_keep_the_start_of_the_path_and_report_its_full_length) {
 
     NodeRef full[MAX_REFS];
     FindNodePathResult full_path;
-    nav_mesh_search::find_node_path(full_path, workspace, nav_mesh, start.node_ref, end.node_ref, start.position, end.position, filter, full,
-                                    MAX_REFS);
+    nav_mesh_search::find_node_path(full_path, workspace, nav_mesh, start.node_ref, end.node_ref, start.position, end.position, filter, full);
     REQUIRE(full_path.success);
     REQUIRE(full_path.path_count > 2);
-    CHECK(full_path.full_path_count == full_path.path_count);
+    CHECK(full_path.path_total == full_path.path_count);
+    CHECK(!full_path.truncated);
 
     NodeRef truncated[2];
     FindNodePathResult truncated_path;
-    nav_mesh_search::find_node_path(truncated_path, workspace, nav_mesh, start.node_ref, end.node_ref, start.position, end.position, filter, truncated,
-                                    2);
+    nav_mesh_search::find_node_path(truncated_path, workspace, nav_mesh, start.node_ref, end.node_ref, start.position, end.position, filter, truncated);
     CHECK(truncated_path.success);
     CHECK(truncated_path.path_count == 2);
-    CHECK(truncated_path.full_path_count == full_path.path_count);
+    CHECK(truncated_path.path_total == full_path.path_count);
+    CHECK(truncated_path.truncated);
     CHECK(truncated[0] == full[0]);
     CHECK(truncated[1] == full[1]);
 
     FindNodePathResult counted;
-    nav_mesh_search::find_node_path(counted, workspace, nav_mesh, start.node_ref, end.node_ref, start.position, end.position, filter, nullptr, 0);
+    nav_mesh_search::find_node_path(counted, workspace, nav_mesh, start.node_ref, end.node_ref, start.position, end.position, filter, {});
     CHECK(counted.path_count == 0);
-    CHECK(counted.full_path_count == full_path.path_count);
+    CHECK(counted.path_total == full_path.path_count);
 
     NodeRef ray_refs[1];
     RaycastResult ray;
-    nav_mesh_search::raycast(ray, nav_mesh, start.node_ref, start.position, end.position, filter, ray_refs, 1);
+    nav_mesh_search::raycast(ray, nav_mesh, start.node_ref, start.position, end.position, filter, ray_refs);
     CHECK(ray.path_count == 1);
-    CHECK(ray.full_path_count > 1);
+    CHECK(ray.path_total > 1);
+    CHECK(ray.truncated);
     CHECK(ray_refs[0] == start.node_ref);
 
+    StraightPathPoint all_points[MAX_POINTS];
+    FindStraightPathResult all;
+    find_straight_path::find_straight_path(all, nav_mesh, start.position, end.position, full, full_path.path_count, all_points);
+    REQUIRE(all.success);
+    CHECK(!all.truncated);
+
+    Array<StraightPathPoint> exact = {};
+    exact.resize(all.point_count);
+    FindStraightPathResult exact_fit;
+    find_straight_path::find_straight_path(exact_fit, nav_mesh, start.position, end.position, full, full_path.path_count, exact);
+    CHECK(exact_fit.point_count == all.point_count);
+    CHECK(!exact_fit.truncated);
+
+    exact.resize(all.point_count - 1);
+    Span<StraightPathPoint> short_buffer = {exact.data, exact.length};
+    FindStraightPathResult cut;
+    find_straight_path::find_straight_path(cut, nav_mesh, start.position, end.position, full, full_path.path_count, short_buffer);
+    CHECK(cut.point_count == all.point_count - 1);
+    CHECK(cut.truncated);
+    exact.release();
+
     nav_mesh_search::release(workspace);
+    nav_mesh_api::release_nav_mesh(nav_mesh);
+}
+
+TEST(sliced_finalize_can_be_repeated_to_grow_the_buffer) {
+    NavMesh nav_mesh = create_strip_nav_mesh();
+    const QueryFilter &filter = nav_mesh_api::DEFAULT_QUERY_FILTER;
+
+    FindNearestPolyResult start;
+    nav_mesh_api::find_nearest_poly(start, nav_mesh, {1.5f, 0, 0.5f}, {1, 1, 1}, filter);
+    FindNearestPolyResult end;
+    nav_mesh_api::find_nearest_poly(end, nav_mesh, {5.5f, 0, 1.5f}, {1, 1, 1}, filter);
+
+    SlicedNodePathQuery query = nav_mesh_search::create_sliced_node_path_query();
+    nav_mesh_search::init_sliced_find_node_path(nav_mesh, query, start.node_ref, end.node_ref, start.position, end.position, filter);
+    while (query.status & SLICED_FIND_NODE_PATH_IN_PROGRESS) nav_mesh_search::update_sliced_find_node_path(nav_mesh, query, 2);
+
+    NodeRef first[1];
+    SlicedFindNodePathResult cut;
+    nav_mesh_search::finalize_sliced_find_node_path(cut, nav_mesh, query, first);
+    CHECK(cut.truncated);
+    REQUIRE(cut.path_total > 1);
+
+    NodeRef all[MAX_REFS];
+    SlicedFindNodePathResult again;
+    nav_mesh_search::finalize_sliced_find_node_path(again, nav_mesh, query, all);
+    CHECK(again.status == cut.status);
+    CHECK(!again.truncated);
+    CHECK(again.path_count == cut.path_total);
+    CHECK(all[0] == first[0]);
+    CHECK(all[again.path_count - 1] == end.node_ref);
+
+    nav_mesh_search::release(query);
     nav_mesh_api::release_nav_mesh(nav_mesh);
 }
 
@@ -176,25 +230,24 @@ TEST(warm_queries_do_not_allocate) {
         if (round == 1) allocations_after_warm_up = memory::outstanding().total_allocations;
 
         FindPathResult path;
-        find_path::find_path(path, workspace, nav_mesh, {0.5f, 0, 0.5f}, {5.5f, 0, 1.5f}, {1, 1, 1}, filter, points, MAX_POINTS);
+        find_path::find_path(path, workspace, nav_mesh, {0.5f, 0, 0.5f}, {5.5f, 0, 1.5f}, {1, 1, 1}, filter, points);
         CHECK(path.success);
 
         FindNearestPolyResult nearest;
         nav_mesh_api::find_nearest_poly(nearest, nav_mesh, {0.5f, 0, 0.5f}, {1, 1, 1}, filter);
 
         RaycastResult ray;
-        nav_mesh_search::raycast(ray, nav_mesh, nearest.node_ref, {0.5f, 0, 0.5f}, {5.5f, 0, 1.5f}, filter, refs, MAX_REFS);
+        nav_mesh_search::raycast(ray, nav_mesh, nearest.node_ref, {0.5f, 0, 0.5f}, {5.5f, 0, 1.5f}, filter, refs);
 
         MoveAlongSurfaceResult moved;
-        nav_mesh_search::move_along_surface(moved, workspace, nav_mesh, nearest.node_ref, {0.5f, 0, 0.5f}, {5.5f, 0, 1.5f}, filter, refs, MAX_REFS);
+        nav_mesh_search::move_along_surface(moved, workspace, nav_mesh, nearest.node_ref, {0.5f, 0, 0.5f}, {5.5f, 0, 1.5f}, filter, refs);
 
         FindLocalNeighbourhoodResult neighbourhood;
-        local_neighbourhood::find_local_neighbourhood(neighbourhood, workspace, nav_mesh, nearest.node_ref, {0.5f, 0, 0.5f}, 3, filter, refs,
-                                                      MAX_REFS);
+        local_neighbourhood::find_local_neighbourhood(neighbourhood, workspace, nav_mesh, nearest.node_ref, {0.5f, 0, 0.5f}, 3, filter, refs);
 
-        float segments[MAX_REFS * 6];
+        WallSegment segments[MAX_REFS];
         PolyWallSegmentsResult walls;
-        local_neighbourhood::get_poly_wall_segments(walls, nav_mesh, nearest.node_ref, filter, true, segments, refs, MAX_REFS);
+        local_neighbourhood::get_poly_wall_segments(walls, nav_mesh, nearest.node_ref, filter, true, segments, refs);
     }
 
     CHECK(memory::outstanding().total_allocations == allocations_after_warm_up);

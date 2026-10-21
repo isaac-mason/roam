@@ -19,6 +19,7 @@ struct PathCorridor {
 struct FindCornersResult {
     bool success;
     uint32_t corner_count;
+    bool truncated;
 };
 
 struct MoveOverOffMeshConnectionResult {
@@ -43,7 +44,7 @@ void merge_start_shortcut(Array<NodeRef> &current_path, const Array<NodeRef> &vi
 
 bool move_position(PathCorridor &corridor, SearchWorkspace &workspace, Vec3 new_position, const NavMesh &nav_mesh, const QueryFilter &filter);
 
-void find_corners(FindCornersResult &out, const PathCorridor &corridor, const NavMesh &nav_mesh, StraightPathPoint *corners, uint32_t max_corners);
+void find_corners(FindCornersResult &out, const PathCorridor &corridor, const NavMesh &nav_mesh, Span<StraightPathPoint> corners);
 
 bool corridor_is_valid(const PathCorridor &corridor, uint32_t max_look_ahead, const NavMesh &nav_mesh, const QueryFilter &filter);
 

@@ -42,8 +42,7 @@ static void update_path() {
     double start = app::now_milliseconds();
     FindPathResult path = {};
     find_path::find_path(path, state.workspace, nav_mesh, state.start, state.end, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER, state.points,
-                         MAX_PATH_POINTS,
-                         {.raycast_distance = state.any_angle ? 10.0f : 0.0f, .node_path = state.node_path, .max_node_path = MAX_NODE_PATH});
+                         {.raycast_distance = state.any_angle ? 10.0f : 0.0f, .node_path = state.node_path});
     state.query_milliseconds = app::now_milliseconds() - start;
     state.success = path.success;
     state.flags = path.flags;
@@ -53,7 +52,7 @@ static void update_path() {
     DrawList list = {};
 
     if (state.show_search_nodes) {
-        DebugPrimitives nodes = debug::create_search_nodes_helper(state.workspace.nodes);
+        DebugPrimitives nodes = debug::create_search_nodes_helper(state.workspace);
         renderer::add_primitives(list, nodes);
         debug::release(nodes);
     }

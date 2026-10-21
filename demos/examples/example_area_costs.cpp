@@ -229,7 +229,7 @@ static void update_path() {
     flag(list, state.end, GREEN_COLOR);
 
     FindPathResult path = {};
-    find_path::find_path(path, state.workspace, state.nav_mesh, state.start, state.end, {0.6f, 1, 0.6f}, state.filter, state.points, MAX_PATH_POINTS);
+    find_path::find_path(path, state.workspace, state.nav_mesh, state.start, state.end, {0.6f, 1, 0.6f}, state.filter, state.points);
     state.success = path.success;
     state.point_count = path.point_count;
 

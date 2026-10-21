@@ -247,7 +247,7 @@ static void run_find_path() {
         uint32_t a = i % state.centers.length;
         FindPathResult path;
         find_path::find_path(path, query_workspace, state.nav_mesh, state.centers[a], state.centers[pair_end(i)], {1, 1, 1},
-                             nav_mesh_api::DEFAULT_QUERY_FILTER, points, MAX_PATH);
+                             nav_mesh_api::DEFAULT_QUERY_FILTER, points);
     }
 }
 
@@ -257,7 +257,7 @@ static void run_raycast() {
         uint32_t a = i % state.centers.length;
         RaycastResult ray;
         nav_mesh_search::raycast(ray, state.nav_mesh, state.center_refs[a], state.centers[a], state.centers[pair_end(i)], nav_mesh_api::DEFAULT_QUERY_FILTER,
-                                 path, MAX_PATH);
+                                 path);
     }
 }
 
@@ -277,7 +277,7 @@ static void run_node_paths() {
         uint32_t b = pair_end(i);
         FindNodePathResult result;
         nav_mesh_search::find_node_path(result, query_workspace, state.nav_mesh, state.center_refs[a], state.center_refs[b], state.centers[a],
-                                        state.centers[b], nav_mesh_api::DEFAULT_QUERY_FILTER, path, MAX_PATH);
+                                        state.centers[b], nav_mesh_api::DEFAULT_QUERY_FILTER, path);
     }
 }
 

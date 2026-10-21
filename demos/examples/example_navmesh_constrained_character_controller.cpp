@@ -136,7 +136,7 @@ static void movement_update(const App &app, float delta) {
         if (nearest.success) {
             MoveAlongSurfaceResult moved = {};
             nav_mesh_search::move_along_surface(moved, state.workspace, nav_mesh, nearest.node_ref, state.position, target,
-                                                nav_mesh_api::DEFAULT_QUERY_FILTER, nullptr, 0);
+                                                nav_mesh_api::DEFAULT_QUERY_FILTER, {});
             if (moved.success) state.position = moved.position;
         }
         state.first_position_update = false;

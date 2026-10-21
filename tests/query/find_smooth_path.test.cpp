@@ -14,8 +14,7 @@ TEST(find_smooth_path_takes_off_mesh_connection_from_its_start) {
     SearchWorkspace workspace = nav_mesh_search::create_search_workspace();
     SmoothPathPoint points[256];
     FindSmoothPathResult result;
-    find_smooth_path::find_smooth_path(result, workspace, nav_mesh, {1, 0, 1}, {8.5f, 0, 1.5f}, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER, points,
-                                       256, {.step_size = 0.5f, .slop = 0.01f});
+    find_smooth_path::find_smooth_path(result, workspace, nav_mesh, {1, 0, 1}, {8.5f, 0, 1.5f}, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER, points, {.step_size = 0.5f, .slop = 0.01f});
 
     REQUIRE(result.success);
     REQUIRE(result.point_count > 1);

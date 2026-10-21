@@ -6,6 +6,7 @@
 #include "roam/query/nav_mesh_api.h"
 #include "roam/util/array.h"
 #include "roam/util/map.h"
+#include "roam/util/span.h"
 
 namespace roam {
 
@@ -55,7 +56,8 @@ struct FindNodePathResult {
     bool success;
     uint32_t flags;
     uint32_t path_count;
-    uint32_t full_path_count;
+    uint32_t path_total;
+    bool truncated;
 };
 
 struct FindNodePathOptions {
@@ -81,7 +83,8 @@ struct RaycastResult {
     int hit_edge_index;
     float path_cost;
     uint32_t path_count;
-    uint32_t full_path_count;
+    uint32_t path_total;
+    bool truncated;
 };
 
 struct SlicedNodePathQuery {
@@ -98,12 +101,14 @@ struct SlicedNodePathQuery {
     bool has_raycast_limit;
     float raycast_limit_sqr;
     Array<uint32_t> path_nodes;
+    uint32_t finalized_status;
 };
 
 struct SlicedFindNodePathResult {
     uint32_t status;
     uint32_t path_count;
-    uint32_t full_path_count;
+    uint32_t path_total;
+    bool truncated;
 };
 
 struct MoveAlongSurfaceResult {
@@ -111,7 +116,8 @@ struct MoveAlongSurfaceResult {
     Vec3 position;
     NodeRef node_ref;
     uint32_t visited_count;
-    uint32_t full_visited_count;
+    uint32_t visited_total;
+    bool truncated;
 };
 
 struct SearchWorkspace {
@@ -155,33 +161,25 @@ void release(SearchNodeQueue &queue);
 bool get_portal_points(const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref, Vec3 &out_left, Vec3 &out_right);
 bool get_edge_mid_point(const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref, Vec3 &out_mid_point);
 
-void find_node_path_to_workspace(FindNodePathResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
-                         NodeRef end_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter, FindNodePathOptions options = {});
 void find_node_path(FindNodePathResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref, NodeRef end_node_ref,
-                    Vec3 start_position, Vec3 end_position, const QueryFilter &filter, NodeRef *path, uint32_t max_path,
-                    FindNodePathOptions options = {});
+                    Vec3 start_position, Vec3 end_position, const QueryFilter &filter, Span<NodeRef> path, FindNodePathOptions options = {});
 
 SlicedNodePathQuery create_sliced_node_path_query();
 uint32_t init_sliced_find_node_path(const NavMesh &nav_mesh, SlicedNodePathQuery &query, NodeRef start_node_ref, NodeRef end_node_ref,
                                     Vec3 start_position, Vec3 end_position, const QueryFilter &filter, uint32_t flags = 0);
 int update_sliced_find_node_path(const NavMesh &nav_mesh, SlicedNodePathQuery &query, int max_iterations);
-void finalize_sliced_find_node_path(SlicedFindNodePathResult &out, const NavMesh &nav_mesh, SlicedNodePathQuery &query, NodeRef *path,
-                                    uint32_t max_path);
+void finalize_sliced_find_node_path(SlicedFindNodePathResult &out, const NavMesh &nav_mesh, SlicedNodePathQuery &query, Span<NodeRef> path);
 void finalize_sliced_find_node_path_partial(SlicedFindNodePathResult &out, const NavMesh &nav_mesh, SlicedNodePathQuery &query,
-                                            const NodeRef *existing_path, uint32_t existing_path_count, NodeRef *path, uint32_t max_path);
-void finalize_sliced_find_node_path_to_workspace(SlicedFindNodePathResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh,
-                                                 SlicedNodePathQuery &query);
-void finalize_sliced_find_node_path_partial_to_workspace(SlicedFindNodePathResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh,
-                                                         SlicedNodePathQuery &query, const NodeRef *existing_path, uint32_t existing_path_count);
+                                            const NodeRef *existing_path, uint32_t existing_path_count, Span<NodeRef> path);
 void release(SlicedNodePathQuery &query);
 
 void move_along_surface(MoveAlongSurfaceResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
-                        Vec3 start_position, Vec3 end_position, const QueryFilter &filter, NodeRef *visited, uint32_t max_visited);
+                        Vec3 start_position, Vec3 end_position, const QueryFilter &filter, Span<NodeRef> visited);
 
 void raycast(RaycastResult &out, const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter,
-             NodeRef *path, uint32_t max_path);
+             Span<NodeRef> path);
 void raycast_with_costs(RaycastResult &out, const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position,
-                        const QueryFilter &filter, NodeRef previous_ref, NodeRef *path, uint32_t max_path);
+                        const QueryFilter &filter, NodeRef previous_ref, Span<NodeRef> path);
 
 void find_random_point(FindRandomPointResult &out, const NavMesh &nav_mesh, const QueryFilter &filter, RandomFunction random, void *random_user_data);
 void find_random_point_around_circle(FindRandomPointResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,

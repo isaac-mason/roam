@@ -30,21 +30,21 @@ struct FindSmoothPathResult {
     Vec3 end_position;
     uint32_t node_path_flags;
     uint32_t node_path_count;
-    uint32_t full_node_path_count;
+    uint32_t node_path_total;
+    bool truncated;
 };
 
 struct FindSmoothPathOptions {
     float step_size;
     float slop;
     float raycast_distance;
-    NodeRef *node_path;
-    uint32_t max_node_path;
+    Span<NodeRef> node_path;
 };
 
 namespace find_smooth_path {
 
 void find_smooth_path(FindSmoothPathResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 half_extents,
-                      const QueryFilter &filter, SmoothPathPoint *points, uint32_t max_points, const FindSmoothPathOptions &options);
+                      const QueryFilter &filter, Span<SmoothPathPoint> points, const FindSmoothPathOptions &options);
 
 }
 

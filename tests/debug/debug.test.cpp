@@ -83,7 +83,7 @@ TEST(debug_helpers_draw_a_generated_nav_mesh) {
     SearchWorkspace workspace = nav_mesh_search::create_search_workspace();
     FindNodePathResult node_path;
     nav_mesh_search::find_node_path(node_path, workspace, nav_mesh, nearest.node_ref, far.node_ref, {1, 0, 1}, {9, 0, 1},
-                                    nav_mesh_api::DEFAULT_QUERY_FILTER, nullptr, 0);
+                                    nav_mesh_api::DEFAULT_QUERY_FILTER, {});
     REQUIRE(node_path.success);
     check_helper(debug::create_search_nodes_helper(workspace.nodes), "search nodes");
     nav_mesh_search::release(workspace);

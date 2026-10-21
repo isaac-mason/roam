@@ -305,7 +305,7 @@ static void draw_agent(DrawList &list, const Agent &agent, Color color) {
     if (state.show_path_line) {
         StraightPathPoint corners[3];
         FindCornersResult found = {};
-        path_corridor::find_corners(found, agent.corridor, state.result.nav_mesh, corners, 3);
+        path_corridor::find_corners(found, agent.corridor, state.result.nav_mesh, corners);
         if (found.success && found.corner_count > 1) {
             const Vec3 lift = {0, 0.2f, 0};
             Vec3 previous = vec3::add(agent.position, lift);
