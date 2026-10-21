@@ -212,6 +212,8 @@ static void release(Pipeline &pipeline) {
 
 static void prepare_stage() {
     state.pipeline = {};
+    state.pipeline.tri_area_ids.resize(state.input.indices.length / 3, 0);
+    state.pipeline.tri_area_ids.clear();
     for (int stage = 0; stage < state.stage; stage++) advance(state.pipeline, stage);
 }
 

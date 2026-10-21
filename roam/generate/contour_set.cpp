@@ -1,6 +1,7 @@
 #include "roam/generate/contour_set.h"
 
 #include <math.h>
+#include <string.h>
 
 #include "roam/generate/common.h"
 #include "roam/math/scalar.h"
@@ -653,9 +654,11 @@ ContourSet build_contours(BuildContext &context, const CompactHeightfield &chf, 
 
                 Contour contour = {};
                 contour.vertex_count = (int)simplified.length / 4;
-                for (int value : simplified) contour.vertices.push(value);
+                contour.vertices.resize(simplified.length);
+                memcpy(contour.vertices.data, simplified.data, simplified.length * sizeof(int));
                 contour.raw_vertex_count = (int)vertices.length / 4;
-                for (int value : vertices) contour.raw_vertices.push(value);
+                contour.raw_vertices.resize(vertices.length);
+                memcpy(contour.raw_vertices.data, vertices.data, vertices.length * sizeof(int));
                 contour.reg = region;
                 contour.area = area;
 
