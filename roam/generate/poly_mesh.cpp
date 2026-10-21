@@ -335,6 +335,49 @@ static BestMerge find_best_merge(const int *polys, int poly_count, const int *ve
     return best;
 }
 
+static const int MAX_CACHED_MERGE_POLYS = 512;
+
+static void update_merge_values(const int *polys, int poly_count, int changed, const int *vertices, int nvp, PolyMergeValue *cache, int stride) {
+    for (int other = 0; other < poly_count; other++) {
+        if (other == changed) continue;
+        int j = other < changed ? other : changed;
+        int k = other < changed ? changed : other;
+        cache[j * stride + k] = get_poly_merge_value(polys, (uint32_t)(j * nvp), (uint32_t)(k * nvp), vertices, nvp);
+    }
+}
+
+static void merge_polys_with_cache(int *polys, int &poly_count, uint32_t temp_poly_start, const int *vertices, int nvp,
+                                   Array<PolyMergeValue> &cache) {
+    int stride = poly_count;
+    cache.resize((uint32_t)(stride * stride));
+    for (int j = 0; j < poly_count - 1; j++) {
+        for (int k = j + 1; k < poly_count; k++) {
+            cache[(uint32_t)(j * stride + k)] = get_poly_merge_value(polys, (uint32_t)(j * nvp), (uint32_t)(k * nvp), vertices, nvp);
+        }
+    }
+
+    while (true) {
+        BestMerge best = {0, 0, 0, 0, 0};
+        for (int j = 0; j < poly_count - 1; j++) {
+            const PolyMergeValue *row = &cache[(uint32_t)(j * stride)];
+            for (int k = j + 1; k < poly_count; k++) {
+                if (row[k].value > best.value) best = {row[k].value, j, k, row[k].ea, row[k].eb};
+            }
+        }
+        if (best.value <= 0) break;
+
+        uint32_t pa_start = (uint32_t)(best.pa * nvp);
+        uint32_t pb_start = (uint32_t)(best.pb * nvp);
+        merge_poly_vertices(polys, pa_start, pb_start, best.ea, best.eb, temp_poly_start, nvp);
+
+        for (int m = 0; m < nvp; m++) polys[pb_start + (uint32_t)m] = polys[(uint32_t)((poly_count - 1) * nvp + m)];
+        poly_count--;
+
+        update_merge_values(polys, poly_count, best.pa, vertices, nvp, cache.data, stride);
+        if (best.pb < poly_count) update_merge_values(polys, poly_count, best.pb, vertices, nvp, cache.data, stride);
+    }
+}
+
 static void set_poly(Array<int> &polys, int index, int nvp, int value) {
     uint32_t end = (uint32_t)((index + 1) * nvp);
     if (polys.length < end) polys.resize(end, MESH_NULL_IDX);
@@ -668,6 +711,7 @@ PolyMesh build_poly_mesh(BuildContext &context, const ContourSet &contour_set, i
     Array<uint32_t> indices = {};
     Array<int> triangles = {};
     Array<int> polys = {};
+    Array<PolyMergeValue> merge_cache = {};
     indices.resize((uint32_t)max_vertices_per_contour, 0);
     triangles.resize((uint32_t)(max_vertices_per_contour * 3), 0);
     polys.resize((uint32_t)((max_vertices_per_contour + 1) * nvp), MESH_NULL_IDX);
@@ -708,7 +752,9 @@ PolyMesh build_poly_mesh(BuildContext &context, const ContourSet &contour_set, i
 
         if (poly_count == 0) continue;
 
-        if (nvp > 3) {
+        if (nvp > 3 && poly_count <= MAX_CACHED_MERGE_POLYS) {
+            merge_polys_with_cache(polys.data, poly_count, temp_poly_start, mesh.vertices.data, nvp, merge_cache);
+        } else if (nvp > 3) {
             while (true) {
                 BestMerge best = find_best_merge(polys.data, poly_count, mesh.vertices.data, nvp);
                 if (best.value <= 0) break;
@@ -751,6 +797,7 @@ PolyMesh build_poly_mesh(BuildContext &context, const ContourSet &contour_set, i
     indices.release();
     triangles.release();
     polys.release();
+    merge_cache.release();
     return mesh;
 }
 

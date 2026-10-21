@@ -8,16 +8,17 @@ const { values: args } = parseArgs({
         navcat: { type: 'string' },
         roam: { type: 'string' },
         filter: { type: 'string' },
+        fixture: { type: 'string' },
     },
 });
 
 if (!args.navcat) {
-    console.error('usage: node bench.mjs --navcat <navcat checkout> [--roam <roam_bench binary>] [--filter <name>]');
+    console.error('usage: node bench.mjs --navcat <navcat checkout> [--roam <roam_bench binary>] [--filter <name>] [--fixture <fixture.json>]');
     process.exit(1);
 }
 
 const navcatDir = resolve(args.navcat);
-const fixturePath = join(navcatDir, 'bench/fixtures/nav-test.json');
+const fixturePath = args.fixture ? resolve(args.fixture) : join(navcatDir, 'bench/fixtures/nav-test.json');
 const navcat = await import(join(navcatDir, 'dist/index.js'));
 const blocks = await import(join(navcatDir, 'dist/blocks.js'));
 

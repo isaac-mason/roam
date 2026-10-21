@@ -103,6 +103,11 @@ static void walk_contour(BuildContext &context, int x, int y, uint32_t i, const 
     int current_y = y;
     uint32_t current_i = i;
 
+    uint32_t checkpoint_i = current_i;
+    int checkpoint_direction = direction;
+    int steps_since_checkpoint = 0;
+    int checkpoint_interval = 1;
+
     while (++iteration < MAX_CONTOUR_WALK_ITERATIONS) {
         const CompactHeightfieldSpan &s = chf.spans[current_i];
         if (flags[current_i] & (1 << direction)) {
@@ -135,6 +140,11 @@ static void walk_contour(BuildContext &context, int x, int y, uint32_t i, const 
 
             flags[current_i] &= ~(1 << direction);
             direction = (direction + 1) & 0x3;
+
+            checkpoint_i = current_i;
+            checkpoint_direction = direction;
+            steps_since_checkpoint = 0;
+            checkpoint_interval = 1;
         } else {
             if (get_con(s, direction) == NOT_CONNECTED) {
                 build_context::warn(context, "walkContour: encountered unexpected disconnected neighbour at (%d, %d)", current_x, current_y);
@@ -145,6 +155,14 @@ static void walk_contour(BuildContext &context, int x, int y, uint32_t i, const 
             current_y += get_dir_offset_y(direction);
             current_i = ni;
             direction = (direction + 3) & 0x3;
+
+            if (current_i == checkpoint_i && direction == checkpoint_direction) break;
+            if (++steps_since_checkpoint == checkpoint_interval) {
+                checkpoint_i = current_i;
+                checkpoint_direction = direction;
+                steps_since_checkpoint = 0;
+                checkpoint_interval *= 2;
+            }
         }
 
         if (start_i == current_i && start_direction == direction) break;

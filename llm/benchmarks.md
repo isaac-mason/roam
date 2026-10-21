@@ -78,3 +78,33 @@ Change: in the last row of a triangle and the last cell of a row, the clipped-of
 |---|---:|---:|
 | rasterize triangles | 1.187 | 1.066 |
 | generate solo nav mesh | 3.287 | 3.195 |
+
+## Perf round 4: large levels (2026-10-21)
+
+nav-test is a 1,612-triangle, 3 ms build, too small to show scaling problems. `tools/navcat-bench/glb_to_fixture.py` flattens a `.glb` into navcat's bench fixture format (scene node transforms, positions merged like `getPositionsAndIndices`; it reproduces navcat's nav-test fixture to within its JSON rounding). Fixtures go in `build/bench-fixtures/`, never committed. Both `roam_bench --fixture` and `bench.mjs --fixture` take them.
+
+```sh
+python3 -I tools/navcat-bench/glb_to_fixture.py demos/assets/game-level.glb build/bench-fixtures/game-level.json
+node tools/navcat-bench/bench.mjs --navcat ../navcat --roam build/release/roam_bench --fixture build/bench-fixtures/game-level.json
+```
+
+Starting point (median ms): roam stays 3-5x faster than navcat, but two stages blow up at scale, in navcat too.
+
+| level | triangles | navcat solo | roam solo | roam contours | roam poly mesh |
+|---|---:|---:|---:|---:|---:|
+| game-level | 71,399 | 180.5 | 52.3 | 17.2 | 2.6 |
+| lowpoly FPS map | 58,758 | 303.1 | 66.8 | 2.4 | 22.7 |
+
+**Contours: walks stuck in a cycle.** On game-level, 124 of 512 contour walks ran to the 40,000-iteration cap (5M steps, all in region 14, which also logs "Multiple outlines": the watershed overlap navcat's comments warn about in narrow spiral corridors). The walk emits its points, then circles cells whose flags are already cleared and never returns to its start. Flags only change on emission, so a repeated (span, direction) state with no emission in between is a cycle that can never emit or terminate. `walk_contour` detects it with Brent's algorithm (a checkpoint reset on every emission, doubling interval) and stops there, producing the same points as running to the cap. game-level contours: 17.2 to 1.8 ms. The same change for navcat is `llm/navcat-contour-walk-cycle.patch` (navcat game-level contours: 63 to 7 ms).
+
+**Poly mesh: cubic merging.** `find_best_merge` re-evaluated every polygon pair after every merge: O(p^3) per contour, and one FPS map contour triangulates into 159 triangles (merging took 27.4 of the build's poly mesh time). A merge value depends only on its two polygons, and a merge only changes slot `pa` (merged) and `pb` (receives the last polygon), so `merge_polys_with_cache` keeps every pair's value and recomputes only pairs touching those two slots, scanning in the original order with the original strict `>` so it picks the same merge. Contours over 512 triangles fall back to the old search, since the cache is quadratic. FPS map poly mesh: 22.7 to 4.2 ms.
+
+Both are verified bit-identical beyond the parity tests: a hash of every contour, poly mesh and detail mesh on game-level, the FPS map and nav-test matches the previous build exactly.
+
+| level | solo before | solo after | tiled |
+|---|---:|---:|---:|
+| game-level | 52.3 | 34.0 | 91.3 |
+| lowpoly FPS map | 66.8 | 46.7 | 93.1 |
+| nav-test | 3.36 | 3.40 | 5.37 |
+
+Tiled builds are now about 2-2.7x the solo build on the big levels and are the next thing to look at.
