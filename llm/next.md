@@ -21,7 +21,7 @@ A working checklist. Tick items as they land, and record findings and numbers in
 - [x] Tests on doctest.
 - [x] Port navcat's remaining unit tests: heightfield (42), compact heightfield (31), chunky tri mesh (14), path corridor (13), node and nav mesh API (4). All pass; no library discrepancies found. 216 tests in all.
 - [ ] Robustness fuzzing: stale refs, NaN, zero-size buffers, tile and off-mesh churn with link invariants, degenerate generation input.
-- [ ] Saving and loading: Detour-aligned binary format, `save_tile` / `load_tile` plus a nav mesh file that restores refs. Design doc first.
+- [x] Saving and loading: `nav_mesh_io` with Detour-shaped tile blobs and a full nav mesh snapshot (see `llm/save-load.md`).
 - [x] Decided: generation memory (not keeping intermediates) is user code.
 
 ## Performance

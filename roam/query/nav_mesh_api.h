@@ -133,7 +133,8 @@ uint32_t gather_poly_vertices(const NavMeshTile &tile, const NavMeshPoly &poly, 
 void release(PolyVertices &vertices);
 
 void get_poly_height(GetPolyHeightResult &out, const NavMeshTile &tile, const NavMeshPoly &poly, int poly_index, Vec3 position);
-void get_closest_point_on_detail_edges(GetClosestPointOnDetailEdgesResult &out, const NavMeshTile &tile, const NavMeshPoly &poly, int poly_index, Vec3 position,
+void get_closest_point_on_detail_edges(GetClosestPointOnDetailEdgesResult &out, const NavMeshTile &tile, const NavMeshPoly &poly, int poly_index,
+                                       Vec3 position,
                                                             bool only_boundary);
 void get_closest_point_on_poly(GetClosestPointOnPolyResult &out, const NavMesh &nav_mesh, NodeRef node_ref, Vec3 position);
 void get_closest_point_on_poly_boundary(GetClosestPointOnPolyBoundaryResult &out, const NavMesh &nav_mesh, NodeRef node_ref, Vec3 point);
@@ -146,6 +147,10 @@ void query_polygons(QueryPolygonsResult &out, const NavMesh &nav_mesh, Box3 boun
 uint32_t get_max_node_count(const NavMesh &nav_mesh);
 
 NavMeshTile build_tile(const NavMeshTileParams &params);
+void release(NavMeshTile &tile);
+void build_tile_portals(NavMeshTile &tile);
+uint64_t get_tile_position_key(int x, int y, int layer);
+uint64_t get_tile_column_key(int x, int y);
 uint32_t add_tile(NavMesh &nav_mesh, NavMeshTile tile);
 bool remove_tile(NavMesh &nav_mesh, int x, int y, int layer);
 

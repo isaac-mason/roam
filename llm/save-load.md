@@ -1,12 +1,12 @@
 # Saving and loading nav meshes
 
-Draft design, 2026-10-21. Nothing here is built yet.
+Design, 2026-10-21. Built in `roam/query/nav_mesh_io.{h,cpp}`, tested in `tests/query/nav_mesh_io.test.cpp`.
 
 ## Goals
 
 - Bake a nav mesh offline and load it at runtime, or send it over a network.
 - Save and load single tiles, for streaming and for caching rebuilt tiles.
-- After loading a saved nav mesh, every node ref that was valid before saving is valid again and points at the same poly or off-mesh connection, as with navcat's `JSON.stringify` / `JSON.parse` round trip.
+- A saved nav mesh loads back as the same nav mesh, as with navcat's `JSON.stringify` / `JSON.parse` round trip: every ref that was valid is valid again, queries give the same results (link order and tile column order decide exact-cost ties, so they are kept), and the refs and ids handed out next are the same ones the original would have handed out.
 - Malformed or hostile bytes fail with an error. They never crash, assert or read out of bounds.
 - No file I/O in roam: everything is byte buffers.
 
@@ -17,14 +17,14 @@ Not goals: a format navcat can read, or Detour binary compatibility. The format 
 - A tile is one blob from `dtCreateNavMeshData`: a header (magic, version, tile x, y and layer, counts, walkable settings, bounds, BV quantization factor), then sections for vertices, polys, links, detail meshes, detail vertices, detail triangles, the BV tree and off-mesh connections, each 4-byte aligned. Links are reserved space, filled in by `addTile`.
 - The sample's mesh file (`MSET`) is a header (magic, version, tile count, `dtNavMeshParams`) followed by each tile's ref, data size and blob. Loading calls `addTile(data, size, flags, tileRef)`, and passing the old tile ref keeps poly refs the same.
 
-roam follows the same split: a self-contained tile blob, and a mesh file that is the mesh's settings plus tile blobs plus what's needed to give everything its old refs back.
+roam follows the same split for tiles: a self-contained tile blob that `add_tile` links up. The nav mesh file goes further than Detour's and is a full snapshot (nodes, links, tiles, off-mesh connections, column order, sequence counters, index pools), so a reload is indistinguishable from the original.
 
 ## Encoding rules
 
 - Little-endian, written and read field by field with explicit widths. Structs are never `memcpy`'d, so padding, alignment and host ABI don't matter, and the encoder is the same on every platform.
 - Floats are written as their IEEE 754 bits, so a round trip is bit-exact.
 - Every blob starts with a 4-byte magic and a `uint32` version. Readers reject unknown versions instead of guessing.
-- Sections are 4-byte aligned, so a reader on a little-endian host could later read sections in place.
+- No padding depends on where a blob sits: every tile section is a whole number of 4-byte words from the start of the tile (polys are 12 bytes with two zero bytes after the area), so a tile embedded in a nav mesh file encodes exactly like a standalone one. Nothing is read in place.
 
 ## Tile blob
 
@@ -48,7 +48,7 @@ Sections, in order:
 | section | per element |
 |---|---|
 | vertices | f32 x 3 |
-| polys | vertex base u32, vertex count u8, area u8, flags u32 |
+| polys | vertex base u32, vertex count u8, area u8, zero u16, flags u32 |
 | poly vertices | u32 |
 | poly neighbours | i32 |
 | detail meshes | vertex base, triangle base, vertex count, triangle count: u32 x 4 |
@@ -60,17 +60,22 @@ Not saved: links and `poly_nodes`, which `add_tile` rebuilds, and the portal ind
 
 ## Nav mesh file
 
+Magic `RMNM`, version, then the nav mesh state, each array in index order with an `allocated` byte per slot and the fields only for allocated slots:
+
 | part | contents |
 |---|---|
-| header | magic `RMNM`, version, origin (f32 x 3), tile width, tile height, tile count, off-mesh connection count |
-| per tile | tile id u32, tile sequence u32, node index per poly (u32 x poly count), blob size u32, tile blob |
-| per off-mesh connection | id u32, sequence u32, start, end, radius, direction, flags, area, and its off-mesh node index if it was attached |
-| sequence counters | count, then (tile position key u64, counter u32) pairs |
+| settings | origin (f32 x 3), tile width, tile height |
+| nodes | count; per allocated node: type, area, ref, first link, flags, tile id, poly index, off-mesh connection id |
+| links | count; per link: to node ref, next, edge, side, bmin, bmax (free links included, so link indices stay put) |
+| tiles | count; per allocated tile: sequence, blob size, tile blob, node index per poly |
+| off-mesh connections | count; per allocated connection: sequence, start, end, radius, direction, flags, area |
+| attachments | count; per attached one: off-mesh node, start poly node, end poly node |
+| tile columns | count; per column (sorted by key): key, tile ids in order |
+| sequence counters | count; (tile position key, counter) pairs sorted by key |
 | off-mesh sequence counter | u32 |
+| index pools | node, tile, off-mesh connection and link pools: counter, then the free list in order |
 
-A node ref is type, node index and sequence. Restoring each tile's id, sequence and node indices, each off-mesh connection's id, sequence and node, and the sequence counters makes every saved ref valid again. Refs that were already stale before saving stay stale, because the counters carry on from where they were.
-
-Loading creates an empty nav mesh, marks the saved tile ids, node indices and off-mesh ids as used in their index pools (everything else goes on the free lists in ascending order), adds each tile at its saved id and node indices, which rebuilds the links, then reattaches the off-mesh connections. Refs handed out after loading can differ from what the original mesh would have handed out next, because the free lists aren't saved in their original order. Nothing a user held before saving depends on that.
+Map contents are written sorted by key, so saving a loaded nav mesh gives the same bytes. Derived data is rebuilt on load: the tile position map and each tile's portal index.
 
 ## API sketch
 
@@ -99,15 +104,21 @@ LoadStatus load_tile(NavMeshTile &tile, Span<const uint8_t> bytes);
 LoadStatus load_nav_mesh(NavMesh &nav_mesh, Span<const uint8_t> bytes);
 ```
 
+A loaded tile that never gets added is freed with `nav_mesh_api::release(NavMeshTile &)`, which also covers `build_tile`'s result. Following Detour, the status is the return value and the data goes out through a parameter.
+
 - Saving follows the query buffer pattern: call with an empty span to get `byte_total`, size a buffer, call again.
 - `load_tile` fills a tile ready for `add_tile`, like `build_tile`'s result. `load_nav_mesh` fills an empty nav mesh. Both own what they allocate, and on failure leave nothing allocated.
 
 ## Validation on load
 
-Every count is checked against the remaining bytes before anything is allocated, and every index is checked against what it indexes: poly vertex indices against the vertex count, poly vertex ranges against the poly vertex count, neighbour indices against the poly count, detail ranges against the detail counts, detail triangle vertices against their mesh's vertex count, BV node poly indices against the poly count, tile ids, node indices and off-mesh ids against duplicates and the format's limits. Vertex counts per poly are checked against `MAX_POLY_VERTICES`. Floats are not required to be finite, since the mesh may legitimately contain any value the generator produced.
+Reads never go past the end, and every count is checked against the remaining bytes before anything is allocated. A tile is rejected unless every poly has 3 to `MAX_POLY_VERTICES` vertices within the poly vertex array, every poly vertex index is in range, neighbour entries are 0, an in-tile poly or an external flag with a direction below 8, detail meshes are absent or one per poly with ranges in bounds and triangle corners below the poly's vertex count plus its detail vertex count, and BV leaves point at polys.
 
-## Open questions
+A nav mesh is rejected unless every allocated node's ref matches its index, type and owner's sequence, and its owner points back at it (the tile's poly node, or the off-mesh connection's attachment); every link list is in bounds, acyclic and unshared, each link points at an allocated node with a matching ref, and poly-to-poly links name an edge the poly has; attachments point at matching nodes; every allocated tile is in exactly one column, the right one, and positions are unique; and each index pool's free list is exactly the unused slots, with counters matching the array lengths. On any failure the partially read nav mesh or tile is released and nothing leaks.
 
-1. `load_tile(NavMeshTile &, bytes)` returning a status, or a `LoadTileResult {status, tile}` returned by value like `build_tile`? The first keeps results from owning memory; the second reads more like `build_tile`.
-2. Should tile blobs carry a user field (Detour's `userId`), for games that tag tiles?
-3. Compression is left to the user (the blob is plain bytes); fine?
+Fuzzing in the tests (every truncation, thousands of random bit flips) checks that loading never crashes and that anything accepted is safe to query and edit.
+
+## Decisions
+
+- Status return with an out parameter for loading, as Detour does.
+- No per-tile user field for now.
+- Compression is left to the user.

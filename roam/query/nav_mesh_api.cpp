@@ -25,7 +25,7 @@ QueryFilter create_default_query_filter() { return DEFAULT_QUERY_FILTER; }
 
 NavMesh create_nav_mesh() { return {}; }
 
-static void release_tile_data(NavMeshTile &tile) {
+void release(NavMeshTile &tile) {
     tile.vertices.release();
     tile.polys.release();
     tile.poly_vertices.release();
@@ -39,7 +39,7 @@ static void release_tile_data(NavMeshTile &tile) {
 }
 
 void release(NavMesh &nav_mesh) {
-    for (NavMeshTile &tile : nav_mesh.tiles) release_tile_data(tile);
+    for (NavMeshTile &tile : nav_mesh.tiles) release(tile);
     nav_mesh.tiles.release();
     nav_mesh.nodes.release();
     nav_mesh.links.release();
@@ -97,16 +97,18 @@ bool is_valid_node_ref(const NavMesh &nav_mesh, NodeRef node_ref) {
     return is_off_mesh_connection_connected(nav_mesh, connection->id);
 }
 
-static uint64_t tile_position_key(int x, int y, int layer) {
+uint64_t get_tile_position_key(int x, int y, int layer) {
     return ((uint64_t)((uint32_t)x & 0xffffff) << 40) | ((uint64_t)((uint32_t)y & 0xffffff) << 16) | ((uint64_t)layer & 0xffff);
 }
 
-static uint64_t tile_column_key(int x, int y) { return ((uint64_t)(uint32_t)x << 32) | (uint64_t)(uint32_t)y; }
+uint64_t get_tile_column_key(int x, int y) { return ((uint64_t)(uint32_t)x << 32) | (uint64_t)(uint32_t)y; }
 
-static const Array<uint32_t> *tile_column(const NavMesh &nav_mesh, int x, int y) { return nav_mesh.tile_column_to_tile_ids.get(tile_column_key(x, y)); }
+static const Array<uint32_t> *tile_column(const NavMesh &nav_mesh, int x, int y) {
+    return nav_mesh.tile_column_to_tile_ids.get(get_tile_column_key(x, y));
+}
 
 const NavMeshTile *get_tile_at(const NavMesh &nav_mesh, int x, int y, int layer) {
-    const uint32_t *tile_id = nav_mesh.tile_position_to_tile_id.get(tile_position_key(x, y, layer));
+    const uint32_t *tile_id = nav_mesh.tile_position_to_tile_id.get(get_tile_position_key(x, y, layer));
     if (!tile_id) return nullptr;
     return tile_by_id(nav_mesh, (int32_t)*tile_id);
 }
@@ -174,8 +176,8 @@ static Vec3 detail_triangle_vertex(const NavMeshTile &tile, const NavMeshPoly &p
 
 static int get_detail_tri_edge_flags(int triangle_flags, int edge_index) { return (triangle_flags >> (edge_index * 2)) & 0x3; }
 
-void get_closest_point_on_detail_edges(GetClosestPointOnDetailEdgesResult &out, const NavMeshTile &tile, const NavMeshPoly &poly, int poly_index, Vec3 position,
-                                                            bool only_boundary) {
+void get_closest_point_on_detail_edges(GetClosestPointOnDetailEdgesResult &out, const NavMeshTile &tile, const NavMeshPoly &poly, int poly_index,
+                                       Vec3 position, bool only_boundary) {
     float dmin = FLT_MAX;
     float tmin = 0;
     Vec3 pmin = {0, 0, 0};
@@ -635,7 +637,7 @@ struct ConnectingPoly {
     float umax;
 };
 
-static void build_tile_portals(NavMeshTile &tile) {
+void build_tile_portals(NavMeshTile &tile) {
     uint32_t counts[8] = {};
     for (const NavMeshPoly &poly : tile.polys) {
         for (uint32_t j = 0; j < poly.vertex_count; j++) {
@@ -874,7 +876,7 @@ static void connect_with_column(NavMesh &nav_mesh, uint32_t tile_id) {
 }
 
 uint32_t add_tile(NavMesh &nav_mesh, NavMeshTile tile) {
-    uint64_t position_key = tile_position_key(tile.tile_x, tile.tile_y, tile.tile_layer);
+    uint64_t position_key = get_tile_position_key(tile.tile_x, tile.tile_y, tile.tile_layer);
 
     if (nav_mesh.tile_position_to_tile_id.has(position_key)) remove_tile(nav_mesh, tile.tile_x, tile.tile_y, tile.tile_layer);
 
@@ -896,7 +898,7 @@ uint32_t add_tile(NavMesh &nav_mesh, NavMeshTile tile) {
 
     nav_mesh.tile_position_to_tile_id.set(position_key, id);
 
-    uint64_t column_key = tile_column_key(tile.tile_x, tile.tile_y);
+    uint64_t column_key = get_tile_column_key(tile.tile_x, tile.tile_y);
     Array<uint32_t> *column = nav_mesh.tile_column_to_tile_ids.get(column_key);
     if (!column) column = &nav_mesh.tile_column_to_tile_ids.set(column_key, {});
     column->push(id);
@@ -933,7 +935,7 @@ uint32_t add_tile(NavMesh &nav_mesh, NavMeshTile tile) {
 }
 
 bool remove_tile(NavMesh &nav_mesh, int x, int y, int layer) {
-    uint64_t position_key = tile_position_key(x, y, layer);
+    uint64_t position_key = get_tile_position_key(x, y, layer);
     const uint32_t *found = nav_mesh.tile_position_to_tile_id.get(position_key);
     if (!found) return false;
     uint32_t tile_id = *found;
@@ -965,12 +967,12 @@ bool remove_tile(NavMesh &nav_mesh, int x, int y, int layer) {
 
     for (uint32_t node_index : tile.poly_nodes) release_node(nav_mesh, node_index);
 
-    release_tile_data(tile);
+    release(tile);
     tile = {};
 
     nav_mesh.tile_position_to_tile_id.remove(position_key);
 
-    uint64_t column_key = tile_column_key(x, y);
+    uint64_t column_key = get_tile_column_key(x, y);
     Array<uint32_t> *tile_ids = nav_mesh.tile_column_to_tile_ids.get(column_key);
     if (tile_ids) {
         for (uint32_t i = 0; i < tile_ids->length; i++) {
