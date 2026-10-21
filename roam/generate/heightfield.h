@@ -41,7 +41,7 @@ GridSize calculate_grid_size(Box3 bounds, float cell_size);
 Heightfield create(int width, int height, Box3 bounds, float cell_size, float cell_height);
 void release(Heightfield &heightfield);
 
-bool add_heightfield_span(Heightfield &heightfield, int x, int z, int min, int max, uint8_t area_id, int flag_merge_threshold);
+bool add_heightfield_span(Heightfield &heightfield, int x, int z, int min, int max, uint8_t area_id, int flag_merge_threshold = 1);
 
 bool rasterize_triangles(BuildContext &context, Heightfield &heightfield, const InputTriangleMesh &mesh, Span<const uint8_t> tri_area_ids,
                          int flag_merge_threshold = 1);
@@ -50,11 +50,11 @@ void filter_low_hanging_walkable_obstacles(Heightfield &heightfield, int walkabl
 void filter_ledge_spans(Heightfield &heightfield, int walkable_height, int walkable_climb);
 void filter_walkable_low_height_spans(Heightfield &heightfield, int walkable_height);
 
-void rasterize_sphere(Heightfield &heightfield, Vec3 center, float radius, uint8_t area, int flag_merge_threshold);
-void rasterize_capsule(Heightfield &heightfield, Vec3 start, Vec3 end, float radius, uint8_t area, int flag_merge_threshold);
-void rasterize_cylinder(Heightfield &heightfield, Vec3 start, Vec3 end, float radius, uint8_t area, int flag_merge_threshold);
-void rasterize_box(Heightfield &heightfield, Vec3 center, const Vec3 half_edges[3], uint8_t area, int flag_merge_threshold);
-void rasterize_convex(Heightfield &heightfield, const InputTriangleMesh &mesh, uint8_t area, int flag_merge_threshold);
+void rasterize_sphere(Heightfield &heightfield, Vec3 center, float radius, uint8_t area, int flag_merge_threshold = 1);
+void rasterize_capsule(Heightfield &heightfield, Vec3 start, Vec3 end, float radius, uint8_t area, int flag_merge_threshold = 1);
+void rasterize_cylinder(Heightfield &heightfield, Vec3 start, Vec3 end, float radius, uint8_t area, int flag_merge_threshold = 1);
+void rasterize_box(Heightfield &heightfield, Vec3 center, const Vec3 half_edges[3], uint8_t area, int flag_merge_threshold = 1);
+void rasterize_convex(Heightfield &heightfield, const InputTriangleMesh &mesh, uint8_t area, int flag_merge_threshold = 1);
 
 }
 

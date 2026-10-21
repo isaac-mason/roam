@@ -39,7 +39,8 @@ static void relax_distance(const CompactHeightfield &compact_heightfield, uint16
     const CompactHeightfieldSpan &a_span = compact_heightfield.spans.data[ai];
     if (get_con(a_span, diagonal_direction) == NOT_CONNECTED) return;
 
-    size_t aai = neighbor_span_index(compact_heightfield, x + common::DIR_OFFSETS[direction][0], y + common::DIR_OFFSETS[direction][1], diagonal_direction, a_span);
+    size_t aai = neighbor_span_index(compact_heightfield, x + common::DIR_OFFSETS[direction][0], y + common::DIR_OFFSETS[direction][1],
+                                     diagonal_direction, a_span);
     if (distances[aai] + 3 < distances[i]) distances[i] = (uint16_t)(distances[aai] + 3);
 }
 
@@ -129,7 +130,8 @@ static void box_blur(const CompactHeightfield &compact_heightfield, int threshol
                     const CompactHeightfieldSpan &a_span = spans[ai];
                     int direction_2 = (direction + 1) & 0x3;
                     if (get_con(a_span, direction_2) != NOT_CONNECTED) {
-                        d += source_distances[neighbor_span_index(compact_heightfield, x + common::DIR_OFFSETS[direction][0], y + common::DIR_OFFSETS[direction][1],
+                        d += source_distances[neighbor_span_index(compact_heightfield, x + common::DIR_OFFSETS[direction][0],
+                                                                  y + common::DIR_OFFSETS[direction][1],
                                                                 direction_2, a_span)];
                     } else {
                         d += cd;
@@ -662,7 +664,8 @@ static bool merge_and_filter_regions(BuildContext &context, int min_region_area,
                     }
                 }
 
-                if (neighbor_direction != -1) walk_contour(context, x, y, i, neighbor_direction, compact_heightfield, source_regions, region.connections);
+                if (neighbor_direction != -1) walk_contour(context, x, y, i, neighbor_direction, compact_heightfield, source_regions,
+                                                           region.connections);
             }
         }
     }

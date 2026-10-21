@@ -38,7 +38,7 @@ Generation:
 - [x] **Borrowed arrays that look owned.** `NavMeshTileParams` fields are `Span<const T>`; tests and the pruning demo own their tile arrays separately. No params helper: with spans the designated initializers read fine. Was: `NavMeshTileParams` holds `Array<T>` fields that it doesn't own (`build_tile` copies them). Make them `Span<const T>`. Also add one helper that builds tile params from tile polys and detail mesh; the solo and tiled generators and the bench each write the 15-field copy by hand.
 - [x] **Internal constants in `roam::`.** The grid direction helpers, `AXIS_*`, `MULTIPLE_REGS` and `MAX_LAYERS` live in `roam::common::`; constants that describe values in public structs stay in `roam::`. Was: `common.h` exports `AXIS_X`, `BORDER_VERTEX`, `AREA_BORDER`, `MULTIPLE_REGS`, `CONTOUR_REG_MASK`, `MAX_LAYERS` and the direction helpers next to the public `NULL_AREA`, `WALKABLE_AREA`, `MESH_NULL_IDX`.
 - [ ] **Later phase: typed records** for the flat int arrays (`PolyMesh::vertices` stride 3, `polys` stride 2 x nvp, detail `meshes` and `triangles` stride 4). Bigger change; parity tests compare these arrays.
-- [ ] Small: `flag_merge_threshold` defaults to 1 on `rasterize_triangles` but is required on the shape rasterizers.
+- [x] Small: every span-adding function now defaults `flag_merge_threshold` to 1. Was: `flag_merge_threshold` defaults to 1 on `rasterize_triangles` but is required on the shape rasterizers.
 
 Query:
 
