@@ -464,7 +464,7 @@ static void draw_nav_mesh_tile(NavMeshTileDrawing &drawing, const NavMeshTile &t
         Vec3 color = area_to_color(poly.area, 0.4f);
 
         for (uint32_t j = 0; j < detail.triangles_count; j++) {
-            const int *t = &tile.detail_triangles[(detail.triangles_base + j) * 4];
+            const uint8_t *t = &tile.detail_triangles[(detail.triangles_base + j) * 4];
             uint32_t base = drawing.triangles.positions.length / 3;
             for (int k = 0; k < 3; k++) {
                 push3(drawing.triangles.positions, detail_vertex(tile, poly, detail, (uint32_t)t[k]));
@@ -551,7 +551,7 @@ DebugPrimitives create_nav_mesh_poly_helper(const NavMesh &nav_mesh, NodeRef nod
     } else {
         const NavMeshPolyDetail &detail = tile.detail_meshes[(uint32_t)node.poly_index];
         for (uint32_t i = 0; i < detail.triangles_count; ++i) {
-            const int *t = &tile.detail_triangles[(detail.triangles_base + i) * 4];
+            const uint8_t *t = &tile.detail_triangles[(detail.triangles_base + i) * 4];
             for (int j = 0; j < 3; ++j) {
                 push3(triangles.positions, detail_vertex(tile, poly, detail, (uint32_t)t[j]));
                 push3(triangles.colors, base_color);

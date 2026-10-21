@@ -107,7 +107,7 @@ struct NavMeshTileParams {
     Array<int> poly_neis;
     Array<NavMeshPolyDetail> detail_meshes;
     Array<float> detail_vertices;
-    Array<int> detail_triangles;
+    Array<uint8_t> detail_triangles;
     int tile_x;
     int tile_y;
     int tile_layer;
@@ -132,7 +132,7 @@ struct NavMeshTile {
     Array<int> poly_neis;
     Array<NavMeshPolyDetail> detail_meshes;
     Array<float> detail_vertices;
-    Array<int> detail_triangles;
+    Array<uint8_t> detail_triangles;
     Array<uint32_t> poly_nodes;
     NavMeshTileBvTree bv_tree;
     float cell_size;

@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <stdint.h>
 
+#include "roam/util/array.h"
+
 struct DetailMeshRange {
     int vertex_base;
     int vertex_count;
@@ -50,4 +52,14 @@ inline DetailMeshMatch compare_detail_mesh(DetailMeshRange actual, const float *
         }
     }
     return DETAIL_MESH_SAME;
+}
+
+inline DetailMeshMatch compare_detail_mesh(DetailMeshRange actual, const float *actual_vertices, const uint8_t *actual_triangles, DetailMeshRange expected,
+                                           const double *expected_vertices, const int32_t *expected_triangles) {
+    roam::Array<int> widened = {};
+    for (int i = 0; i < actual.triangle_count * 4; i++) widened.push(actual_triangles[actual.triangle_base * 4 + i]);
+    DetailMeshRange local = {actual.vertex_base, actual.vertex_count, 0, actual.triangle_count};
+    DetailMeshMatch match = compare_detail_mesh(local, actual_vertices, widened.data, expected, expected_vertices, expected_triangles);
+    widened.release();
+    return match;
 }

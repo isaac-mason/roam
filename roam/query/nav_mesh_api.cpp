@@ -213,7 +213,7 @@ ClosestPointOnDetailEdges get_closest_point_on_detail_edges(const NavMeshTile &t
 
         for (uint32_t i = 0; i < detail_mesh.triangles_count; i++) {
             uint32_t t = (detail_mesh.triangles_base + i) * 4;
-            const int *triangle = &tile.detail_triangles[t];
+            const uint8_t *triangle = &tile.detail_triangles[t];
 
             if (only_boundary) {
                 const int ANY_BOUNDARY_EDGE = (DETAIL_EDGE_BOUNDARY << 0) | (DETAIL_EDGE_BOUNDARY << 2) | (DETAIL_EDGE_BOUNDARY << 4);
@@ -245,7 +245,7 @@ static float get_detail_mesh_height(const NavMeshTile &tile, const NavMeshPoly &
     if ((uint32_t)poly_index < tile.detail_meshes.length) {
         const NavMeshPolyDetail &detail_mesh = tile.detail_meshes[(uint32_t)poly_index];
         for (uint32_t j = 0; j < detail_mesh.triangles_count; ++j) {
-            const int *triangle = &tile.detail_triangles[(detail_mesh.triangles_base + j) * 4];
+            const uint8_t *triangle = &tile.detail_triangles[(detail_mesh.triangles_base + j) * 4];
             Vec3 a = detail_triangle_vertex(tile, poly, detail_mesh, triangle[0]);
             Vec3 b = detail_triangle_vertex(tile, poly, detail_mesh, triangle[1]);
             Vec3 c = detail_triangle_vertex(tile, poly, detail_mesh, triangle[2]);

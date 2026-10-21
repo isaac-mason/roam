@@ -19,7 +19,7 @@ struct NavMeshTilePolys {
 struct NavMeshTileDetailMesh {
     Array<NavMeshPolyDetail> detail_meshes;
     Array<float> detail_vertices;
-    Array<int> detail_triangles;
+    Array<uint8_t> detail_triangles;
 };
 
 struct ExternalPolygon {

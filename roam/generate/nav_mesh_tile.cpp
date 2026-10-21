@@ -68,11 +68,12 @@ NavMeshTileDetailMesh polys_to_tile_detail_mesh(const Array<NavMeshPoly> &polys)
         detail_mesh.detail_meshes.push({0, triangles_base, 0, vertex_count - 2});
 
         for (uint32_t j = 2; j < vertex_count; j++) {
+            ROAM_ASSERT(j <= 0xff);
             detail_mesh.detail_triangles.push(0);
-            detail_mesh.detail_triangles.push((int)j - 1);
-            detail_mesh.detail_triangles.push((int)j);
+            detail_mesh.detail_triangles.push((uint8_t)(j - 1));
+            detail_mesh.detail_triangles.push((uint8_t)j);
 
-            int edge_flags = 1 << 2;
+            uint8_t edge_flags = 1 << 2;
             if (j == 2) edge_flags |= 1 << 0;
             if (j == vertex_count - 1) edge_flags |= 1 << 4;
 
@@ -113,7 +114,11 @@ NavMeshTileDetailMesh poly_mesh_detail_to_tile_detail_mesh(const Array<NavMeshPo
         vertices_base += (uint32_t)additional_vertex_count;
     }
 
-    for (int value : poly_mesh_detail.triangles) detail_mesh.detail_triangles.push(value);
+    detail_mesh.detail_triangles.reserve(poly_mesh_detail.triangles.length);
+    for (int value : poly_mesh_detail.triangles) {
+        ROAM_ASSERT(value >= 0 && value <= 0xff);
+        detail_mesh.detail_triangles.push((uint8_t)value);
+    }
 
     return detail_mesh;
 }
