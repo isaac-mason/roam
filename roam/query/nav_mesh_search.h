@@ -172,6 +172,7 @@ void reindex_node_in_queue(SearchNodeQueue &queue, const SearchNodePool &pool, u
 void release(SearchNodeQueue &queue);
 
 void get_portal_points(GetPortalPointsResult &out, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref);
+void get_portal_points_unchecked(GetPortalPointsResult &out, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref);
 void get_edge_mid_point(GetEdgeMidPointResult &out, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref);
 
 void copy_last_node_path(FindNodePathResult &out, const SearchWorkspace &workspace, Span<NodeRef> path);

@@ -56,7 +56,7 @@ static uint32_t append_portals(const NavMesh &nav_mesh, int start_index, int end
         }
 
         GetPortalPointsResult portal;
-        nav_mesh_search::get_portal_points(portal, nav_mesh, from, to);
+        nav_mesh_search::get_portal_points_unchecked(portal, nav_mesh, from, to);
         if (!portal.success) break;
 
         geometry::IntersectSegSeg2dResult intersection = geometry::intersect_seg_seg_2d(start_position, end_position, portal.left, portal.right);
@@ -110,6 +110,8 @@ static FindStraightPathResult find_straight_path_in(const NavMesh &nav_mesh, Vec
     if (start_status != APPEND_VERTEX_IN_PROGRESS) return stopped(start_status, PARTIAL, path);
 
     int path_size = (int)path_node_count;
+    int valid_count = 0;
+    while (valid_count < path_size && nav_mesh_api::is_valid_node_ref(nav_mesh, path_node_refs[valid_count])) valid_count++;
 
     if (path_size > 1) {
         Vec3 portal_apex = closest_start_position;
@@ -134,8 +136,8 @@ static FindStraightPathResult find_straight_path_in(const NavMesh &nav_mesh, Vec
                 NodeRef to_ref = path_node_refs[i + 1];
                 to_type = node::get_node_ref_type(to_ref);
 
-                GetPortalPointsResult portal;
-                nav_mesh_search::get_portal_points(portal, nav_mesh, path_node_refs[i], to_ref);
+                GetPortalPointsResult portal = {};
+                if (i + 1 < valid_count) nav_mesh_search::get_portal_points_unchecked(portal, nav_mesh, path_node_refs[i], to_ref);
                 left = portal.left;
                 right = portal.right;
                 if (!portal.success) {

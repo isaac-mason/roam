@@ -1,71 +1,14 @@
 #include <math.h>
 #include <string.h>
 
-#include "roam/blocks/generators/generate_tiled_nav_mesh.h"
 #include "roam/query/find_path.h"
 #include "roam/query/nav_mesh_api.h"
 #include "roam/query/nav_mesh_io.h"
 #include "roam/query/nav_mesh_search.h"
-#include "roam/util/sort.h"
 #include "tests/harness/test.h"
+#include "tests/query/test_nav_meshes.h"
 
 using namespace roam;
-
-static NavMesh create_tiled_terrain() {
-    const int size = 24;
-    Array<float> positions = {};
-    Array<uint32_t> indices = {};
-    for (int z = 0; z <= size; z++) {
-        for (int x = 0; x <= size; x++) {
-            float height = 0.4f * sinf((float)x * 0.5f) * cosf((float)z * 0.4f);
-            positions.push((float)x);
-            positions.push(height);
-            positions.push((float)z);
-        }
-    }
-    for (int z = 0; z < size; z++) {
-        for (int x = 0; x < size; x++) {
-            if (x > 9 && x < 13 && z > 6 && z < 15) continue;
-            uint32_t a = (uint32_t)(z * (size + 1) + x);
-            uint32_t b = a + 1;
-            uint32_t c = a + (uint32_t)(size + 1);
-            uint32_t d = c + 1;
-            const uint32_t quad[] = {a, c, b, b, c, d};
-            for (uint32_t index : quad) indices.push(index);
-        }
-    }
-
-    const float cell_size = 0.2f;
-    const float cell_height = 0.2f;
-    TiledNavMeshOptions options = {
-        .cell_size = cell_size,
-        .cell_height = cell_height,
-        .tile_size_voxels = 32,
-        .tile_size_world = 32 * cell_size,
-        .walkable_radius_voxels = 1,
-        .walkable_radius_world = 0.2f,
-        .walkable_climb_voxels = 3,
-        .walkable_climb_world = 0.6f,
-        .walkable_height_voxels = 5,
-        .walkable_height_world = 1.0f,
-        .walkable_slope_angle_degrees = 45,
-        .border_size = 4,
-        .min_region_area = 8,
-        .merge_region_area = 20,
-        .max_simplification_error = 1.3f,
-        .max_edge_length = 12,
-        .max_vertices_per_poly = 6,
-        .detail_sample_distance = cell_size * 6,
-        .detail_sample_max_error = cell_height,
-    };
-    TiledNavMeshResult result = generate_tiled_nav_mesh::generate_tiled_nav_mesh({positions, indices}, options);
-    generate_tiled_nav_mesh::release(result.intermediates);
-    positions.release();
-    indices.release();
-
-    nav_mesh_api::add_off_mesh_connection(result.nav_mesh, {{2, 0, 2}, {20, 0, 20}, 0.5f, OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL, 1, 1});
-    return result.nav_mesh;
-}
 
 static Array<uint8_t> save_tile_bytes(const NavMeshTile &tile) {
     SaveResult size = {};
@@ -130,46 +73,6 @@ static uint64_t hash_links(const NavMesh &nav_mesh) {
         }
     }
     return hash;
-}
-
-static uint64_t poly_key(const NavMesh &nav_mesh, NodeRef ref) {
-    const NavMeshNode &node = nav_mesh_api::get_node_by_ref(nav_mesh, ref);
-    if (node.type != NODE_TYPE_POLY) return 0xffffffffffffffffull;
-    const NavMeshTile &tile = nav_mesh.tiles[(uint32_t)node.tile_id];
-    return ((uint64_t)(uint8_t)tile.tile_x << 56) | ((uint64_t)(uint8_t)tile.tile_y << 48) | ((uint64_t)(uint8_t)tile.tile_layer << 40) |
-           (uint64_t)(uint32_t)node.poly_index;
-}
-
-struct LinkKey {
-    uint64_t from;
-    uint64_t to;
-    uint32_t data;
-};
-
-static Array<LinkKey> link_keys(const NavMesh &nav_mesh) {
-    Array<LinkKey> keys = {};
-    for (const NavMeshNode &node : nav_mesh.nodes) {
-        if (!node.allocated || node.type != NODE_TYPE_POLY) continue;
-        for (int32_t l = node.first_link; l != NULL_LINK; l = nav_mesh.links[(uint32_t)l].next) {
-            const NavMeshLink &link = nav_mesh.links[(uint32_t)l];
-            uint32_t data = ((uint32_t)link.edge << 24) | ((uint32_t)link.side << 16) | ((uint32_t)link.bmin << 8) | link.bmax;
-            keys.push({poly_key(nav_mesh, node.ref), poly_key(nav_mesh, link.to_node_ref), data});
-        }
-    }
-    sort::stable(keys.data, keys.length, [](const LinkKey &a, const LinkKey &b) {
-        if (a.from != b.from) return a.from < b.from;
-        if (a.to != b.to) return a.to < b.to;
-        return a.data < b.data;
-    });
-    return keys;
-}
-
-static bool same_links(const Array<LinkKey> &a, const Array<LinkKey> &b) {
-    if (a.length != b.length) return false;
-    for (uint32_t i = 0; i < a.length; i++) {
-        if (a[i].from != b[i].from || a[i].to != b[i].to || a[i].data != b[i].data) return false;
-    }
-    return true;
 }
 
 static const Vec3 PATH_POINTS[] = {{1, 0, 1}, {23, 0, 23}, {5, 0, 20}, {20, 0, 3}, {11, 0, 4}, {11, 0, 18}, {2, 0, 12}};

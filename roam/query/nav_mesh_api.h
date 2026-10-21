@@ -102,7 +102,7 @@ inline const NavMeshNode &get_node_by_tile_and_poly(const NavMesh &nav_mesh, con
     return nav_mesh.nodes[tile.poly_nodes[(uint32_t)poly_index]];
 }
 
-bool is_valid_node_ref(const NavMesh &nav_mesh, NodeRef node_ref);
+bool is_valid_off_mesh_node_ref(const NavMesh &nav_mesh, NodeRef node_ref);
 
 const NavMeshTile *get_tile_at(const NavMesh &nav_mesh, int x, int y, int layer);
 Span<const uint32_t> get_tile_ids_at(const NavMesh &nav_mesh, int x, int y);
@@ -119,7 +119,7 @@ inline TileAndPoly get_tile_and_poly_by_ref(const NavMesh &nav_mesh, NodeRef ref
 
     if (node.tile_id < 0 || (uint32_t)node.tile_id >= nav_mesh.tiles.length) return result;
     const NavMeshTile &tile = nav_mesh.tiles[(uint32_t)node.tile_id];
-    if (!tile.allocated) return result;
+    if (!tile.allocated || tile.sequence != node::get_node_ref_sequence(ref)) return result;
     if (node.poly_index < 0 || (uint32_t)node.poly_index >= tile.polys.length) return result;
 
     result.success = true;
@@ -127,6 +127,11 @@ inline TileAndPoly get_tile_and_poly_by_ref(const NavMesh &nav_mesh, NodeRef ref
     result.poly = &tile.polys[(uint32_t)node.poly_index];
     result.poly_index = node.poly_index;
     return result;
+}
+
+inline bool is_valid_node_ref(const NavMesh &nav_mesh, NodeRef node_ref) {
+    if (node::get_node_ref_type(node_ref) == NODE_TYPE_POLY) return get_tile_and_poly_by_ref(nav_mesh, node_ref).success;
+    return is_valid_off_mesh_node_ref(nav_mesh, node_ref);
 }
 
 uint32_t gather_poly_vertices(const NavMeshTile &tile, const NavMeshPoly &poly, PolyVertices &vertices);

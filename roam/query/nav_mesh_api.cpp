@@ -7,6 +7,7 @@
 #include "roam/generate/poly_mesh_detail.h"
 #include "roam/geometry/geometry.h"
 #include "roam/query/bv_tree.h"
+#include "roam/util/sort.h"
 
 namespace roam {
 
@@ -75,25 +76,16 @@ static const OffMeshConnectionAttachment *attachment_by_id(const NavMesh &nav_me
     return attachment.attached ? &attachment : nullptr;
 }
 
-bool is_valid_node_ref(const NavMesh &nav_mesh, NodeRef node_ref) {
-    if (node_ref == INVALID_NODE_REF) return false;
+bool is_valid_off_mesh_node_ref(const NavMesh &nav_mesh, NodeRef node_ref) {
+    if (node_ref == INVALID_NODE_REF || node::get_node_ref_type(node_ref) != NODE_TYPE_OFFMESH) return false;
 
     uint32_t node_index = node::get_node_ref_index(node_ref);
     if (node_index >= nav_mesh.nodes.length) return false;
     const NavMeshNode &node = nav_mesh.nodes[node_index];
-    uint32_t sequence = node::get_node_ref_sequence(node_ref);
-
-    if (node::get_node_ref_type(node_ref) == NODE_TYPE_POLY) {
-        const NavMeshTile *tile = tile_by_id(nav_mesh, node.tile_id);
-        if (!tile) return false;
-        if (tile->sequence != sequence) return false;
-        if (node.poly_index < 0 || (uint32_t)node.poly_index >= tile->polys.length) return false;
-        return true;
-    }
 
     const OffMeshConnection *connection = off_mesh_connection_by_id(nav_mesh, node.off_mesh_connection_id);
     if (!connection) return false;
-    if (connection->sequence != sequence) return false;
+    if (connection->sequence != node::get_node_ref_sequence(node_ref)) return false;
     return is_off_mesh_connection_connected(nav_mesh, connection->id);
 }
 
@@ -376,19 +368,52 @@ static void visit_polygons_in_tile(const NavMesh &nav_mesh, const NavMeshTile &t
     }
 }
 
+struct TileColumnCell {
+    int x;
+    int y;
+    uint32_t slot;
+};
+
+static void visit_column(const NavMesh &nav_mesh, const Array<uint32_t> &column, Box3 bounds, const QueryFilter &filter, PolyVisitor visit,
+                         void *user_data) {
+    for (uint32_t tile_id : column) visit_polygons_in_tile(nav_mesh, nav_mesh.tiles[tile_id], bounds, filter, visit, user_data);
+}
+
 static void visit_polygons(const NavMesh &nav_mesh, Box3 bounds, const QueryFilter &filter, PolyVisitor visit, void *user_data) {
     Vec2 min_tile = world_to_tile_position(nav_mesh, bounds.min);
     Vec2 max_tile = world_to_tile_position(nav_mesh, bounds.max);
 
     if (!vec2::finite(min_tile) || !vec2::finite(max_tile)) return;
 
-    for (int x = (int)min_tile.x; x <= (int)max_tile.x; x++) {
-        for (int y = (int)min_tile.y; y <= (int)max_tile.y; y++) {
-            const Array<uint32_t> *column = tile_column(nav_mesh, x, y);
-            if (!column) continue;
-            for (uint32_t tile_id : *column) visit_polygons_in_tile(nav_mesh, nav_mesh.tiles[tile_id], bounds, filter, visit, user_data);
+    double min_x = fmax((double)min_tile.x, (double)INT32_MIN);
+    double min_y = fmax((double)min_tile.y, (double)INT32_MIN);
+    double max_x = fmin((double)max_tile.x, (double)INT32_MAX);
+    double max_y = fmin((double)max_tile.y, (double)INT32_MAX);
+    if (min_x > max_x || min_y > max_y) return;
+
+    const Map<uint64_t, Array<uint32_t>> &columns = nav_mesh.tile_column_to_tile_ids;
+    double cell_count = (max_x - min_x + 1) * (max_y - min_y + 1);
+    if (cell_count <= (double)columns.length * 4 + 64) {
+        for (int64_t x = (int64_t)min_x; x <= (int64_t)max_x; x++) {
+            for (int64_t y = (int64_t)min_y; y <= (int64_t)max_y; y++) {
+                const Array<uint32_t> *column = tile_column(nav_mesh, (int)x, (int)y);
+                if (column) visit_column(nav_mesh, *column, bounds, filter, visit, user_data);
+            }
         }
+        return;
     }
+
+    Array<TileColumnCell> cells = {};
+    for (uint32_t slot = 0; slot < columns.capacity; slot++) {
+        if (columns.slots[slot] != MAP_SLOT_OCCUPIED) continue;
+        int x = (int)(uint32_t)(columns.keys[slot] >> 32);
+        int y = (int)(uint32_t)columns.keys[slot];
+        if (x < min_x || x > max_x || y < min_y || y > max_y) continue;
+        cells.push({x, y, slot});
+    }
+    sort::stable(cells.data, cells.length, [](const TileColumnCell &a, const TileColumnCell &b) { return a.x != b.x ? a.x < b.x : a.y < b.y; });
+    for (const TileColumnCell &cell : cells) visit_column(nav_mesh, columns.values[cell.slot], bounds, filter, visit, user_data);
+    cells.release();
 }
 
 struct NearestPolySearch {

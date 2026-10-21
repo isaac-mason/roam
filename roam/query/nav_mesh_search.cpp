@@ -180,7 +180,7 @@ static Vec3 tile_vertex(const NavMeshTile &tile, const NavMeshPoly &poly, uint32
     return vec3::load(tile.vertices.data, tile.poly_vertices[poly.vertex_base + i] * 3);
 }
 
-void get_portal_points(GetPortalPointsResult &out, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref) {
+void get_portal_points_unchecked(GetPortalPointsResult &out, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref) {
     out = {};
     const NavMeshNode &from_node = nav_mesh_api::get_node_by_ref(nav_mesh, from_node_ref);
 
@@ -230,11 +230,25 @@ void get_portal_points(GetPortalPointsResult &out, const NavMesh &nav_mesh, Node
     }
 }
 
-void get_edge_mid_point(GetEdgeMidPointResult &out, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref) {
+static void edge_mid_point(GetEdgeMidPointResult &out, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref) {
     GetPortalPointsResult portal;
-    get_portal_points(portal, nav_mesh, from_node_ref, to_node_ref);
+    get_portal_points_unchecked(portal, nav_mesh, from_node_ref, to_node_ref);
     out.success = portal.success;
     out.position = portal.success ? vec3::scale(vec3::add(portal.left, portal.right), 0.5f) : Vec3{0, 0, 0};
+}
+
+static bool valid_pair(const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref) {
+    return nav_mesh_api::is_valid_node_ref(nav_mesh, from_node_ref) && nav_mesh_api::is_valid_node_ref(nav_mesh, to_node_ref);
+}
+
+void get_portal_points(GetPortalPointsResult &out, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref) {
+    out = {};
+    if (valid_pair(nav_mesh, from_node_ref, to_node_ref)) get_portal_points_unchecked(out, nav_mesh, from_node_ref, to_node_ref);
+}
+
+void get_edge_mid_point(GetEdgeMidPointResult &out, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref) {
+    out = {};
+    if (valid_pair(nav_mesh, from_node_ref, to_node_ref)) edge_mid_point(out, nav_mesh, from_node_ref, to_node_ref);
 }
 
 struct RefWriter {
@@ -292,7 +306,7 @@ static uint32_t get_or_add_neighbour(const NavMesh &nav_mesh, SearchNodePool &po
 
     SearchNode node = make_search_node(neighbour_node_ref, state, 0, {0, 0, 0});
     GetEdgeMidPointResult mid;
-    get_edge_mid_point(mid, nav_mesh, best_node_ref, neighbour_node_ref);
+    edge_mid_point(mid, nav_mesh, best_node_ref, neighbour_node_ref);
     node.position = mid.position;
     return add_search_node(pool, node);
 }
@@ -1167,7 +1181,7 @@ void find_random_point_around_circle(FindRandomPointResult &out, SearchWorkspace
             if (!nav_mesh_api::passes_filter(filter, neighbour_ref, nav_mesh)) continue;
 
             GetPortalPointsResult portal;
-            get_portal_points(portal, nav_mesh, best_ref, neighbour_ref);
+            get_portal_points_unchecked(portal, nav_mesh, best_ref, neighbour_ref);
             if (!portal.success) continue;
 
             if (geometry::distance_pt_seg_sqr_2d(position, portal.left, portal.right).dist_sqr > radius_sqr) continue;

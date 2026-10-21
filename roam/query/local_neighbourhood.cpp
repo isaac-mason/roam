@@ -107,7 +107,7 @@ void find_local_neighbourhood(FindLocalNeighbourhoodResult &result, SearchWorksp
             if (!nav_mesh_api::passes_filter(filter, neighbour_ref, nav_mesh)) continue;
 
             GetPortalPointsResult portal;
-            nav_mesh_search::get_portal_points(portal, nav_mesh, current_ref, neighbour_ref);
+            nav_mesh_search::get_portal_points_unchecked(portal, nav_mesh, current_ref, neighbour_ref);
             if (!portal.success) continue;
 
             if (geometry::distance_pt_seg_sqr_2d(position, portal.left, portal.right).dist_sqr > radius_sqr) continue;
