@@ -163,6 +163,13 @@ static DividedPoly divide_poly(const float *in_vertices, int in_vertex_count, fl
     return {poly_1_vertex, poly_2_vertex};
 }
 
+static bool all_on_near_side(const float *vertices, int vertex_count, float axis_offset, int axis) {
+    for (int vertex = 0; vertex < vertex_count; ++vertex) {
+        if (!(axis_offset - vertices[vertex * 3 + axis] >= 0)) return false;
+    }
+    return true;
+}
+
 static bool rasterize_triangle(Vec3 v0, Vec3 v1, Vec3 v2, uint8_t area_id, Heightfield &heightfield, int flag_merge_threshold) {
     Vec3 triangle_min = vec3::min(vec3::min(v0, v1), v2);
     Vec3 triangle_max = vec3::max(vec3::max(v0, v1), v2);
@@ -200,14 +207,23 @@ static bool rasterize_triangle(Vec3 v0, Vec3 v1, Vec3 v2, uint8_t area_id, Heigh
 
     for (int z = z0; z <= z1; ++z) {
         float cell_z = heightfield.bounds.min.z + (float)z * cell_size;
-        DividedPoly row = divide_poly(in_vertices, in_vertex_count, in_row, p1, cell_z + cell_size, AXIS_Z);
+        int row_vertex_count = 0;
+        if (z == z1 && all_on_near_side(in_vertices, in_vertex_count, cell_z + cell_size, AXIS_Z)) {
+            float *swap = in_row;
+            in_row = in_vertices;
+            in_vertices = swap;
+            row_vertex_count = in_vertex_count;
+            in_vertex_count = 0;
+        } else {
+            DividedPoly row = divide_poly(in_vertices, in_vertex_count, in_row, p1, cell_z + cell_size, AXIS_Z);
 
-        float *swap = in_vertices;
-        in_vertices = p1;
-        p1 = swap;
-        in_vertex_count = row.vertex_count_2;
+            float *swap = in_vertices;
+            in_vertices = p1;
+            p1 = swap;
+            in_vertex_count = row.vertex_count_2;
+            row_vertex_count = row.vertex_count_1;
+        }
 
-        int row_vertex_count = row.vertex_count_1;
         if (row_vertex_count < 3) continue;
         if (z < 0) continue;
 
@@ -228,14 +244,23 @@ static bool rasterize_triangle(Vec3 v0, Vec3 v1, Vec3 v2, uint8_t area_id, Heigh
 
         for (int x = x0; x <= x1; ++x) {
             float cx = heightfield.bounds.min.x + (float)x * cell_size;
-            DividedPoly column = divide_poly(in_row, remaining_row_vertex_count, p1, p2, cx + cell_size, AXIS_X);
+            int vertex_count = 0;
+            if (x == x1 && all_on_near_side(in_row, remaining_row_vertex_count, cx + cell_size, AXIS_X)) {
+                float *swap_cell = p1;
+                p1 = in_row;
+                in_row = swap_cell;
+                vertex_count = remaining_row_vertex_count;
+                remaining_row_vertex_count = 0;
+            } else {
+                DividedPoly column = divide_poly(in_row, remaining_row_vertex_count, p1, p2, cx + cell_size, AXIS_X);
 
-            float *swap_row = in_row;
-            in_row = p2;
-            p2 = swap_row;
-            remaining_row_vertex_count = column.vertex_count_2;
+                float *swap_row = in_row;
+                in_row = p2;
+                p2 = swap_row;
+                remaining_row_vertex_count = column.vertex_count_2;
+                vertex_count = column.vertex_count_1;
+            }
 
-            int vertex_count = column.vertex_count_1;
             if (vertex_count < 3) continue;
             if (x < 0) continue;
 

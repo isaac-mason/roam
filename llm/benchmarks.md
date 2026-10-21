@@ -67,3 +67,14 @@ Change: `sort::stable_with_scratch` takes a caller scratch buffer; the chunky tr
 Findings for later:
 - Tiled generation spends about 15% in malloc, free and memset, mostly allocating and freeing each tile's heightfield, compact heightfield, contours and meshes. Reusing those buffers across tiles is the next single-threaded win, with an estimated 5-10%.
 - Tiles are independent, so the big win for tiled builds is building them in parallel. That needs a public per-tile build function that callers can run on their own threads (roam doesn't own threads, which also matters for wasm).
+
+## Perf round 3: rasterization (2026-10-21)
+
+With asserts off, the stage benches put rasterization at 1.2 of the 3.36 ms solo build (36%); in the whole-build profile it had been spread over inlined `divide_poly`, `push_vertex` and `add_heightfield_span` frames. Inside it, clipping (`divide_poly` and `push_vertex`) is about 38% and span insertion about 13%.
+
+Change: in the last row of a triangle and the last cell of a row, the clipped-off remainder is discarded, so when every vertex is already on the near side of the boundary the clip only copies the polygon. `all_on_near_side` checks that with the clip's own expression (`(cell + cell_size) - v >= 0`) and the rasterizer swaps buffers instead of clipping. Bit-identical (heightfield parity unchanged). Triangles inside one cell skip both clips; larger ones skip one per row.
+
+| bench (min ms, alternating runs) | before | after |
+|---|---:|---:|
+| rasterize triangles | 1.187 | 1.066 |
+| generate solo nav mesh | 3.287 | 3.195 |
