@@ -82,7 +82,7 @@ NavMeshTileBvTree build_nav_mesh_bv_tree(const NavMeshTileParams &params) {
     NavMeshTileBvTree tree = {};
     tree.quant_factor = 1.0f / params.cell_size;
 
-    uint32_t poly_count = params.polys.length;
+    uint32_t poly_count = params.polys.capacity;
     if (poly_count == 0) return tree;
 
     Array<NavMeshBvNode> items = {};
@@ -104,7 +104,7 @@ NavMeshTileBvTree build_nav_mesh_bv_tree(const NavMeshTileParams &params) {
             bounds = expand(bounds, vec3::load(params.vertices.data, vertex_index * 3));
         }
 
-        if (params.detail_meshes.length > 0 && params.detail_vertices.length > 0) {
+        if (params.detail_meshes.capacity > 0 && params.detail_vertices.capacity > 0) {
             const NavMeshPolyDetail &detail_mesh = params.detail_meshes[i];
             for (uint32_t j = 0; j < detail_mesh.vertices_count; j++) {
                 bounds = expand(bounds, vec3::load(params.detail_vertices.data, (detail_mesh.vertices_base + j) * 3));

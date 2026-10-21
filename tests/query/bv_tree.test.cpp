@@ -10,6 +10,9 @@ static bool overlaps(const int *bmin, const int *bmax, const NavMeshBvNode &node
 
 TEST(bv_tree_traversal_matches_brute_force_over_leaves) {
     NavMeshTileParams params = {};
+    Array<float> vertices = {};
+    Array<NavMeshPoly> polys = {};
+    Array<uint32_t> poly_vertices = {};
     params.cell_size = 1;
     params.bounds = {{0, 0, 0}, {64, 4, 64}};
     uint32_t state = 7;
@@ -20,20 +23,23 @@ TEST(bv_tree_traversal_matches_brute_force_over_leaves) {
     for (uint32_t i = 0; i < 300; i++) {
         float x = next() * 60;
         float z = next() * 60;
-        uint32_t base = params.vertices.length / 3;
-        params.vertices.push(x);
-        params.vertices.push(next() * 3);
-        params.vertices.push(z);
-        params.vertices.push(x + 1 + next() * 3);
-        params.vertices.push(next() * 3);
-        params.vertices.push(z);
-        params.vertices.push(x);
-        params.vertices.push(next() * 3);
-        params.vertices.push(z + 1 + next() * 3);
-        params.polys.push({params.poly_vertices.length, 3, 1, 0});
-        for (uint32_t k = 0; k < 3; k++) params.poly_vertices.push(base + k);
+        uint32_t base = vertices.length / 3;
+        vertices.push(x);
+        vertices.push(next() * 3);
+        vertices.push(z);
+        vertices.push(x + 1 + next() * 3);
+        vertices.push(next() * 3);
+        vertices.push(z);
+        vertices.push(x);
+        vertices.push(next() * 3);
+        vertices.push(z + 1 + next() * 3);
+        polys.push({poly_vertices.length, 3, 1, 0});
+        for (uint32_t k = 0; k < 3; k++) poly_vertices.push(base + k);
     }
 
+    params.vertices = vertices;
+    params.polys = polys;
+    params.poly_vertices = poly_vertices;
     NavMeshTileBvTree tree = bv_tree::build_nav_mesh_bv_tree(params);
 
     uint32_t mismatches = 0;
@@ -70,20 +76,24 @@ TEST(bv_tree_traversal_matches_brute_force_over_leaves) {
     }
 
     tree.nodes.release();
-    params.vertices.release();
-    params.polys.release();
-    params.poly_vertices.release();
+    vertices.release();
+    polys.release();
+    poly_vertices.release();
 }
 
 TEST(bv_tree_snaps_near_integers_before_truncating) {
     NavMeshTileParams params = {};
+    Array<NavMeshPoly> polys = {};
+    Array<uint32_t> poly_vertices = {};
     params.cell_size = 0.1f;
     params.bounds = {{0, 0, 0}, {10, 10, 10}};
     const float vertices[] = {0.3f, 0, 0.3f, 2.4f, 0, 0.3f, 2.4f, 0, 2.39999f};
-    for (float value : vertices) params.vertices.push(value);
-    params.polys.push({0, 3, 1, 0});
-    for (uint32_t k = 0; k < 3; k++) params.poly_vertices.push(k);
+    polys.push({0, 3, 1, 0});
+    for (uint32_t k = 0; k < 3; k++) poly_vertices.push(k);
 
+    params.vertices = vertices;
+    params.polys = polys;
+    params.poly_vertices = poly_vertices;
     NavMeshTileBvTree tree = bv_tree::build_nav_mesh_bv_tree(params);
     REQUIRE(tree.nodes.length == 1);
     CHECK(tree.nodes[0].bmin[0] == 3);
@@ -91,7 +101,6 @@ TEST(bv_tree_snaps_near_integers_before_truncating) {
     CHECK(tree.nodes[0].bmax[2] == 24);
 
     tree.nodes.release();
-    params.vertices.release();
-    params.polys.release();
-    params.poly_vertices.release();
+    polys.release();
+    poly_vertices.release();
 }

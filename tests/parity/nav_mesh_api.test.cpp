@@ -14,7 +14,8 @@ TEST(nav_mesh_matches_navcat_on_nav_test) {
     fixture::Fixture expected = fixture::load("nav_test_solo");
     REQUIRE(expected.loaded);
 
-    NavMeshTileParams params = load_tile_params(expected);
+    NavTestTile loaded = load_tile(expected);
+    const NavMeshTileParams &params = loaded.params;
     NavMeshTile tile = nav_mesh_api::build_tile(params);
 
     Array<int32_t> bv_bounds = {};
@@ -125,6 +126,6 @@ TEST(nav_mesh_matches_navcat_on_nav_test) {
     check_nav_mesh("nav_mesh.with_off_mesh", nav_mesh, expected);
 
     nav_mesh_api::release(nav_mesh);
-    release(params);
+    release(loaded);
     fixture::release(expected);
 }

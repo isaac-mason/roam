@@ -9,6 +9,7 @@
 #include "roam/util/array.h"
 #include "roam/util/index_pool.h"
 #include "roam/util/map.h"
+#include "roam/util/span.h"
 
 namespace roam {
 
@@ -100,13 +101,13 @@ struct NavMeshTileBvTree {
 
 struct NavMeshTileParams {
     Box3 bounds;
-    Array<float> vertices;
-    Array<NavMeshPoly> polys;
-    Array<uint32_t> poly_vertices;
-    Array<int> poly_neis;
-    Array<NavMeshPolyDetail> detail_meshes;
-    Array<float> detail_vertices;
-    Array<uint8_t> detail_triangles;
+    Span<const float> vertices;
+    Span<const NavMeshPoly> polys;
+    Span<const uint32_t> poly_vertices;
+    Span<const int> poly_neis;
+    Span<const NavMeshPolyDetail> detail_meshes;
+    Span<const float> detail_vertices;
+    Span<const uint8_t> detail_triangles;
     int tile_x;
     int tile_y;
     int tile_layer;

@@ -832,10 +832,10 @@ static void update_off_mesh_connections(NavMesh &nav_mesh) {
 }
 
 template <typename T>
-static Array<T> copy_array(const Array<T> &source) {
+static Array<T> copy_array(Span<const T> source) {
     Array<T> copy = {};
-    copy.resize(source.length);
-    for (uint32_t i = 0; i < source.length; i++) copy[i] = source[i];
+    copy.resize(source.capacity);
+    for (uint32_t i = 0; i < source.capacity; i++) copy[i] = source[i];
     return copy;
 }
 

@@ -7,6 +7,7 @@
 #include "roam/blocks/search/flood_fill_nav_mesh.h"
 #include "roam/debug/debug.h"
 #include "roam/generate/common.h"
+#include "roam/generate/nav_mesh_tile.h"
 #include "roam/query/nav_mesh_api.h"
 
 using namespace roam;
@@ -26,7 +27,13 @@ struct FloodFillPruningExample {
 
 static FloodFillPruningExample flood_fill_pruning_example;
 
-static bool sanitize_tile_polys(const NavMeshTile &tile, const Array<bool> &keep, NavMeshTileParams &params) {
+struct SanitizedTile {
+    NavMeshTilePolys polys;
+    NavMeshTileDetailMesh detail_mesh;
+    NavMeshTileParams params;
+};
+
+static bool sanitize_tile_polys(const NavMeshTile &tile, const Array<bool> &keep, SanitizedTile &sanitized_tile) {
     Array<int> poly_remap = {};
     poly_remap.resize(tile.polys.length, -1);
     Array<uint32_t> survivors = {};
@@ -42,42 +49,47 @@ static bool sanitize_tile_polys(const NavMeshTile &tile, const Array<bool> &keep
         return false;
     }
 
-    params = {};
+    sanitized_tile = {};
+    NavMeshTilePolys &polys = sanitized_tile.polys;
+    NavMeshTileDetailMesh &detail_mesh = sanitized_tile.detail_mesh;
+    NavMeshTileParams &params = sanitized_tile.params;
     Map<uint32_t, uint32_t> vertex_remap = {};
     auto remap_vertex = [&](uint32_t old_vertex) {
         const uint32_t *existing = vertex_remap.get(old_vertex);
         if (existing) return *existing;
-        uint32_t new_vertex = params.vertices.length / 3;
+        uint32_t new_vertex = polys.vertices.length / 3;
         vertex_remap.set(old_vertex, new_vertex);
-        params.vertices.push(tile.vertices[old_vertex * 3]);
-        params.vertices.push(tile.vertices[old_vertex * 3 + 1]);
-        params.vertices.push(tile.vertices[old_vertex * 3 + 2]);
+        polys.vertices.push(tile.vertices[old_vertex * 3]);
+        polys.vertices.push(tile.vertices[old_vertex * 3 + 1]);
+        polys.vertices.push(tile.vertices[old_vertex * 3 + 2]);
         return new_vertex;
     };
 
     for (uint32_t old_poly : survivors) {
         const NavMeshPoly &poly = tile.polys[old_poly];
 
-        NavMeshPoly sanitized = {params.poly_vertices.length, poly.vertex_count, poly.flags, poly.area};
+        NavMeshPoly sanitized = {polys.poly_vertices.length, poly.vertex_count, poly.flags, poly.area};
         for (uint32_t j = 0; j < poly.vertex_count; j++) {
-            params.poly_vertices.push(remap_vertex(tile.poly_vertices[poly.vertex_base + j]));
+            polys.poly_vertices.push(remap_vertex(tile.poly_vertices[poly.vertex_base + j]));
             int nei = tile.poly_neis[poly.vertex_base + j];
             if (nei != 0 && (nei & POLY_NEIS_FLAG_EXT_LINK) == 0) {
                 int new_neighbour = poly_remap[(uint32_t)nei - 1];
                 nei = new_neighbour == -1 ? 0 : new_neighbour + 1;
             }
-            params.poly_neis.push(nei);
+            polys.poly_neis.push(nei);
         }
-        params.polys.push(sanitized);
+        polys.polys.push(sanitized);
 
         const NavMeshPolyDetail &detail = tile.detail_meshes[old_poly];
-        uint32_t vertices_base = params.detail_vertices.length / 3;
-        uint32_t triangles_base = params.detail_triangles.length / 4;
+        uint32_t vertices_base = detail_mesh.detail_vertices.length / 3;
+        uint32_t triangles_base = detail_mesh.detail_triangles.length / 4;
 
-        for (uint32_t v = 0; v < detail.vertices_count * 3; v++) params.detail_vertices.push(tile.detail_vertices[detail.vertices_base * 3 + v]);
-        for (uint32_t t = 0; t < detail.triangles_count * 4; t++) params.detail_triangles.push(tile.detail_triangles[detail.triangles_base * 4 + t]);
+        for (uint32_t v = 0; v < detail.vertices_count * 3; v++) detail_mesh.detail_vertices.push(tile.detail_vertices[detail.vertices_base * 3 + v]);
+        for (uint32_t t = 0; t < detail.triangles_count * 4; t++) {
+            detail_mesh.detail_triangles.push(tile.detail_triangles[detail.triangles_base * 4 + t]);
+        }
 
-        params.detail_meshes.push({vertices_base, triangles_base, detail.vertices_count, detail.triangles_count});
+        detail_mesh.detail_meshes.push({vertices_base, triangles_base, detail.vertices_count, detail.triangles_count});
     }
 
     params.tile_x = tile.tile_x;
@@ -89,6 +101,13 @@ static bool sanitize_tile_polys(const NavMeshTile &tile, const Array<bool> &keep
     params.walkable_height = tile.walkable_height;
     params.walkable_radius = tile.walkable_radius;
     params.walkable_climb = tile.walkable_climb;
+    params.vertices = polys.vertices;
+    params.polys = polys.polys;
+    params.poly_vertices = polys.poly_vertices;
+    params.poly_neis = polys.poly_neis;
+    params.detail_meshes = detail_mesh.detail_meshes;
+    params.detail_vertices = detail_mesh.detail_vertices;
+    params.detail_triangles = detail_mesh.detail_triangles;
 
     vertex_remap.release();
     poly_remap.release();
@@ -96,14 +115,9 @@ static bool sanitize_tile_polys(const NavMeshTile &tile, const Array<bool> &keep
     return true;
 }
 
-static void release(NavMeshTileParams &params) {
-    params.vertices.release();
-    params.polys.release();
-    params.poly_vertices.release();
-    params.poly_neis.release();
-    params.detail_meshes.release();
-    params.detail_vertices.release();
-    params.detail_triangles.release();
+static void release(SanitizedTile &sanitized_tile) {
+    nav_mesh_tile::release(sanitized_tile.polys);
+    nav_mesh_tile::release(sanitized_tile.detail_mesh);
 }
 
 static NavMesh prune_nav_mesh(const NavMesh &nav_mesh, const Map<NodeRef, uint8_t> &keep) {
@@ -117,10 +131,10 @@ static NavMesh prune_nav_mesh(const NavMesh &nav_mesh, const Map<NodeRef, uint8_
         if (!tile.allocated) continue;
         keep_poly.clear();
         for (uint32_t node_index : tile.poly_nodes) keep_poly.push(keep.has(nav_mesh.nodes[node_index].ref));
-        NavMeshTileParams params = {};
-        if (sanitize_tile_polys(tile, keep_poly, params)) {
-            nav_mesh_api::add_tile(result, nav_mesh_api::build_tile(params));
-            release(params);
+        SanitizedTile sanitized = {};
+        if (sanitize_tile_polys(tile, keep_poly, sanitized)) {
+            nav_mesh_api::add_tile(result, nav_mesh_api::build_tile(sanitized.params));
+            release(sanitized);
         }
     }
     keep_poly.release();
