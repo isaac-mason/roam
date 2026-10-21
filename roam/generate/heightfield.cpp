@@ -12,8 +12,13 @@ namespace heightfield {
 static const int SPAN_MAX_HEIGHT = 0x1fff;
 static const int MAX_HEIGHTFIELD_HEIGHT = 0xffff;
 
+static int grid_cells(float extent, float cell_size) {
+    float cells = floorf(extent / cell_size + 0.5f);
+    return cells > 0 && cells < (float)INT32_MAX ? (int)cells : 0;
+}
+
 GridSize calculate_grid_size(Box3 bounds, float cell_size) {
-    return {(int)floorf((bounds.max.x - bounds.min.x) / cell_size + 0.5f), (int)floorf((bounds.max.z - bounds.min.z) / cell_size + 0.5f)};
+    return {grid_cells(bounds.max.x - bounds.min.x, cell_size), grid_cells(bounds.max.z - bounds.min.z, cell_size)};
 }
 
 Heightfield create(int width, int height, Box3 bounds, float cell_size, float cell_height) {
