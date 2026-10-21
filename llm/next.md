@@ -26,3 +26,24 @@ A working checklist. Tick items as they land, and record findings and numbers in
 - [x] **Regions: a closer look.** Now 1.03-1.21x ahead of Detour: 16-bit scratch, sorting only unassigned spans, and expansion drops resolved entries.
 - [x] **Mark walkable: a closer look.** Bound by indexed vertex loads; vectorizing the arithmetic didn't change the time.
 - [ ] Deferred: SIMD (obstacle avoidance, detail sampling, triangle setup), a generation workspace, Detour's 6-vertex poly cap.
+
+## Structure and API review (2026-10-21)
+
+Generation:
+
+- [ ] **One way to pass a triangle mesh.** `mark_walkable_triangles`, `rasterize_triangles`, `calculate_mesh_bounds` take `(vertices, indices, index_count)`; `rasterize_convex` takes `(vertices, vertex_float_count, triangles, triangle_index_count)`; the blocks have three identical structs (`SoloNavMeshInput`, `TiledNavMeshInput`, `MeshView`). Use spans (`Span<const float> positions, Span<const uint32_t> indices`) or one shared view struct.
+- [ ] **Output buffers as spans.** `mark_walkable_triangles(..., uint8_t *out_tri_area_ids, ...)` writes through a raw pointer with the output last. Make it a `Span<uint8_t>` like the query outputs.
+- [ ] **The mutated object first.** `erode_walkable_area(radius, chf)`, `mark_box_area(bounds, area, chf)`, `median_filter_walkable_area(chf)` and friends put the compact heightfield last (navcat's order), while `filter_ledge_spans(hf, ...)` and `build_distance_field(chf)` put it first.
+- [ ] **Counts that duplicate array lengths.** `CompactHeightfield::span_count`, `Contour::vertex_count` / `raw_vertex_count`, `PolyMesh::vertex_count` / `poly_count`, `PolyMeshDetail::mesh_count` / `vertex_count` / `triangle_count` sit next to arrays that already know their length. Two sources of truth (the nav mesh structs dropped theirs).
+- [ ] **Borrowed arrays that look owned.** `NavMeshTileParams` holds `Array<T>` fields that it doesn't own (`build_tile` copies them). Make them `Span<const T>`. Also add one helper that builds tile params from tile polys and detail mesh; the solo and tiled generators and the bench each write the 15-field copy by hand.
+- [ ] **Internal constants in `roam::`.** `common.h` exports `AXIS_X`, `BORDER_VERTEX`, `AREA_BORDER`, `MULTIPLE_REGS`, `CONTOUR_REG_MASK`, `MAX_LAYERS` and the direction helpers next to the public `NULL_AREA`, `WALKABLE_AREA`, `MESH_NULL_IDX`.
+- [ ] Maybe: typed records for the flat int arrays (`PolyMesh::vertices` stride 3, `polys` stride 2 x nvp, detail `meshes` and `triangles` stride 4). Bigger change; parity tests compare these arrays.
+- [ ] Small: `flag_merge_threshold` defaults to 1 on `rasterize_triangles` but is required on the shape rasterizers.
+
+Query:
+
+- [ ] **`release_nav_mesh`** is the only `release_<thing>` left; everything else is a `release(T &)` overload.
+- [ ] **Result naming.** `ClosestPointOnPolyBoundary` and `ClosestPointOnDetailEdges` lack the `Result` suffix that `GetClosestPointOnPolyResult` has, and use `point` where the others use `position`. `get_closest_point_on_detail_edges` returns by value while its siblings write `out`.
+- [ ] **`success` and a `SUCCESS` flag** both live in `FindNodePathResult`, `FindPathResult`, `FindStraightPathResult`, `FindSmoothPathResult`. Two sources of truth; navcat has both, so decide deliberately.
+- [ ] Small: `StraightPathPoint::type` repeats the type bits in `node_ref` (40 → 32 bytes without it; navcat has the field).
+- [ ] Blocks (crowd, path corridor) use `SearchWorkspace` arrays (`node_path`, `visited`, `raycast_path`) as their own scratch, coupling them to the workspace's internals.
