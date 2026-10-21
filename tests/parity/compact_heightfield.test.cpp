@@ -20,9 +20,9 @@ TEST(compact_heightfield_matches_navcat_on_nav_test) {
 
     CompactHeightfield compact_heightfield =
         compact_heightfield::build(nav_test.context, nav_test.heightfield, nav_test.options.walkable_height, nav_test.options.walkable_climb);
-    CHECK(compact_heightfield.span_count > 1000);
+    CHECK(compact_heightfield.spans.length > 1000);
 
-    int32_t span_count = (int32_t)compact_heightfield.span_count;
+    int32_t span_count = (int32_t)compact_heightfield.spans.length;
     CHECK_I32_ARRAY("compact_heightfield.built.span_count", &span_count, 1, fixture::i32(expected, "compact_heightfield.built.span_count"));
     const Box3 &bounds = compact_heightfield.bounds;
     float bounds_values[6] = {bounds.min.x, bounds.min.y, bounds.min.z, bounds.max.x, bounds.max.y, bounds.max.z};

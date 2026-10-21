@@ -27,7 +27,6 @@ struct CompactHeightfieldCell {
 struct CompactHeightfield {
     int width;
     int height;
-    uint32_t span_count;
     int walkable_height_voxels;
     int walkable_climb_voxels;
     int border_size;

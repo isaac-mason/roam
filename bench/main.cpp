@@ -173,7 +173,8 @@ static void advance(Pipeline &pipeline, int stage) {
             Box3 bounds = input_triangle_mesh::calculate_mesh_bounds({input.positions, input.indices});
             GridSize grid = heightfield::calculate_grid_size(bounds, options.cell_size);
             pipeline.heightfield = heightfield::create(grid.width, grid.height, bounds, options.cell_size, options.cell_height);
-            heightfield::rasterize_triangles(pipeline.context, pipeline.heightfield, {input.positions, input.indices}, pipeline.tri_area_ids, options.walkable_climb_voxels);
+            heightfield::rasterize_triangles(pipeline.context, pipeline.heightfield, {input.positions, input.indices}, pipeline.tri_area_ids,
+                                             options.walkable_climb_voxels);
             break;
         }
         case STAGE_FILTER:

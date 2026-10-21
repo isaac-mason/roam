@@ -606,7 +606,7 @@ ContourSet build_contours(BuildContext &context, const CompactHeightfield &chf, 
     }
 
     Array<int> flags = {};
-    flags.resize(chf.span_count, 0);
+    flags.resize(chf.spans.length, 0);
 
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {

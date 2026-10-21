@@ -49,7 +49,7 @@ static int calculate_distance_field(const CompactHeightfield &compact_heightfiel
     const CompactHeightfieldCell *cells = compact_heightfield.cells.data;
     const CompactHeightfieldSpan *spans = compact_heightfield.spans.data;
     const uint8_t *areas = compact_heightfield.areas.data;
-    size_t span_count = compact_heightfield.span_count;
+    size_t span_count = compact_heightfield.spans.length;
 
     for (size_t i = 0; i < span_count; i++) distances[i] = 0xffff;
 
@@ -143,7 +143,7 @@ static void box_blur(const CompactHeightfield &compact_heightfield, int threshol
 
 void build_distance_field(CompactHeightfield &compact_heightfield) {
     Array<uint16_t> blurred = {};
-    blurred.resize(compact_heightfield.span_count);
+    blurred.resize(compact_heightfield.spans.length);
 
     compact_heightfield.max_distance = calculate_distance_field(compact_heightfield, compact_heightfield.distances.data);
 
@@ -618,7 +618,7 @@ static void compress_region_ids(Array<Region> &regions, int &out_max_regions) {
 }
 
 static void remap_source_regions(const CompactHeightfield &compact_heightfield, const Array<Region> &regions, uint16_t *source_regions) {
-    for (uint32_t i = 0; i < compact_heightfield.span_count; i++) {
+    for (uint32_t i = 0; i < compact_heightfield.spans.length; i++) {
         if ((source_regions[i] & BORDER_REG) == 0) source_regions[i] = (uint16_t)regions[(uint32_t)source_regions[i]].id;
     }
 }
@@ -768,15 +768,15 @@ static bool merge_and_filter_regions(BuildContext &context, int min_region_area,
 }
 
 static void store_regions(CompactHeightfield &compact_heightfield, const uint16_t *source_regions) {
-    for (uint32_t i = 0; i < compact_heightfield.span_count; i++) compact_heightfield.spans[i].region = source_regions[i];
+    for (uint32_t i = 0; i < compact_heightfield.spans.length; i++) compact_heightfield.spans[i].region = source_regions[i];
 }
 
 bool build_regions(BuildContext &context, CompactHeightfield &compact_heightfield, int border_size, int min_region_area,
                    int merge_region_area) {
     Array<uint16_t> source_regions = {};
     Array<uint16_t> source_distances = {};
-    source_regions.resize(compact_heightfield.span_count, 0);
-    source_distances.resize(compact_heightfield.span_count, 0);
+    source_regions.resize(compact_heightfield.spans.length, 0);
+    source_distances.resize(compact_heightfield.spans.length, 0);
 
     int region_id = 1;
     int level = (compact_heightfield.max_distance + 1) & ~1;
@@ -933,7 +933,7 @@ static int sweep_monotone_rows(const CompactHeightfield &compact_heightfield, in
 bool build_regions_monotone(BuildContext &context, CompactHeightfield &compact_heightfield, int border_size, int min_region_area,
                             int merge_region_area) {
     Array<uint16_t> source_regions = {};
-    source_regions.resize(compact_heightfield.span_count, 0);
+    source_regions.resize(compact_heightfield.spans.length, 0);
 
     int id = paint_border_regions(border_size, 1, compact_heightfield, source_regions.data);
     compact_heightfield.border_size = border_size;
@@ -1075,7 +1075,7 @@ static bool merge_and_filter_layer_regions(int min_region_area, const CompactHei
 
 bool build_layer_regions(BuildContext &context, CompactHeightfield &compact_heightfield, int border_size, int min_region_area) {
     Array<uint16_t> source_regions = {};
-    source_regions.resize(compact_heightfield.span_count, 0);
+    source_regions.resize(compact_heightfield.spans.length, 0);
 
     int id = paint_border_regions(border_size, 1, compact_heightfield, source_regions.data);
     compact_heightfield.border_size = border_size;

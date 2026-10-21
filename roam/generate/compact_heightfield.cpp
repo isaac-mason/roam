@@ -29,7 +29,6 @@ CompactHeightfield build(BuildContext &context, const Heightfield &heightfield, 
     CompactHeightfield compact_heightfield = {};
     compact_heightfield.width = x_size;
     compact_heightfield.height = z_size;
-    compact_heightfield.span_count = span_count;
     compact_heightfield.walkable_height_voxels = walkable_height_voxels;
     compact_heightfield.walkable_climb_voxels = walkable_climb_voxels;
     compact_heightfield.bounds = heightfield.bounds;
@@ -159,7 +158,7 @@ static Array<uint8_t> compute_distance_to_boundary(const CompactHeightfield &com
     int z_size = compact_heightfield.height;
 
     Array<uint8_t> distance_to_boundary = {};
-    distance_to_boundary.resize(compact_heightfield.span_count, MAX_DISTANCE);
+    distance_to_boundary.resize(compact_heightfield.spans.length, MAX_DISTANCE);
 
     for (int z = 0; z < z_size; ++z) {
         for (int x = 0; x < x_size; ++x) {
@@ -214,7 +213,7 @@ void erode_walkable_area(CompactHeightfield &compact_heightfield, int walkable_r
     Array<uint8_t> distance_to_boundary = compute_distance_to_boundary(compact_heightfield);
 
     int min_boundary_distance = walkable_radius_voxels * 2;
-    for (uint32_t span_index = 0; span_index < compact_heightfield.span_count; ++span_index) {
+    for (uint32_t span_index = 0; span_index < compact_heightfield.spans.length; ++span_index) {
         if (distance_to_boundary[span_index] < min_boundary_distance) compact_heightfield.areas[span_index] = NULL_AREA;
     }
 
@@ -233,7 +232,7 @@ void erode_and_mark_walkable_areas(CompactHeightfield &compact_heightfield, int 
 
     int base_min_distance = base_walkable_radius_voxels * 2;
 
-    for (uint32_t span_index = 0; span_index < compact_heightfield.span_count; ++span_index) {
+    for (uint32_t span_index = 0; span_index < compact_heightfield.spans.length; ++span_index) {
         int distance = distance_to_boundary[span_index];
 
         if (distance < base_min_distance) {
@@ -416,7 +415,7 @@ bool median_filter_walkable_area(CompactHeightfield &compact_heightfield) {
     int z_size = compact_heightfield.height;
 
     Array<uint8_t> areas = {};
-    areas.resize(compact_heightfield.span_count, 0xff);
+    areas.resize(compact_heightfield.spans.length, 0xff);
 
     for (int z = 0; z < z_size; ++z) {
         for (int x = 0; x < x_size; ++x) {
@@ -458,7 +457,7 @@ bool median_filter_walkable_area(CompactHeightfield &compact_heightfield) {
         }
     }
 
-    for (uint32_t i = 0; i < compact_heightfield.span_count; ++i) compact_heightfield.areas[i] = areas[i];
+    for (uint32_t i = 0; i < compact_heightfield.spans.length; ++i) compact_heightfield.areas[i] = areas[i];
 
     areas.release();
     return true;

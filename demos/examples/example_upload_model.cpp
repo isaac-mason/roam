@@ -142,7 +142,8 @@ static void update_drawing(const App &app, int helper) {
         if (helper == UPLOAD_HELPER_TRIANGLE_AREA_IDS) {
             Array<uint8_t> tri_area_ids = {};
             tri_area_ids.resize(app.level.walkable_indices.length / 3, 0);
-            input_triangle_mesh::mark_walkable_triangles(tri_area_ids, {app.level.walkable_positions, app.level.walkable_indices}, upload.config.walkable_slope_angle_degrees);
+            input_triangle_mesh::mark_walkable_triangles(tri_area_ids, {app.level.walkable_positions, app.level.walkable_indices},
+                                                         upload.config.walkable_slope_angle_degrees);
             add_helper(list,
                        debug::create_triangle_area_ids_helper({app.level.walkable_positions, app.level.walkable_indices}, tri_area_ids),
                        0);
