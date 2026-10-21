@@ -686,7 +686,8 @@ static void find_connecting_polys(Array<ConnectingPoly> &results, const NavMesh 
         if (fabsf(apos - portal.position) > 0.01f) continue;
         if (!overlap_slabs(amin, amax, portal.bmin, portal.bmax, 0.01f, target.walkable_climb)) continue;
 
-        results.push({get_node_by_tile_and_poly(nav_mesh, target, (int)portal.poly_index).ref, fmaxf(amin.x, portal.bmin.x), fminf(amax.x, portal.bmax.x)});
+        NodeRef node_ref = get_node_by_tile_and_poly(nav_mesh, target, (int)portal.poly_index).ref;
+        results.push({node_ref, fmaxf(amin.x, portal.bmin.x), fminf(amax.x, portal.bmax.x)});
         connected_poly = portal.poly_index;
     }
 }
@@ -728,7 +729,9 @@ static void connect_external_links(NavMesh &nav_mesh, const NavMeshTile &tile, c
     Array<ConnectingPoly> overlaps = {};
 
     if (side != -1) {
-        for (uint32_t k = tile.portal_starts[side]; k < tile.portal_starts[side + 1]; k++) connect_portal(nav_mesh, overlaps, tile, tile.portals[k], target, side);
+        for (uint32_t k = tile.portal_starts[side]; k < tile.portal_starts[side + 1]; k++) {
+            connect_portal(nav_mesh, overlaps, tile, tile.portals[k], target, side);
+        }
     } else {
         uint32_t next[8];
         for (int direction = 0; direction < 8; direction++) next[direction] = tile.portal_starts[direction];

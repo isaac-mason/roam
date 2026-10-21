@@ -295,8 +295,9 @@ TEST_CASE("a saved nav mesh loads back identically after tile and off mesh churn
     Array<uint8_t> again = save_nav_mesh_bytes(loaded);
     CHECK(SAME_ARRAY(again, bytes));
 
-    uint32_t original_next = nav_mesh_api::add_off_mesh_connection(nav_mesh, {{4, 0, 4}, {8, 0, 8}, 0.5f, OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL, 1, 1});
-    uint32_t loaded_next = nav_mesh_api::add_off_mesh_connection(loaded, {{4, 0, 4}, {8, 0, 8}, 0.5f, OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL, 1, 1});
+    const OffMeshConnectionParams next_connection = {{4, 0, 4}, {8, 0, 8}, 0.5f, OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL, 1, 1};
+    uint32_t original_next = nav_mesh_api::add_off_mesh_connection(nav_mesh, next_connection);
+    uint32_t loaded_next = nav_mesh_api::add_off_mesh_connection(loaded, next_connection);
     CHECK(original_next == loaded_next);
     CHECK(hash_links(loaded) == hash_links(nav_mesh));
 
