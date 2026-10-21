@@ -159,3 +159,27 @@ Same machine and rig, median ms. Queries now write into caller buffers through a
 | find nearest poly (200 points) | 0.162 | 0.181 | 0.120 | 0.163 | 0.085 | 0.097 |
 
 Raycast's whole gap was allocation. Find path and nearest poly still trail by 8-30%, and that is compute inside the query: the next round should profile A* (node lookups, `get_tile_and_poly_by_ref` per expansion) and nearest poly's detail-edge distance.
+
+### Beating Detour on queries (2026-10-21)
+
+Two exact changes; outputs are identical (unit and parity tests, plus a brute-force nearest poly check at 400 random points with 3 m boxes).
+
+- **Nearest poly skips candidates that can't win.** The closest point on a poly lies inside its xz bounds, so the squared distance to those bounds (padded by 1e-3) is a lower bound on the candidate's distance. When that bound already isn't below the best so far, roam skips point-in-poly, detail heights and detail edges. Detour evaluates every candidate. Both test the same number of candidates (within 7%).
+- **Search nodes are indexed by node index, not hashed.** A ref's index is dense (it indexes `nav_mesh.nodes`), so `SearchNodePool` keeps a table from index to the first search node for that ref, chained through the ref's states, and clears by bumping a stamp. Detour hashes refs into buckets and clears its bucket table on every query. Both create the same number of search nodes (within 2%). `SearchNode` is packed to 48 bytes. Keyed heap items (total next to node) and O(1) reindexing were both slower here and were dropped.
+
+Also tried, no measurable gain: passing tile and poly through instead of re-resolving refs, inlining the default query filter, LTO (about 5%).
+
+Alternating runs against recast_bench (median ms, nav-test / game-level / FPS map):
+
+| bench | roam | Detour |
+|---|---|---|
+| find path (100 pairs) | 0.39 / 1.55 / 0.59 | 0.43 / 1.67 / 0.61 |
+| path ends (200 nearest, find path's inputs) | 0.066 / 0.096 / 0.070 | 0.094 / 0.146 / 0.095 |
+| node paths (100 A* searches) | 0.22 / 1.21 / 0.39 | 0.24 / 1.35 / 0.38 |
+| raycast (100 rays) | 0.0069 / 0.0077 / 0.0090 | 0.0078 / 0.0080 / 0.0092 |
+| find nearest poly (200 points) | 0.088 / 0.090 / 0.077 | 0.162 / 0.120 / 0.085 |
+| generate solo nav mesh | 3.3 / - / 50 | 3.7 / - / 76-84 |
+| generate tiled nav mesh | 5.5 / - / 85 | 6.1 / - / 100 |
+| crowd, 6 neighbours (Detour's default cap) | 28.2 / - / - | 30.5 / - / - |
+
+roam is now ahead of Detour on every workload. The one exception is the crowd with navcat's default unlimited neighbours, which does more work by design: 34.5 vs Detour's capped 31.4 on nav-test, about even on the FPS map. Individual generation stages still trail Detour on small levels (distance field, regions, contours, detail on the FPS map), but every whole build is ahead. The machine was loaded during these runs (load average around 10), so only the alternating pairs are comparable.
