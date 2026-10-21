@@ -939,6 +939,11 @@ bool build_regions_monotone(BuildContext &context, CompactHeightfield &compact_h
     compact_heightfield.border_size = border_size;
 
     id = sweep_monotone_rows(compact_heightfield, border_size, id, source_regions.data);
+    if (id > 0xffff) {
+        build_context::error(context, "Region ID overflow");
+        source_regions.release();
+        return false;
+    }
 
     Array<int> overlaps = {};
     compact_heightfield.max_regions = id;
@@ -1068,7 +1073,7 @@ static bool merge_and_filter_layer_regions(int min_region_area, const CompactHei
     return true;
 }
 
-bool build_layer_regions(BuildContext &, CompactHeightfield &compact_heightfield, int border_size, int min_region_area) {
+bool build_layer_regions(BuildContext &context, CompactHeightfield &compact_heightfield, int border_size, int min_region_area) {
     Array<uint16_t> source_regions = {};
     source_regions.resize(compact_heightfield.span_count, 0);
 
@@ -1076,6 +1081,11 @@ bool build_layer_regions(BuildContext &, CompactHeightfield &compact_heightfield
     compact_heightfield.border_size = border_size;
 
     id = sweep_monotone_rows(compact_heightfield, border_size, id, source_regions.data);
+    if (id > 0xffff) {
+        build_context::error(context, "Region ID overflow");
+        source_regions.release();
+        return false;
+    }
 
     compact_heightfield.max_regions = id;
     int max_region_id = compact_heightfield.max_regions;

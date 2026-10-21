@@ -75,6 +75,7 @@ Dated decisions and the reasoning behind them are in `llm/worklog.md`.
 - **Ref 0 is never treated as "none"**: roam uses `INVALID_NODE_REF`. navcat needs `llm/navcat-ref-zero-truthiness.patch` to match.
 - **Smooth path zero-length steps** move zero distance instead of producing NaN. navcat needs `llm/navcat-smooth-path-zero-step.patch` to match.
 - **Merged positions keep index 0**: navcat needs `llm/navcat-merge-positions-index-zero.patch` to match.
+- **Region id overflow** is an error in every region builder. roam stores region ids in 16 bits (in compact spans and in the build scratch, like recast), so watershed, monotone and layer regions all fail with "Region ID overflow" past 0xffff ids; navcat only checks in watershed.
 - **Floating point contraction is off** for roam's targets, so results don't depend on whether the compiler fuses multiply-adds.
 - **Path queries** differ from navcat only at exact vertex and edge ties (see worklog).
 
