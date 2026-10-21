@@ -39,7 +39,7 @@ static void calculate_extents(const Array<BoundsItem> &items, uint32_t min, uint
 }
 
 static void subdivide(Array<BoundsItem> &items, uint32_t min, uint32_t max, uint32_t tris_per_chunk, ChunkyTriMesh &mesh,
-                      const uint32_t *indices) {
+                      const uint32_t *indices, BoundsItem *scratch) {
     uint32_t node_index = mesh.nodes.length;
     uint32_t count = max - min;
 
@@ -61,13 +61,13 @@ static void subdivide(Array<BoundsItem> &items, uint32_t min, uint32_t max, uint
     }
 
     bool split_on_y = node.max.y - node.min.y > node.max.x - node.min.x;
-    sort::stable(&items[min], count, [split_on_y](const BoundsItem &a, const BoundsItem &b) {
+    sort::stable_with_scratch(&items[min], count, scratch, [split_on_y](const BoundsItem &a, const BoundsItem &b) {
         return split_on_y ? a.min.y < b.min.y : a.min.x < b.min.x;
     });
 
     uint32_t split = min + count / 2;
-    subdivide(items, min, split, tris_per_chunk, mesh, indices);
-    subdivide(items, split, max, tris_per_chunk, mesh, indices);
+    subdivide(items, min, split, tris_per_chunk, mesh, indices, scratch);
+    subdivide(items, split, max, tris_per_chunk, mesh, indices, scratch);
 
     mesh.nodes[node_index].index = -(int32_t)(mesh.nodes.length - node_index);
 }
@@ -81,7 +81,10 @@ ChunkyTriMesh create(const float *vertices, const uint32_t *indices, uint32_t in
     items.reserve(triangle_count);
     for (uint32_t i = 0; i < triangle_count; i++) items.push(calculate_triangle_bounds(vertices, indices, i));
 
-    subdivide(items, 0, triangle_count, tris_per_chunk, mesh, indices);
+    Array<BoundsItem> scratch = {};
+    scratch.resize(triangle_count);
+    subdivide(items, 0, triangle_count, tris_per_chunk, mesh, indices, scratch.data);
+    scratch.release();
     items.release();
 
     for (const ChunkyTriMeshNode &node : mesh.nodes) {

@@ -55,3 +55,15 @@ Results (alternating runs of the before and after binaries, `--time 5000`):
 | find nearest poly (200 points) | 0.309 / 0.278 | 0.218 / 0.187 |
 
 About 8-10% on the crowd and 30% on nearest poly. The crowd's remaining time is mostly inherent work: obstacle avoidance sampling is about 75 candidate velocities per agent per update against every neighbour. navcat collects every neighbour within the collision query range, where recast caps it at the 6 nearest; a cap would be the next big win but changes behaviour against navcat.
+
+Correction: round 1's profiling build set `CMAKE_CXX_FLAGS_RELWITHDEBINFO` without `-DNDEBUG`, so `ROAM_ASSERT` bounds checks were compiled in for both the before and after binaries. The comparisons are like for like, but absolute times include assert overhead. Profile with `-O3 -g -fno-omit-frame-pointer -DNDEBUG`.
+
+## Perf round 2: generation (2026-10-21)
+
+Profiled `generate solo nav mesh` and `generate tiled nav mesh` (asserts off). Time is spread over the stages with no single dominant cost: `filter_ledge_spans` (14-16%, pointer-chasing span columns), detail height patches (5%), compact heightfield connections, region expansion, rasterization clipping (`divide_poly`), distance fields. Each is the same algorithm as navcat, already 2.9-5.1x faster than it.
+
+Change: `sort::stable_with_scratch` takes a caller scratch buffer; the chunky tri mesh's recursive subdivision allocates one scratch buffer instead of one per sort. Identical output; no measurable change on nav-test (5.48 vs 5.50 ms tiled), since the sort was under 1%.
+
+Findings for later:
+- Tiled generation spends about 15% in malloc, free and memset, mostly allocating and freeing each tile's heightfield, compact heightfield, contours and meshes. Reusing those buffers across tiles is the next single-threaded win, with an estimated 5-10%.
+- Tiles are independent, so the big win for tiled builds is building them in parallel. That needs a public per-tile build function that callers can run on their own threads (roam doesn't own threads, which also matters for wasm).

@@ -39,7 +39,7 @@ void insertion(T *items, uint32_t start, uint32_t end, Less less) {
 }
 
 template <typename T, typename Less>
-void stable(T *items, uint32_t count, Less less) {
+void stable_with_scratch(T *items, uint32_t count, T *scratch, Less less) {
     const uint32_t run = 16;
     for (uint32_t start = 0; start < count; start += run) {
         uint32_t end = start + run < count ? start + run : count;
@@ -47,7 +47,6 @@ void stable(T *items, uint32_t count, Less less) {
     }
     if (count <= run) return;
 
-    T *scratch = memory::allocate_array<T>(count);
     for (uint32_t width = run; width < count; width *= 2) {
         for (uint32_t start = 0; start < count; start += width * 2) {
             uint32_t middle = start + width;
@@ -56,6 +55,16 @@ void stable(T *items, uint32_t count, Less less) {
             merge_runs(items, scratch, start, middle, end, less);
         }
     }
+}
+
+template <typename T, typename Less>
+void stable(T *items, uint32_t count, Less less) {
+    if (count <= 16) {
+        stable_with_scratch(items, count, (T *)nullptr, less);
+        return;
+    }
+    T *scratch = memory::allocate_array<T>(count);
+    stable_with_scratch(items, count, scratch, less);
     memory::free_array(scratch, count);
 }
 
