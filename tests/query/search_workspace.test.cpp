@@ -16,46 +16,48 @@ static SearchNode node_for(NodeRef ref, int state) {
     return node;
 }
 
+static NodeRef poly_ref(uint32_t index) { return node::ser_node_ref(NODE_TYPE_POLY, index, 1); }
+
 TEST(search_node_pool_finds_every_node_after_growing) {
     SearchNodePool pool = {};
-    for (uint32_t i = 0; i < 1000; i++) nav_mesh_search::add_search_node(pool, node_for(i * 7919ull, (int)(i % 3)));
+    for (uint32_t i = 0; i < 1000; i++) nav_mesh_search::add_search_node(pool, node_for(poly_ref(i * 37), (int)(i % 3)));
 
     bool all_found = true;
-    for (uint32_t i = 0; i < 1000; i++) all_found &= nav_mesh_search::get_search_node(pool, i * 7919ull, (int)(i % 3)) == (int32_t)i;
+    for (uint32_t i = 0; i < 1000; i++) all_found &= nav_mesh_search::get_search_node(pool, poly_ref(i * 37), (int)(i % 3)) == (int32_t)i;
     CHECK(all_found);
-    CHECK(nav_mesh_search::get_search_node(pool, 3, 0) == NULL_SEARCH_NODE);
-    CHECK(nav_mesh_search::get_search_node(pool, 0, 1) == NULL_SEARCH_NODE);
+    CHECK(nav_mesh_search::get_search_node(pool, poly_ref(3), 0) == NULL_SEARCH_NODE);
+    CHECK(nav_mesh_search::get_search_node(pool, poly_ref(0), 1) == NULL_SEARCH_NODE);
 
     nav_mesh_search::release(pool);
 }
 
 TEST(search_node_pool_clear_keeps_memory_and_forgets_nodes) {
     SearchNodePool pool = {};
-    for (uint32_t i = 0; i < 300; i++) nav_mesh_search::add_search_node(pool, node_for(i, 0));
+    for (uint32_t i = 0; i < 300; i++) nav_mesh_search::add_search_node(pool, node_for(poly_ref(i), 0));
     uint32_t node_capacity = pool.nodes.capacity;
-    uint32_t bucket_count = pool.buckets.length;
+    uint32_t table_length = pool.first_by_index.length;
 
     nav_mesh_search::clear(pool);
     CHECK(pool.nodes.length == 0);
     CHECK(pool.nodes.capacity == node_capacity);
-    CHECK(pool.buckets.length == bucket_count);
-    CHECK(nav_mesh_search::get_search_node(pool, 5, 0) == NULL_SEARCH_NODE);
+    CHECK(pool.first_by_index.length == table_length);
+    CHECK(nav_mesh_search::get_search_node(pool, poly_ref(5), 0) == NULL_SEARCH_NODE);
 
-    CHECK(nav_mesh_search::add_search_node(pool, node_for(5, 0)) == 0);
-    CHECK(nav_mesh_search::get_search_node(pool, 5, 0) == 0);
+    CHECK(nav_mesh_search::add_search_node(pool, node_for(poly_ref(5), 0)) == 0);
+    CHECK(nav_mesh_search::get_search_node(pool, poly_ref(5), 0) == 0);
 
     nav_mesh_search::release(pool);
 }
 
 TEST(search_node_pool_first_node_is_the_earliest_added_for_a_ref) {
     SearchNodePool pool = {};
-    nav_mesh_search::add_search_node(pool, node_for(42, 2));
-    for (uint32_t i = 0; i < 200; i++) nav_mesh_search::add_search_node(pool, node_for(i + 100, 0));
-    nav_mesh_search::add_search_node(pool, node_for(42, 0));
-    nav_mesh_search::add_search_node(pool, node_for(42, 1));
+    nav_mesh_search::add_search_node(pool, node_for(poly_ref(42), 2));
+    for (uint32_t i = 0; i < 200; i++) nav_mesh_search::add_search_node(pool, node_for(poly_ref(i + 100), 0));
+    nav_mesh_search::add_search_node(pool, node_for(poly_ref(42), 0));
+    nav_mesh_search::add_search_node(pool, node_for(poly_ref(42), 1));
 
-    CHECK(nav_mesh_search::get_first_search_node(pool, 42) == 0);
-    CHECK(nav_mesh_search::get_first_search_node(pool, 7) == NULL_SEARCH_NODE);
+    CHECK(nav_mesh_search::get_first_search_node(pool, poly_ref(42)) == 0);
+    CHECK(nav_mesh_search::get_first_search_node(pool, poly_ref(7)) == NULL_SEARCH_NODE);
 
     nav_mesh_search::release(pool);
 }

@@ -11,8 +11,7 @@ namespace nav_mesh_search {
 
 static const float HEURISTIC_SCALE = 0.999f;
 
-static const uint32_t MIN_SEARCH_BUCKETS = 64;
-static const uint32_t SEARCH_NODES_PER_BUCKET = 2;
+static const uint32_t MIN_SEARCH_INDEX_TABLE = 256;
 
 SearchWorkspace create_search_workspace() {
     SearchWorkspace workspace = {};
@@ -36,11 +35,14 @@ void release(SearchWorkspace &workspace) {
     workspace.local_refs.release();
 }
 
-static uint32_t search_bucket(const SearchNodePool &pool, NodeRef node_ref) { return (uint32_t)hash_key(node_ref) & (pool.buckets.length - 1); }
+static int32_t first_with_ref(const SearchNodePool &pool, NodeRef node_ref) {
+    uint32_t index = node::get_node_ref_index(node_ref);
+    if (index >= pool.stamp_by_index.length || pool.stamp_by_index[index] != pool.stamp) return NULL_SEARCH_NODE;
+    return pool.first_by_index[index];
+}
 
 int32_t get_search_node(const SearchNodePool &pool, NodeRef node_ref, int state) {
-    if (pool.buckets.length == 0) return NULL_SEARCH_NODE;
-    for (int32_t index = pool.buckets[search_bucket(pool, node_ref)]; index != NULL_SEARCH_NODE; index = pool.nodes[(uint32_t)index].next_in_bucket) {
+    for (int32_t index = first_with_ref(pool, node_ref); index != NULL_SEARCH_NODE; index = pool.nodes[(uint32_t)index].next_with_same_ref) {
         const SearchNode &node = pool.nodes[(uint32_t)index];
         if (node.node_ref == node_ref && node.state == state) return index;
     }
@@ -48,43 +50,45 @@ int32_t get_search_node(const SearchNodePool &pool, NodeRef node_ref, int state)
 }
 
 int32_t get_first_search_node(const SearchNodePool &pool, NodeRef node_ref) {
-    if (pool.buckets.length == 0) return NULL_SEARCH_NODE;
     int32_t first = NULL_SEARCH_NODE;
-    for (int32_t index = pool.buckets[search_bucket(pool, node_ref)]; index != NULL_SEARCH_NODE; index = pool.nodes[(uint32_t)index].next_in_bucket) {
+    for (int32_t index = first_with_ref(pool, node_ref); index != NULL_SEARCH_NODE; index = pool.nodes[(uint32_t)index].next_with_same_ref) {
         if (pool.nodes[(uint32_t)index].node_ref == node_ref) first = index;
     }
     return first;
 }
 
-static void link_search_node(SearchNodePool &pool, uint32_t index) {
-    uint32_t bucket = search_bucket(pool, pool.nodes[index].node_ref);
-    pool.nodes[index].next_in_bucket = pool.buckets[bucket];
-    pool.buckets[bucket] = (int32_t)index;
-}
-
-static void grow_search_buckets(SearchNodePool &pool) {
-    uint32_t bucket_count = pool.buckets.length > 0 ? pool.buckets.length * 2 : MIN_SEARCH_BUCKETS;
-    pool.buckets.clear();
-    pool.buckets.resize(bucket_count, NULL_SEARCH_NODE);
-    for (uint32_t index = 0; index < pool.nodes.length; index++) link_search_node(pool, index);
-}
-
 uint32_t add_search_node(SearchNodePool &pool, const SearchNode &node) {
-    if (pool.nodes.length + 1 > pool.buckets.length * SEARCH_NODES_PER_BUCKET) grow_search_buckets(pool);
+    uint32_t ref_index = node::get_node_ref_index(node.node_ref);
+    if (ref_index >= pool.stamp_by_index.length) {
+        uint32_t length = pool.stamp_by_index.length > 0 ? pool.stamp_by_index.length : MIN_SEARCH_INDEX_TABLE;
+        while (length <= ref_index) length *= 2;
+        pool.first_by_index.resize(length, NULL_SEARCH_NODE);
+        pool.stamp_by_index.resize(length, pool.stamp - 1);
+    }
+    if (pool.stamp_by_index[ref_index] != pool.stamp) {
+        pool.stamp_by_index[ref_index] = pool.stamp;
+        pool.first_by_index[ref_index] = NULL_SEARCH_NODE;
+    }
+
     uint32_t index = pool.nodes.length;
     pool.nodes.push(node);
-    link_search_node(pool, index);
+    pool.nodes[index].next_with_same_ref = pool.first_by_index[ref_index];
+    pool.first_by_index[ref_index] = (int32_t)index;
     return index;
 }
 
 void clear(SearchNodePool &pool) {
     pool.nodes.clear();
-    for (int32_t &head : pool.buckets) head = NULL_SEARCH_NODE;
+    pool.stamp++;
+    if (pool.stamp == 0) {
+        for (uint32_t &stamp : pool.stamp_by_index) stamp = UINT32_MAX;
+    }
 }
 
 void release(SearchNodePool &pool) {
     pool.nodes.release();
-    pool.buckets.release();
+    pool.first_by_index.release();
+    pool.stamp_by_index.release();
 }
 
 static SearchNode make_search_node(NodeRef node_ref, int state, uint32_t flags, Vec3 position) {
@@ -95,7 +99,7 @@ static SearchNode make_search_node(NodeRef node_ref, int state, uint32_t flags, 
     node.state = state;
     node.flags = flags;
     node.node_ref = node_ref;
-    node.next_in_bucket = NULL_SEARCH_NODE;
+    node.next_with_same_ref = NULL_SEARCH_NODE;
     return node;
 }
 
@@ -336,7 +340,7 @@ static int32_t search_node_path(FindNodePathResult &out, SearchWorkspace &worksp
             NodeRef neighbour_node_ref = link.to_node_ref;
 
             if (neighbour_node_ref == parent_node_ref) continue;
-            if (!filter.pass_filter(filter, neighbour_node_ref, nav_mesh)) continue;
+            if (!nav_mesh_api::passes_filter(filter, neighbour_node_ref, nav_mesh)) continue;
 
             int state = link_state(link);
             uint32_t neighbour_index = get_or_add_neighbour(nav_mesh, nodes, best_node_ref, neighbour_node_ref, state);
@@ -366,12 +370,12 @@ static int32_t search_node_path(FindNodePathResult &out, SearchWorkspace &worksp
 
             if (!found_shortcut) {
                 float current_cost =
-                    filter.get_cost(filter, best.position, neighbour_position, nav_mesh, parent_node_ref, best_node_ref, neighbour_node_ref);
+                    nav_mesh_api::filter_cost(filter, best.position, neighbour_position, nav_mesh, parent_node_ref, best_node_ref, neighbour_node_ref);
                 cost = best.cost + current_cost;
             }
 
             if (neighbour_node_ref == end_node_ref) {
-                float end_cost = filter.get_cost(filter, neighbour_position, end_position, nav_mesh, best_node_ref, neighbour_node_ref, INVALID_NODE_REF);
+                float end_cost = nav_mesh_api::filter_cost(filter, neighbour_position, end_position, nav_mesh, best_node_ref, neighbour_node_ref, INVALID_NODE_REF);
                 cost = cost + end_cost;
                 heuristic = 0;
             } else {
@@ -534,7 +538,7 @@ int update_sliced_find_node_path(const NavMesh &nav_mesh, SlicedNodePathQuery &q
             NodeRef neighbour_node_ref = link.to_node_ref;
 
             if (neighbour_node_ref == parent_node_ref) continue;
-            if (!filter.pass_filter(filter, neighbour_node_ref, nav_mesh)) continue;
+            if (!nav_mesh_api::passes_filter(filter, neighbour_node_ref, nav_mesh)) continue;
 
             int state = link_state(link);
             uint32_t neighbour_index = get_or_add_neighbour(nav_mesh, nodes, best_node_ref, neighbour_node_ref, state);
@@ -564,13 +568,13 @@ int update_sliced_find_node_path(const NavMesh &nav_mesh, SlicedNodePathQuery &q
 
             if (!found_shortcut) {
                 float current_cost =
-                    filter.get_cost(filter, best.position, neighbour_position, nav_mesh, parent_node_ref, best_node_ref, neighbour_node_ref);
+                    nav_mesh_api::filter_cost(filter, best.position, neighbour_position, nav_mesh, parent_node_ref, best_node_ref, neighbour_node_ref);
                 cost = best.cost + current_cost;
             }
 
             if (neighbour_node_ref == query.end_node_ref) {
                 float end_cost =
-                    filter.get_cost(filter, neighbour_position, query.end_position, nav_mesh, best_node_ref, neighbour_node_ref, INVALID_NODE_REF);
+                    nav_mesh_api::filter_cost(filter, neighbour_position, query.end_position, nav_mesh, best_node_ref, neighbour_node_ref, INVALID_NODE_REF);
                 cost = cost + end_cost;
                 heuristic = 0;
             } else {
@@ -828,7 +832,7 @@ void move_along_surface(MoveAlongSurfaceResult &result, SearchWorkspace &workspa
                 NodeRef neighbour_ref = link.to_node_ref;
                 if (node::get_node_ref_type(neighbour_ref) == NODE_TYPE_OFFMESH) continue;
                 if ((uint32_t)link.edge != j) continue;
-                if (!filter.pass_filter(filter, neighbour_ref, nav_mesh)) continue;
+                if (!nav_mesh_api::passes_filter(filter, neighbour_ref, nav_mesh)) continue;
                 neighbours.push(neighbour_ref);
             }
 
@@ -933,7 +937,7 @@ static void raycast_base(RaycastResult &result, const NavMesh &nav_mesh, NodeRef
             result.t = FLT_MAX;
             if (calculate_costs) {
                 result.path_cost +=
-                    filter.get_cost(filter, current_position, end_position, nav_mesh, previous_ref_tracking, current_ref, INVALID_NODE_REF);
+                    nav_mesh_api::filter_cost(filter, current_position, end_position, nav_mesh, previous_ref_tracking, current_ref, INVALID_NODE_REF);
             }
             break;
         }
@@ -948,7 +952,7 @@ static void raycast_base(RaycastResult &result, const NavMesh &nav_mesh, NodeRef
             if (link.edge != intersection.seg_max) continue;
             if (node::get_node_ref_type(link.to_node_ref) == NODE_TYPE_OFFMESH) continue;
             if (!nav_mesh_api::get_tile_and_poly_by_ref(link.to_node_ref, nav_mesh).success) continue;
-            if (!filter.pass_filter(filter, link.to_node_ref, nav_mesh)) continue;
+            if (!nav_mesh_api::passes_filter(filter, link.to_node_ref, nav_mesh)) continue;
 
             if (link.side == 0xff) {
                 next_ref = link.to_node_ref;
@@ -1006,7 +1010,7 @@ static void raycast_base(RaycastResult &result, const NavMesh &nav_mesh, NodeRef
                 Vec3 last_position = current_position;
                 current_position = vec3::scale_and_add(start_position, direction, result.t);
                 result.path_cost +=
-                    filter.get_cost(filter, last_position, current_position, nav_mesh, previous_ref_tracking, current_ref, INVALID_NODE_REF);
+                    nav_mesh_api::filter_cost(filter, last_position, current_position, nav_mesh, previous_ref_tracking, current_ref, INVALID_NODE_REF);
             }
 
             break;
@@ -1026,7 +1030,7 @@ static void raycast_base(RaycastResult &result, const NavMesh &nav_mesh, NodeRef
 
             current_position.y = e0.y + edge_direction.y * s;
 
-            result.path_cost += filter.get_cost(filter, last_position, current_position, nav_mesh, previous_ref_tracking, current_ref, next_ref);
+            result.path_cost += nav_mesh_api::filter_cost(filter, last_position, current_position, nav_mesh, previous_ref_tracking, current_ref, next_ref);
         }
 
         previous_ref_tracking = current_ref;
@@ -1110,7 +1114,7 @@ void find_random_point(FindRandomPointResult &out, const NavMesh &nav_mesh, cons
         const NavMeshPoly &poly = selected_tile->polys[i];
         NodeRef ref = nav_mesh_api::get_node_by_tile_and_poly(nav_mesh, *selected_tile, (int)i).ref;
 
-        if (!filter.pass_filter(filter, ref, nav_mesh)) continue;
+        if (!nav_mesh_api::passes_filter(filter, ref, nav_mesh)) continue;
 
         float area = poly_area(*selected_tile, poly);
         area_sum += area;
@@ -1133,7 +1137,7 @@ void find_random_point_around_circle(FindRandomPointResult &out, SearchWorkspace
     if (!nav_mesh_api::is_valid_node_ref(nav_mesh, start_node_ref) || !vec3::finite(position) || max_radius < 0 || !isfinite(max_radius)) return;
 
     if (!nav_mesh_api::get_tile_and_poly_by_ref(start_node_ref, nav_mesh).success) return;
-    if (!filter.pass_filter(filter, start_node_ref, nav_mesh)) return;
+    if (!nav_mesh_api::passes_filter(filter, start_node_ref, nav_mesh)) return;
 
     SearchNodePool &nodes = workspace.nodes;
     SearchNodeQueue &open_list = workspace.open_list;
@@ -1177,7 +1181,7 @@ void find_random_point_around_circle(FindRandomPointResult &out, SearchWorkspace
 
             if (neighbour_ref == INVALID_NODE_REF || neighbour_ref == parent_ref) continue;
             if (!nav_mesh_api::get_tile_and_poly_by_ref(neighbour_ref, nav_mesh).success) continue;
-            if (!filter.pass_filter(filter, neighbour_ref, nav_mesh)) continue;
+            if (!nav_mesh_api::passes_filter(filter, neighbour_ref, nav_mesh)) continue;
 
             Vec3 va;
             Vec3 vb;

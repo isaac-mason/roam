@@ -117,7 +117,7 @@ bool is_local_boundary_valid(const LocalBoundary &boundary, const NavMesh &nav_m
     for (uint32_t i = 0; i < boundary.poly_count; i++) {
         NodeRef poly_ref = boundary.polys[i];
         if (!nav_mesh_api::is_valid_node_ref(nav_mesh, poly_ref)) return false;
-        if (!filter.pass_filter(filter, poly_ref, nav_mesh)) return false;
+        if (!nav_mesh_api::passes_filter(filter, poly_ref, nav_mesh)) return false;
     }
 
     return true;

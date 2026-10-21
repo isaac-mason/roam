@@ -139,7 +139,7 @@ bool corridor_is_valid(const PathCorridor &corridor, uint32_t max_look_ahead, co
     uint32_t count = corridor.path.length < max_look_ahead ? corridor.path.length : max_look_ahead;
     for (uint32_t i = 0; i < count; i++) {
         NodeRef node_ref = corridor.path[i];
-        if (!nav_mesh_api::is_valid_node_ref(nav_mesh, node_ref) || !filter.pass_filter(filter, node_ref, nav_mesh)) return false;
+        if (!nav_mesh_api::is_valid_node_ref(nav_mesh, node_ref) || !nav_mesh_api::passes_filter(filter, node_ref, nav_mesh)) return false;
     }
     return true;
 }

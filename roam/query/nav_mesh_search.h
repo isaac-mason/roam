@@ -17,20 +17,24 @@ constexpr int NO_PARENT_STATE = -1;
 constexpr int32_t NULL_SEARCH_NODE = -1;
 
 struct SearchNode {
+    NodeRef node_ref;
+    NodeRef parent_node_ref;
     Vec3 position;
     float cost;
     float total;
-    NodeRef parent_node_ref;
-    int parent_state;
-    int state;
-    uint32_t flags;
-    NodeRef node_ref;
-    int32_t next_in_bucket;
+    int32_t next_with_same_ref;
+    uint8_t flags;
+    int8_t state;
+    int8_t parent_state;
 };
+
+static_assert(sizeof(SearchNode) == 48);
 
 struct SearchNodePool {
     Array<SearchNode> nodes;
-    Array<int32_t> buckets;
+    Array<int32_t> first_by_index;
+    Array<uint32_t> stamp_by_index;
+    uint32_t stamp;
 };
 
 struct SearchNodeQueue {

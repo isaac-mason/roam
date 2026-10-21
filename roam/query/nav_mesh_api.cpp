@@ -12,14 +12,11 @@ namespace roam {
 
 namespace nav_mesh_api {
 
-static float distance_cost(const QueryFilter &, Vec3 pa, Vec3 pb, const NavMesh &, NodeRef, NodeRef, NodeRef) { return vec3::distance(pa, pb); }
+float distance_cost(const QueryFilter &, Vec3 pa, Vec3 pb, const NavMesh &, NodeRef, NodeRef, NodeRef) { return vec3::distance(pa, pb); }
 
 static bool pass_any(const QueryFilter &, NodeRef, const NavMesh &) { return true; }
 
-static bool pass_flags(const QueryFilter &filter, NodeRef node_ref, const NavMesh &nav_mesh) {
-    uint32_t flags = get_node_by_ref(nav_mesh, node_ref).flags;
-    return (flags & filter.include_flags) != 0 && (flags & filter.exclude_flags) == 0;
-}
+bool pass_flags(const QueryFilter &filter, NodeRef node_ref, const NavMesh &nav_mesh) { return passes_flags(filter, nav_mesh.nodes[node::get_node_ref_index(node_ref)]); }
 
 const QueryFilter ANY_QUERY_FILTER = {pass_any, distance_cost, 0xffffffffu, 0, nullptr};
 const QueryFilter DEFAULT_QUERY_FILTER = {pass_flags, distance_cost, 0xffffffffu, 0, nullptr};
@@ -389,7 +386,7 @@ static void visit_polygons_in_tile(const NavMesh &nav_mesh, const NavMeshTile &t
 
         if (is_leaf_node && overlap) {
             NodeRef ref = get_node_by_tile_and_poly(nav_mesh, tile, bv_node.i).ref;
-            if (filter.pass_filter(filter, ref, nav_mesh)) visit(tile, bv_node.i, ref, user_data);
+            if (passes_filter(filter, ref, nav_mesh)) visit(tile, bv_node.i, ref, user_data);
         }
 
         if (overlap || is_leaf_node) {

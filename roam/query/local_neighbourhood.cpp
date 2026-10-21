@@ -104,7 +104,7 @@ void find_local_neighbourhood(FindLocalNeighbourhoodResult &result, SearchWorksp
             if (!neighbour.success) continue;
 
             if (node::get_node_ref_type(neighbour_ref) == NODE_TYPE_OFFMESH) continue;
-            if (!filter.pass_filter(filter, neighbour_ref, nav_mesh)) continue;
+            if (!nav_mesh_api::passes_filter(filter, neighbour_ref, nav_mesh)) continue;
 
             Vec3 va;
             Vec3 vb;
@@ -197,13 +197,13 @@ void get_poly_wall_segments(PolyWallSegmentsResult &result, const NavMesh &nav_m
                 if ((uint32_t)link.edge != j) continue;
                 if (link.to_node_ref == INVALID_NODE_REF) continue;
                 if (!nav_mesh_api::get_tile_and_poly_by_ref(link.to_node_ref, nav_mesh).success) continue;
-                if (filter.pass_filter(filter, link.to_node_ref, nav_mesh)) insert_interval(intervals, link.bmin, link.bmax, link.to_node_ref);
+                if (nav_mesh_api::passes_filter(filter, link.to_node_ref, nav_mesh)) insert_interval(intervals, link.bmin, link.bmax, link.to_node_ref);
             }
         } else {
             NodeRef neighbour_ref = INVALID_NODE_REF;
             if (nei) {
                 neighbour_ref = nav_mesh_api::get_node_by_tile_and_poly(nav_mesh, tile, nei - 1).ref;
-                if (nav_mesh_api::get_tile_and_poly_by_ref(neighbour_ref, nav_mesh).success && !filter.pass_filter(filter, neighbour_ref, nav_mesh)) {
+                if (nav_mesh_api::get_tile_and_poly_by_ref(neighbour_ref, nav_mesh).success && !nav_mesh_api::passes_filter(filter, neighbour_ref, nav_mesh)) {
                     neighbour_ref = INVALID_NODE_REF;
                 }
             }

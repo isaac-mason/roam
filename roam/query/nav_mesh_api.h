@@ -71,6 +71,24 @@ namespace nav_mesh_api {
 extern const QueryFilter ANY_QUERY_FILTER;
 extern const QueryFilter DEFAULT_QUERY_FILTER;
 
+bool pass_flags(const QueryFilter &filter, NodeRef node_ref, const NavMesh &nav_mesh);
+float distance_cost(const QueryFilter &filter, Vec3 pa, Vec3 pb, const NavMesh &nav_mesh, NodeRef previous_ref, NodeRef current_ref, NodeRef next_ref);
+
+inline bool passes_flags(const QueryFilter &filter, const NavMeshNode &node) {
+    return (node.flags & filter.include_flags) != 0 && (node.flags & filter.exclude_flags) == 0;
+}
+
+inline bool passes_filter(const QueryFilter &filter, NodeRef node_ref, const NavMesh &nav_mesh) {
+    if (filter.pass_filter == pass_flags) return passes_flags(filter, nav_mesh.nodes[node::get_node_ref_index(node_ref)]);
+    return filter.pass_filter(filter, node_ref, nav_mesh);
+}
+
+inline float filter_cost(const QueryFilter &filter, Vec3 pa, Vec3 pb, const NavMesh &nav_mesh, NodeRef previous_ref, NodeRef current_ref,
+                         NodeRef next_ref) {
+    if (filter.get_cost == distance_cost) return vec3::distance(pa, pb);
+    return filter.get_cost(filter, pa, pb, nav_mesh, previous_ref, current_ref, next_ref);
+}
+
 QueryFilter create_default_query_filter();
 
 NavMesh create_nav_mesh();
