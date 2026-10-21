@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "roam/util/memory.h"
+
 namespace test {
 
 struct Case {
@@ -49,7 +51,15 @@ int run_all(const char *filter) {
         if (!matches(cases[i], filter)) continue;
         current_name = cases[i].name;
         current_failures = 0;
+        roam::memory::MemoryStats before = roam::memory::outstanding();
         cases[i].run();
+        roam::memory::MemoryStats after = roam::memory::outstanding();
+        if (current_failures == 0 && (after.allocations != before.allocations || after.bytes != before.bytes)) {
+            char message[256];
+            snprintf(message, sizeof(message), "leaked %lld allocations (%lld bytes)", (long long)(after.allocations - before.allocations),
+                     (long long)(after.bytes - before.bytes));
+            fail(cases[i].file, 0, message);
+        }
         ran++;
         if (current_failures > 0) failed++;
     }

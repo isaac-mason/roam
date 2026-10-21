@@ -266,6 +266,16 @@ static void run_raycast() {
     }
 }
 
+static RaycastResult reused_ray = {};
+
+static void run_raycast_reused() {
+    for (uint32_t i = 0; i < QUERY_COUNT; i++) {
+        uint32_t a = i % state.centers.length;
+        nav_mesh_search::raycast_into(state.nav_mesh, state.center_refs[a], state.centers[a], state.centers[pair_end(i)],
+                                      nav_mesh_api::DEFAULT_QUERY_FILTER, reused_ray, &query_workspace);
+    }
+}
+
 static void run_find_nearest_poly() {
     for (uint32_t i = 0; i < 2 * QUERY_COUNT; i++) {
         Vec3 point = state.centers[i % state.centers.length];
@@ -370,7 +380,7 @@ int main(int argc, char **argv) {
         "build distance field",    "build regions",       "build contours",     "build poly mesh",          "build poly mesh detail",
     };
 
-    BenchCase cases[STAGE_COUNT + 8] = {};
+    BenchCase cases[STAGE_COUNT + 9] = {};
     uint32_t case_count = 0;
     for (int stage = 0; stage < STAGE_COUNT; stage++) cases[case_count++] = {STAGE_NAMES[stage], prepare_stage, run_stage, finish_stage};
     cases[case_count++] = {"generate solo nav mesh", nullptr, run_solo, nullptr};
@@ -378,6 +388,7 @@ int main(int argc, char **argv) {
     cases[case_count++] = {"find path (100 pairs)", nullptr, run_find_path, nullptr};
     cases[case_count++] = {"find path (100 pairs, workspace)", nullptr, run_find_path_with_workspace, nullptr};
     cases[case_count++] = {"raycast (100 rays)", nullptr, run_raycast, nullptr};
+    cases[case_count++] = {"raycast (100 rays, reused)", nullptr, run_raycast_reused, nullptr};
     cases[case_count++] = {"find nearest poly (200 points)", nullptr, run_find_nearest_poly, nullptr};
     cases[case_count++] = {"crowd (100 agents, 60 updates)", prepare_crowd, run_crowd, finish_crowd};
     cases[case_count++] = {"crowd (100 agents, 60 updates, 6 neighbours)", prepare_capped_crowd, run_crowd, finish_crowd};
@@ -391,6 +402,7 @@ int main(int argc, char **argv) {
         fflush(stdout);
     }
 
+    nav_mesh_search::release(reused_ray);
     nav_mesh_search::release(query_workspace);
     nav_mesh_api::release_nav_mesh(state.nav_mesh);
     state.centers.release();

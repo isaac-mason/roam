@@ -13,11 +13,19 @@ struct Allocator {
     void *user_data;
 };
 
+struct MemoryStats {
+    int64_t allocations;
+    int64_t bytes;
+};
+
 void set_allocator(const Allocator &allocator);
 void reset_allocator();
 
 void *allocate(size_t size);
 void free(void *block, size_t size);
+
+bool tracking_enabled();
+MemoryStats outstanding();
 
 template <typename T>
 T *allocate_array(size_t count) {
