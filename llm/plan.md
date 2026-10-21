@@ -81,6 +81,15 @@ Dated decisions and the reasoning behind them are in `llm/worklog.md`.
 
 - **Detail mesh error ties.** Detail heights are whole multiples of `cell_height`, and `sample_max_error` is usually a multiple of it too. So the two "error greater than max" checks in `poly_mesh_detail` (edge simplification and sample insertion) often compare two mathematically equal values. roam rounds these ties in `float`, as recast does (same comparisons, no epsilon). navcat rounds them in JS doubles. On nav-test this adds one extra vertex to poly 39. The same happens in `triangulate_hull`, which starts from the ear with the shortest perimeter: a lone triangle has three equal perimeters, and symmetric polys have congruent ears. So float and double sometimes start from different ears, which rotates or reshapes the triangulation (nav-test poly 131). Decision (2026-10-20): keep the recast-aligned float behaviour. The detail parity test compares mesh by mesh: vertices must match within 1e-4, triangles must match up to rotation (flags rotate too), and a small budget of tied meshes (at most 2%) may differ by one vertex or by triangulation.
 
+## Generation data layouts
+
+Generation outputs keep recast's and navcat's flat layouts, so fixes from navcat port line for line and parity tests compare arrays directly (decided 2026-10-21; typed records were considered and dropped). Each struct keeps navcat's count fields next to its arrays.
+
+- `Contour::vertices` and `raw_vertices`: 4 ints per vertex, `x, y, z, flags`. `flags & CONTOUR_REG_MASK` is the neighbouring region; `BORDER_VERTEX` and `AREA_BORDER` mark border vertices and area edges. `vertex_count` and `raw_vertex_count` count vertices.
+- `PolyMesh::vertices`: 3 ints per vertex, `x, y, z` in voxels. `polys`: `max_vertices_per_poly` ints per poly, vertex indices padded with `MESH_NULL_IDX`. `regions`, `areas` and `flags`: one per poly. `vertex_count` and `poly_count` count records.
+- `PolyMeshDetail::meshes`: 4 ints per poly, `vertex_base, vertex_count, triangle_base, triangle_count`. `vertices`: 3 floats per vertex. `triangles`: 4 ints per triangle, three vertex indices relative to the poly's `vertex_base`, then edge flags (2 bits per edge, `DETAIL_EDGE_BOUNDARY`).
+- The nav mesh tile (`NavMeshTile`) is typed instead: `NavMeshPoly`, `NavMeshPolyDetail`, and `detail_triangles` as bytes.
+
 ## Demos
 
 - One app with an example picker. Each example is a file `demos/examples/example_<name>.cpp` that exposes an `Example` of `{ name, init, update, ui, shutdown }`.
