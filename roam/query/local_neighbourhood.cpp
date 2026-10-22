@@ -1,6 +1,5 @@
 #include "roam/query/local_neighbourhood.h"
 
-#include "roam/generate/common.h"
 #include "roam/geometry/geometry.h"
 
 namespace roam {

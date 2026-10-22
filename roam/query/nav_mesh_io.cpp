@@ -2,7 +2,6 @@
 
 #include <string.h>
 
-#include "roam/generate/common.h"
 #include "roam/query/nav_mesh_api.h"
 #include "roam/util/sort.h"
 

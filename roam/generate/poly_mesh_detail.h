@@ -9,8 +9,6 @@
 
 namespace roam {
 
-constexpr int DETAIL_EDGE_BOUNDARY = 0x1;
-
 struct PolyMeshDetail {
     Array<int> meshes;
     Array<float> vertices;

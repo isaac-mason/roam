@@ -73,9 +73,9 @@ NavMeshTileDetailMesh polys_to_tile_detail_mesh(const Array<NavMeshPoly> &polys)
             detail_mesh.detail_triangles.push((uint8_t)(j - 1));
             detail_mesh.detail_triangles.push((uint8_t)j);
 
-            uint8_t edge_flags = 1 << 2;
-            if (j == 2) edge_flags |= 1 << 0;
-            if (j == vertex_count - 1) edge_flags |= 1 << 4;
+            uint8_t edge_flags = DETAIL_EDGE_BOUNDARY << 2;
+            if (j == 2) edge_flags |= DETAIL_EDGE_BOUNDARY << 0;
+            if (j == vertex_count - 1) edge_flags |= DETAIL_EDGE_BOUNDARY << 4;
 
             detail_mesh.detail_triangles.push(edge_flags);
             triangles_base++;

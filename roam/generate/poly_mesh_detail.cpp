@@ -7,6 +7,7 @@
 #include "roam/generate/common.h"
 #include "roam/geometry/geometry.h"
 #include "roam/math/scalar.h"
+#include "roam/query/nav_mesh.h"
 
 namespace roam {
 

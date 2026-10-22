@@ -2,7 +2,6 @@
 
 #include <math.h>
 
-#include "roam/generate/common.h"
 #include "roam/util/sort.h"
 
 namespace roam {
@@ -100,7 +99,6 @@ NavMeshTileBvTree build_nav_mesh_bv_tree(const NavMeshTileParams &params) {
 
         for (uint32_t j = 1; j < poly.vertex_count; j++) {
             uint32_t vertex_index = params.poly_vertices[poly.vertex_base + j];
-            if ((int)vertex_index == MESH_NULL_IDX) break;
             bounds = expand(bounds, vec3::load(params.vertices.data, vertex_index * 3));
         }
 

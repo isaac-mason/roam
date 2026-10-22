@@ -3,8 +3,6 @@
 #include <float.h>
 #include <math.h>
 
-#include "roam/generate/common.h"
-#include "roam/generate/poly_mesh_detail.h"
 #include "roam/geometry/geometry.h"
 #include "roam/query/bv_tree.h"
 #include "roam/util/sort.h"

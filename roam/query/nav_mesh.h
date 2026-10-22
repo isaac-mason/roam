@@ -15,6 +15,9 @@ namespace roam {
 
 constexpr int32_t NULL_LINK = -1;
 constexpr uint32_t MAX_POLY_VERTICES = 0xff;
+constexpr int POLY_NEIS_FLAG_EXT_LINK = 0x8000;
+constexpr int POLY_NEIS_FLAG_EXT_LINK_DIR_MASK = 0xff;
+constexpr int DETAIL_EDGE_BOUNDARY = 0x1;
 
 struct NavMeshPoly {
     uint32_t vertex_base;

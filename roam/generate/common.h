@@ -16,9 +16,6 @@ constexpr int BORDER_REG = 0x8000;
 constexpr int NOT_CONNECTED = 0x3f;
 constexpr int MAX_HEIGHT = 0xffff;
 
-constexpr int POLY_NEIS_FLAG_EXT_LINK = 0x8000;
-constexpr int POLY_NEIS_FLAG_EXT_LINK_DIR_MASK = 0xff;
-
 namespace common {
 
 constexpr int DIR_OFFSETS[4][2] = {
