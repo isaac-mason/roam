@@ -57,13 +57,14 @@ enum DebugHelper {
     HELPER_NAV_MESH_BV_TREE,
     HELPER_NAV_MESH,
     HELPER_OFF_MESH_CONNECTIONS,
+    HELPER_NAV_MESH_ISLANDS,
     HELPER_COUNT,
 };
 
 static const char *HELPER_NAMES[HELPER_COUNT] = {
     "triangle area ids", "heightfield", "compact heightfield solid", "compact heightfield distances", "compact heightfield regions",
     "raw contours",      "simplified contours", "poly mesh",       "poly mesh detail",              "nav mesh bv tree",
-    "nav mesh",          "off-mesh connections",
+    "nav mesh",          "off-mesh connections", "nav mesh islands",
 };
 
 struct MultipleAgentSizesExample {
@@ -187,6 +188,11 @@ static DebugPrimitives create_helper(int helper) {
         case HELPER_NAV_MESH_BV_TREE: return debug::create_nav_mesh_bv_tree_helper(nav_mesh);
         case HELPER_NAV_MESH: {
             DebugPrimitives primitives = debug::create_nav_mesh_helper(nav_mesh);
+            app::lift(primitives, 0.1f);
+            return primitives;
+        }
+        case HELPER_NAV_MESH_ISLANDS: {
+            DebugPrimitives primitives = debug::create_nav_mesh_islands_helper(nav_mesh);
             app::lift(primitives, 0.1f);
             return primitives;
         }

@@ -68,7 +68,11 @@ static DebugPrimitives create_nav_mesh_helper(int helper) {
         }
         case TILED_HELPER_NAV_MESH_LINKS: return debug::create_nav_mesh_links_helper(nav_mesh);
         case TILED_HELPER_NAV_MESH_PORTALS: return debug::create_nav_mesh_portals_helper(nav_mesh);
-        case TILED_HELPER_NAV_MESH_ISLANDS: return debug::create_nav_mesh_islands_helper(nav_mesh);
+        case TILED_HELPER_NAV_MESH_ISLANDS: {
+            DebugPrimitives primitives = debug::create_nav_mesh_islands_helper(nav_mesh);
+            app::lift(primitives, 0.1f);
+            return primitives;
+        }
     }
     return {};
 }

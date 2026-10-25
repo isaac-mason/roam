@@ -27,13 +27,14 @@ enum FilledVolumeHelper {
     FILLED_VOLUME_HELPER_NAV_MESH_BV_TREE,
     FILLED_VOLUME_HELPER_NAV_MESH,
     FILLED_VOLUME_HELPER_NAV_MESH_LINKS,
+    FILLED_VOLUME_HELPER_NAV_MESH_ISLANDS,
     FILLED_VOLUME_HELPER_COUNT,
 };
 
 static const char *const FILLED_VOLUME_HELPER_NAMES[FILLED_VOLUME_HELPER_COUNT] = {
     "triangle area ids", "heightfield",    "compact heightfield solid", "compact heightfield distances",
     "compact heightfield regions", "raw contours", "simplified contours", "poly mesh",
-    "poly mesh detail", "nav mesh bv tree", "nav mesh", "nav mesh links",
+    "poly mesh detail", "nav mesh bv tree", "nav mesh", "nav mesh links", "nav mesh islands",
 };
 
 enum VolumeShape {
@@ -232,6 +233,11 @@ static DebugPrimitives create_helper(int helper) {
             return primitives;
         }
         case FILLED_VOLUME_HELPER_NAV_MESH_LINKS: return debug::create_nav_mesh_links_helper(nav_mesh);
+        case FILLED_VOLUME_HELPER_NAV_MESH_ISLANDS: {
+            DebugPrimitives primitives = debug::create_nav_mesh_islands_helper(nav_mesh);
+            app::lift(primitives, 0.1f);
+            return primitives;
+        }
     }
     return {};
 }

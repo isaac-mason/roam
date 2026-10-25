@@ -26,13 +26,14 @@ enum UploadHelper {
     UPLOAD_HELPER_NAV_MESH,
     UPLOAD_HELPER_NAV_MESH_LINKS,
     UPLOAD_HELPER_NAV_MESH_PORTALS,
+    UPLOAD_HELPER_NAV_MESH_ISLANDS,
     UPLOAD_HELPER_COUNT,
 };
 
 static const char *const UPLOAD_HELPER_NAMES[UPLOAD_HELPER_COUNT] = {
     "triangle area ids", "heightfield",      "compact heightfield solid", "compact heightfield distances", "compact heightfield regions",
     "raw contours",      "simplified contours", "poly mesh",              "poly mesh detail",              "nav mesh bv tree",
-    "nav mesh",          "nav mesh links",   "nav mesh portals",
+    "nav mesh",          "nav mesh links",   "nav mesh portals",          "nav mesh islands",
 };
 
 enum UploadTool {
@@ -137,6 +138,8 @@ static void update_drawing(const App &app, int helper) {
         add_helper(list, debug::create_nav_mesh_links_helper(nav_mesh), 0);
     } else if (helper == UPLOAD_HELPER_NAV_MESH_PORTALS) {
         if (upload.generated_tiled) add_helper(list, debug::create_nav_mesh_portals_helper(nav_mesh), 0);
+    } else if (helper == UPLOAD_HELPER_NAV_MESH_ISLANDS) {
+        add_helper(list, debug::create_nav_mesh_islands_helper(nav_mesh), 0.1f);
     } else if (upload.generated_tiled) {
         const TiledNavMeshIntermediates &intermediates = upload.tiled_result.intermediates;
         if (helper == UPLOAD_HELPER_TRIANGLE_AREA_IDS) {
