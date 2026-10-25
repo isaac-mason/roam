@@ -19,7 +19,7 @@ struct FindRandomPointAroundCircleExample {
     bool has_center;
     Vec3 center;
     Array<Vec3> points;
-    SearchWorkspace workspace;
+    QueryWorkspace workspace;
 };
 
 static FindRandomPointAroundCircleExample find_random_point_around_circle_example;
@@ -53,7 +53,7 @@ static void update_random_points(Vec3 point) {
 static void init(App &app) {
     FindRandomPointAroundCircleExample &state = find_random_point_around_circle_example;
     state = {};
-    state.workspace = nav_mesh_search::create_search_workspace();
+    state.workspace = nav_mesh_search::create_query_workspace();
     state.random_state = 42;
     state.radius = 1.0f;
     state.point_count = 100;

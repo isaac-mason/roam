@@ -20,7 +20,7 @@ Crowd create(float max_agent_radius) {
     crowd.max_iterations_per_update = 600;
     crowd.max_iterations_per_agent = 200;
     crowd.quick_search_iterations = 20;
-    crowd.workspace = nav_mesh_search::create_search_workspace();
+    crowd.workspace = nav_mesh_search::create_query_workspace();
     crowd.topology_query = nav_mesh_search::create_sliced_node_path_query();
     return crowd;
 }
@@ -47,6 +47,7 @@ void release(Crowd &crowd) {
     crowd.scratch_cell_starts.release();
     crowd.scratch_cell_agents.release();
     nav_mesh_search::release(crowd.topology_query);
+    crowd.scratch_request_path.release();
     crowd.scratch_merged_path.release();
 }
 
@@ -242,7 +243,7 @@ static void request_path(Crowd &crowd, const NavMesh &nav_mesh, Agent &agent) {
                                                 agent.target_position, agent.query_filter);
     nav_mesh_search::update_sliced_find_node_path(agent.sliced_query, nav_mesh, crowd.quick_search_iterations);
 
-    Array<NodeRef> &request_path = crowd.workspace.node_path;
+    Array<NodeRef> &request_path = crowd.scratch_request_path;
     if (agent.target_replan) {
         finalize_partial_into(request_path, nav_mesh, agent.sliced_query, agent.corridor.path);
     } else {
@@ -306,8 +307,8 @@ static void remove_trackbacks(Array<NodeRef> &path) {
 static void complete_path(Crowd &crowd, const NavMesh &nav_mesh, Agent &agent) {
     agent.target_path_is_partial = (agent.sliced_query.status & SLICED_FIND_NODE_PATH_PARTIAL_RESULT) != 0;
 
-    finalize_into(crowd.workspace.node_path, nav_mesh, agent.sliced_query);
-    const Array<NodeRef> &new_path = crowd.workspace.node_path;
+    finalize_into(crowd.scratch_request_path, nav_mesh, agent.sliced_query);
+    const Array<NodeRef> &new_path = crowd.scratch_request_path;
     const Array<NodeRef> &current_path = agent.corridor.path;
 
     bool valid = !(current_path.length > 0 && new_path.length > 0 && current_path.back() != new_path[0]);
@@ -538,7 +539,7 @@ static void update_corners(Crowd &crowd, const NavMesh &nav_mesh) {
 
         if ((agent.update_flags & CROWD_UPDATE_OPTIMIZE_VIS) != 0 && agent.corners.length > 0) {
             uint32_t target_index = agent.corners.length > 1 ? 1 : 0;
-            path_corridor::optimize_path_visibility(agent.corridor, crowd.workspace, agent.corners[target_index].position, agent.path_optimization_range,
+            path_corridor::optimize_path_visibility(agent.corridor, agent.corners[target_index].position, agent.path_optimization_range,
                                                     nav_mesh, agent.query_filter);
         }
     }
@@ -881,7 +882,7 @@ static void update_topology_optimization(Crowd &crowd, const NavMesh &nav_mesh, 
 
     for (uint32_t i = 0; i < queue_length; i++) {
         Agent &agent = crowd.agents[queue[i].agent_id];
-        path_corridor::optimize_path_topology(agent.corridor, crowd.topology_query, crowd.workspace, nav_mesh, agent.query_filter);
+        path_corridor::optimize_path_topology(agent.corridor, crowd.topology_query, nav_mesh, agent.query_filter);
         agent.topology_opt_time = 0;
     }
 }

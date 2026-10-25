@@ -138,7 +138,7 @@ TEST_CASE("generate solo nav mesh covers a plane") {
     SoloNavMeshResult result = generate_solo_nav_mesh::generate_solo_nav_mesh({PLANE_POSITIONS, PLANE_INDICES}, options);
     CHECK(result.intermediates.poly_mesh.poly_count > 0);
 
-    SearchWorkspace workspace = nav_mesh_search::create_search_workspace();
+    QueryWorkspace workspace = nav_mesh_search::create_query_workspace();
     StraightPathPoint points[64];
     FindPathResult path;
     find_path::find_path(path, workspace, result.nav_mesh, {1, 0, 1}, {9, 0, 9}, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER, points);
@@ -179,7 +179,7 @@ TEST_CASE("generate tiled nav mesh connects tiles across a plane") {
     for (const NavMeshTile &tile : result.nav_mesh.tiles) tile_count += tile.allocated ? 1 : 0;
     CHECK(tile_count == 4);
 
-    SearchWorkspace workspace = nav_mesh_search::create_search_workspace();
+    QueryWorkspace workspace = nav_mesh_search::create_query_workspace();
     StraightPathPoint points[64];
     NodeRef node_path[256];
     FindPathResult path;

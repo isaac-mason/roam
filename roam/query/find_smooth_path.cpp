@@ -121,7 +121,7 @@ static void remove_front(Array<NodeRef> &values, uint32_t count) {
     values.resize(values.length - count);
 }
 
-static void move_with_visited(MoveAlongSurfaceResult &moved, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
+static void move_with_visited(MoveAlongSurfaceResult &moved, QueryWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
                               Vec3 start_position, Vec3 end_position, const QueryFilter &filter) {
     Array<NodeRef> &visited = workspace.visited;
     nav_mesh_search::move_along_surface(moved, workspace, nav_mesh, start_node_ref, start_position, end_position, filter, visited);
@@ -132,7 +132,7 @@ static void move_with_visited(MoveAlongSurfaceResult &moved, SearchWorkspace &wo
     visited.resize(moved.visited_count);
 }
 
-void find_smooth_path(FindSmoothPathResult &result, SearchWorkspace &workspace, const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 half_extents,
+void find_smooth_path(FindSmoothPathResult &result, QueryWorkspace &workspace, const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 half_extents,
                       const QueryFilter &filter, Span<SmoothPathPoint> point_buffer, const FindSmoothPathOptions &options) {
     SmoothPathPoint *points = point_buffer.data;
     uint32_t max_points = point_buffer.capacity;

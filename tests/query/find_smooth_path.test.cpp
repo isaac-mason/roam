@@ -11,7 +11,7 @@ TEST_CASE("find smooth path takes off mesh connection from its start") {
 
     nav_mesh_api::add_off_mesh_connection(nav_mesh, {{1, 0, 1}, {8, 0, 1}, 0.5f, OFF_MESH_CONNECTION_DIRECTION_START_TO_END, 1, 0});
 
-    SearchWorkspace workspace = nav_mesh_search::create_search_workspace();
+    QueryWorkspace workspace = nav_mesh_search::create_query_workspace();
     SmoothPathPoint points[256];
     FindSmoothPathResult result;
     find_smooth_path::find_smooth_path(result, workspace, nav_mesh, {1, 0, 1}, {8.5f, 0, 1.5f}, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER, points, {.step_size = 0.5f, .slop = 0.01f});

@@ -12,7 +12,10 @@ static const float MIN_TARGET_DISTANCE = 0.01f;
 
 PathCorridor create() { return {}; }
 
-void release(PathCorridor &corridor) { corridor.path.release(); }
+void release(PathCorridor &corridor) {
+    corridor.path.release();
+    corridor.scratch.release();
+}
 
 void reset(PathCorridor &corridor, NodeRef ref, Vec3 position) {
     corridor.position = position;
@@ -83,10 +86,10 @@ void merge_start_shortcut(Array<NodeRef> &current_path, const Array<NodeRef> &vi
     for (uint32_t i = 0; i < required; i++) current_path[i] = visited[i];
 }
 
-bool move_position(PathCorridor &corridor, SearchWorkspace &workspace, Vec3 new_position, const NavMesh &nav_mesh, const QueryFilter &filter) {
+bool move_position(PathCorridor &corridor, QueryWorkspace &workspace, Vec3 new_position, const NavMesh &nav_mesh, const QueryFilter &filter) {
     if (corridor.path.length == 0) return false;
 
-    Array<NodeRef> &visited = workspace.visited;
+    Array<NodeRef> &visited = corridor.scratch;
     MoveAlongSurfaceResult result;
     nav_mesh_search::move_along_surface(result, workspace, nav_mesh, corridor.path[0], corridor.position, new_position, filter, visited);
     if (result.truncated) {
@@ -204,8 +207,7 @@ void move_over_off_mesh_connection(MoveOverOffMeshConnectionResult &result, Path
     result.off_mesh_node_ref = off_mesh_node_ref;
 }
 
-bool optimize_path_topology(PathCorridor &corridor, SlicedNodePathQuery &query, SearchWorkspace &workspace, const NavMesh &nav_mesh,
-                            const QueryFilter &filter) {
+bool optimize_path_topology(PathCorridor &corridor, SlicedNodePathQuery &query, const NavMesh &nav_mesh, const QueryFilter &filter) {
     if (corridor.path.length < 3) return false;
 
     const int MAX_ITERATIONS = 32;
@@ -213,7 +215,7 @@ bool optimize_path_topology(PathCorridor &corridor, SlicedNodePathQuery &query, 
     nav_mesh_search::init_sliced_find_node_path(query, nav_mesh, corridor.path[0], corridor.path.back(), corridor.position, corridor.target, filter);
     nav_mesh_search::update_sliced_find_node_path(query, nav_mesh, MAX_ITERATIONS);
     SlicedFindNodePathResult result;
-    Array<NodeRef> &path = workspace.node_path;
+    Array<NodeRef> &path = corridor.scratch;
     nav_mesh_search::finalize_sliced_find_node_path_partial(result, nav_mesh, query, corridor.path, path);
     if (result.truncated) {
         path.reserve(result.path_total);
@@ -226,8 +228,7 @@ bool optimize_path_topology(PathCorridor &corridor, SlicedNodePathQuery &query, 
     return optimized;
 }
 
-void optimize_path_visibility(PathCorridor &corridor, SearchWorkspace &workspace, Vec3 next, float path_optimization_range, const NavMesh &nav_mesh,
-                              const QueryFilter &filter) {
+void optimize_path_visibility(PathCorridor &corridor, Vec3 next, float path_optimization_range, const NavMesh &nav_mesh, const QueryFilter &filter) {
     if (corridor.path.length == 0) return;
 
     float dx = next.x - corridor.position.x;
@@ -240,7 +241,7 @@ void optimize_path_visibility(PathCorridor &corridor, SearchWorkspace &workspace
     Vec3 delta = vec3::subtract(next, corridor.position);
     Vec3 goal = vec3::scale_and_add(corridor.position, delta, path_optimization_range / distance);
 
-    Array<NodeRef> &path = workspace.raycast_path;
+    Array<NodeRef> &path = corridor.scratch;
     RaycastResult result;
     nav_mesh_search::raycast(result, nav_mesh, corridor.path[0], corridor.position, goal, filter, path);
     if (result.truncated) {

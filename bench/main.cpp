@@ -247,7 +247,7 @@ static uint32_t pair_end(uint32_t i) { return (i * 37 + 11) % state.centers.leng
 
 static const uint32_t MAX_PATH = 256;
 
-static SearchWorkspace query_workspace = {};
+static QueryWorkspace query_workspace = {};
 
 static void run_find_path() {
     StraightPathPoint points[MAX_PATH];
@@ -482,7 +482,7 @@ static void build_query_points() {
         state.centers.push(nearest.position);
         state.center_refs.push(nearest.node_ref);
     }
-    query_workspace = nav_mesh_search::create_search_workspace();
+    query_workspace = nav_mesh_search::create_query_workspace();
 }
 
 int main(int argc, char **argv) {

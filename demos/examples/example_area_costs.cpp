@@ -57,7 +57,7 @@ struct AreaCostsExample {
     AreaCostsMoving moving;
     bool success;
     uint32_t point_count;
-    SearchWorkspace workspace;
+    QueryWorkspace workspace;
     StraightPathPoint points[MAX_PATH_POINTS];
 };
 
@@ -246,7 +246,7 @@ static void update_path() {
 static void init(App &app) {
     AreaCostsExample &state = area_costs_example;
     state = {};
-    state.workspace = nav_mesh_search::create_search_workspace();
+    state.workspace = nav_mesh_search::create_query_workspace();
     state.costs = {1.0f, 3.0f, 0.45f};
     state.filter = {pass_all, area_cost, 0xffffffffu, 0, &state.costs};
     state.start = {-6, 0, -10};

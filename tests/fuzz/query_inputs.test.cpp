@@ -17,7 +17,7 @@ struct QueryFuzz {
     test::Random random;
     uint32_t successes;
     NavMesh nav_mesh;
-    SearchWorkspace workspace;
+    QueryWorkspace workspace;
     Array<NodeRef> live_refs;
     Array<NodeRef> stale_refs;
 };
@@ -331,7 +331,7 @@ TEST_CASE("queries handle stale refs, bad positions and small buffers") {
     QueryFuzz fuzz = {};
     fuzz.random = {0x5eedull};
     fuzz.nav_mesh = create_tiled_terrain();
-    fuzz.workspace = nav_mesh_search::create_search_workspace();
+    fuzz.workspace = nav_mesh_search::create_query_workspace();
 
     const NavMeshTile *removed = nullptr;
     for (const NavMeshTile &tile : fuzz.nav_mesh.tiles) {

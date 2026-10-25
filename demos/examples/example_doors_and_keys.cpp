@@ -56,7 +56,7 @@ struct DoorsAndKeysExample {
     Vec3 end;
     bool path_success;
     bool path_partial;
-    SearchWorkspace workspace;
+    QueryWorkspace workspace;
     StraightPathPoint points[MAX_PATH_POINTS];
     NodeRef node_path[MAX_NODE_PATH];
 };
@@ -213,7 +213,7 @@ static void update_keys(App &app) {
 static void init(App &app) {
     DoorsAndKeysExample &state = doors_and_keys_example;
     state = {};
-    state.workspace = nav_mesh_search::create_search_workspace();
+    state.workspace = nav_mesh_search::create_query_workspace();
     state.start = {-20.6f, 0.2f, -6.8f};
     state.end = {-5.4f, 0.3f, -2.9f};
     state.filter = nav_mesh_api::DEFAULT_QUERY_FILTER;

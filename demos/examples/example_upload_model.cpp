@@ -65,7 +65,7 @@ struct UploadModelExample {
     Vec3 start;
     Vec3 end;
     StaticDrawing path_drawing;
-    SearchWorkspace workspace;
+    QueryWorkspace workspace;
     StraightPathPoint points[MAX_PATH_POINTS];
     NodeRef node_path[MAX_NODE_PATH];
     bool path_success;
@@ -303,7 +303,7 @@ static const char *file_name(const char *path) {
 
 static void init(App &app) {
     upload = {};
-    upload.workspace = nav_mesh_search::create_search_workspace();
+    upload.workspace = nav_mesh_search::create_query_workspace();
     upload.config = upload_config();
     upload.show[UPLOAD_HELPER_NAV_MESH] = true;
     upload.tool = UPLOAD_TOOL_PATHFINDING;

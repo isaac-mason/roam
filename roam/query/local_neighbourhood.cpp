@@ -56,7 +56,7 @@ static bool links_to(const NavMesh &nav_mesh, const NavMeshNode &node, NodeRef r
     return false;
 }
 
-void find_local_neighbourhood(FindLocalNeighbourhoodResult &result, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
+void find_local_neighbourhood(FindLocalNeighbourhoodResult &result, QueryWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
                               Vec3 position, float radius, const QueryFilter &filter, Span<NodeRef> polys) {
     result = {false, 0, 0, false};
     Array<NodeRef> &found = workspace.local_refs;

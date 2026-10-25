@@ -47,7 +47,7 @@ struct FindSmoothPathExample {
     uint32_t flags;
     uint32_t node_count;
     uint32_t point_count;
-    SearchWorkspace workspace;
+    QueryWorkspace workspace;
     SmoothPathPoint points[MAX_SMOOTH_PATH_POINTS];
     NodeRef node_path[MAX_NODE_PATH];
 };
@@ -134,7 +134,7 @@ static void update_path() {
 static void init(App &app) {
     FindSmoothPathExample &state = find_smooth_path_example;
     state = {};
-    state.workspace = nav_mesh_search::create_search_workspace();
+    state.workspace = nav_mesh_search::create_query_workspace();
     state.start = {-3.94f, 0.26f, 4.71f};
     state.end = {1.01f, 2.38f, -1.93f};
     state.step_size = 0.3f;

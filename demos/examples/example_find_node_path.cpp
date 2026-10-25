@@ -23,7 +23,7 @@ struct FindNodePathExample {
     uint32_t flags;
     uint32_t node_count;
     uint32_t search_node_count;
-    SearchWorkspace workspace;
+    QueryWorkspace workspace;
     Array<NodeRef> node_path;
     uint32_t times_grown;
 };
@@ -91,7 +91,7 @@ static void update_path() {
 static void init(App &app) {
     FindNodePathExample &state = find_node_path_example;
     state = {};
-    state.workspace = nav_mesh_search::create_search_workspace();
+    state.workspace = nav_mesh_search::create_query_workspace();
     state.node_path.reserve(INITIAL_NODE_PATH);
     state.start = {-3.94f, 0.26f, 4.71f};
     state.end = {2.52f, 2.39f, -2.2f};

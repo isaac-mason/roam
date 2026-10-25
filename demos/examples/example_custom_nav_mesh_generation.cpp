@@ -116,7 +116,7 @@ struct CustomNavMeshGenerationExample {
     bool partial;
     uint32_t point_count;
     float previous_fov_y;
-    SearchWorkspace workspace;
+    QueryWorkspace workspace;
     StraightPathPoint points[MAX_PATH_POINTS];
     NodeRef node_path[MAX_NODE_PATH];
 };
@@ -440,7 +440,7 @@ static void update_path() {
 static void init(App &app) {
     CustomNavMeshGenerationExample &state = custom_generation;
     state = {};
-    state.workspace = nav_mesh_search::create_search_workspace();
+    state.workspace = nav_mesh_search::create_query_workspace();
     state.show_nav_mesh = true;
     state.start = {-6.1f, 0.3f, 5};
     state.end = {8.6f, -0.4f, -3.7f};

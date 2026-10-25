@@ -64,7 +64,7 @@ static uint32_t count_polys(const NavMesh &nav_mesh) {
 }
 
 static void query_everywhere(const NavMesh &nav_mesh, Box3 bounds) {
-    SearchWorkspace workspace = nav_mesh_search::create_search_workspace();
+    QueryWorkspace workspace = nav_mesh_search::create_query_workspace();
     StraightPathPoint points[32];
     test::Random random = {99};
     for (int i = 0; i < 8; i++) {

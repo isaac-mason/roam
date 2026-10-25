@@ -13,15 +13,14 @@ static const float HEURISTIC_SCALE = 0.999f;
 
 static const uint32_t MIN_SEARCH_INDEX_TABLE = 256;
 
-SearchWorkspace create_search_workspace() {
-    SearchWorkspace workspace = {};
+QueryWorkspace create_query_workspace() {
+    QueryWorkspace workspace = {};
     workspace.node_path.reserve(INITIAL_PATH_CAPACITY);
     workspace.visited.reserve(INITIAL_PATH_CAPACITY);
-    workspace.raycast_path.reserve(INITIAL_PATH_CAPACITY);
     return workspace;
 }
 
-void release(SearchWorkspace &workspace) {
+void release(QueryWorkspace &workspace) {
     release(workspace.nodes);
     release(workspace.open_list);
     release(workspace.local_nodes);
@@ -31,11 +30,10 @@ void release(SearchWorkspace &workspace) {
     workspace.neighbours.release();
     workspace.node_path.release();
     workspace.visited.release();
-    workspace.raycast_path.release();
     workspace.local_refs.release();
 }
 
-uint32_t get_search_node_count(const SearchWorkspace &workspace) { return workspace.nodes.nodes.length; }
+uint32_t get_search_node_count(const QueryWorkspace &workspace) { return workspace.nodes.nodes.length; }
 
 static int32_t first_with_ref(const SearchNodePool &pool, NodeRef node_ref) {
     uint32_t index = node::get_node_ref_index(node_ref);
@@ -311,7 +309,7 @@ static uint32_t get_or_add_neighbour(const NavMesh &nav_mesh, SearchNodePool &po
     return add_search_node(pool, node);
 }
 
-static int32_t search_node_path(FindNodePathResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
+static int32_t search_node_path(FindNodePathResult &out, QueryWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
                                 NodeRef end_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter, FindNodePathOptions options) {
     out.success = false;
     out.flags = FIND_NODE_PATH_RESULT_NONE;
@@ -450,13 +448,13 @@ static int32_t search_node_path(FindNodePathResult &out, SearchWorkspace &worksp
     return last_best_node;
 }
 
-void find_node_path(FindNodePathResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref, NodeRef end_node_ref,
+void find_node_path(FindNodePathResult &out, QueryWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref, NodeRef end_node_ref,
                     Vec3 start_position, Vec3 end_position, const QueryFilter &filter, Span<NodeRef> path, FindNodePathOptions options) {
     workspace.last_path_node = search_node_path(out, workspace, nav_mesh, start_node_ref, end_node_ref, start_position, end_position, filter, options);
     copy_last_node_path(out, workspace, path);
 }
 
-void copy_last_node_path(FindNodePathResult &out, const SearchWorkspace &workspace, Span<NodeRef> path) {
+void copy_last_node_path(FindNodePathResult &out, const QueryWorkspace &workspace, Span<NodeRef> path) {
     int32_t last_node = workspace.last_path_node;
     uint32_t total = last_node == NULL_SEARCH_NODE ? 0 : collect_path(workspace.nodes, last_node, path.data, path.capacity);
     set_counts(out.path_count, out.path_total, out.truncated, total, path.capacity);
@@ -760,7 +758,7 @@ static int32_t surface_parent(const SearchNodePool &pool, int32_t current) {
     return node.parent_node_ref != INVALID_NODE_REF ? get_search_node(pool, node.parent_node_ref, 0) : NULL_SEARCH_NODE;
 }
 
-void move_along_surface(MoveAlongSurfaceResult &result, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
+void move_along_surface(MoveAlongSurfaceResult &result, QueryWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
                         Vec3 start_position, Vec3 end_position, const QueryFilter &filter, Span<NodeRef> visited) {
     result.visited_count = 0;
     result.visited_total = 0;
@@ -1126,7 +1124,7 @@ void find_random_point(FindRandomPointResult &out, const NavMesh &nav_mesh, cons
     random_point_in_poly(out, nav_mesh, *selected_tile, *selected_poly, selected_poly_ref, random, random_user_data);
 }
 
-void find_random_point_around_circle(FindRandomPointResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
+void find_random_point_around_circle(FindRandomPointResult &out, QueryWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
                                      Vec3 position, float max_radius, const QueryFilter &filter, RandomFunction random, void *random_user_data) {
     out = {false, INVALID_NODE_REF, {0, 0, 0}};
 

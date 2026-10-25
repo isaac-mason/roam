@@ -79,7 +79,7 @@ struct OffMeshConnectionsExample {
     uint32_t node_count;
     uint32_t off_mesh_node_count;
     uint32_t point_count;
-    SearchWorkspace workspace;
+    QueryWorkspace workspace;
     StraightPathPoint points[MAX_PATH_POINTS];
     NodeRef node_path[MAX_NODE_PATH];
 };
@@ -154,7 +154,7 @@ static void update_path() {
 static void init(App &app) {
     OffMeshConnectionsExample &state = off_mesh_connections_example;
     state = {};
-    state.workspace = nav_mesh_search::create_search_workspace();
+    state.workspace = nav_mesh_search::create_query_workspace();
     state.filter = {pass_all, off_mesh_connection_cost, 0xffffffffu, 0, nullptr};
     state.start = {-2.2f, 0.26f, 4.71f};
     state.end = {3.4f, 2.8f, 3.6f};

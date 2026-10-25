@@ -80,7 +80,7 @@ static const Vec3 PATH_POINTS[] = {{1, 0, 1}, {23, 0, 23}, {5, 0, 20}, {20, 0, 3
 static uint64_t hash_paths(const NavMesh &nav_mesh) {
     uint64_t hash = 1469598103934665603ull;
     auto mix = [&](uint64_t value) { hash = (hash ^ value) * 1099511628211ull; };
-    SearchWorkspace workspace = nav_mesh_search::create_search_workspace();
+    QueryWorkspace workspace = nav_mesh_search::create_query_workspace();
     StraightPathPoint points[128];
     NodeRef node_path[256];
     uint32_t count = sizeof(PATH_POINTS) / sizeof(PATH_POINTS[0]);

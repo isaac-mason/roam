@@ -122,12 +122,13 @@ struct Crowd {
     int quick_search_iterations;
     uint32_t max_neighbours;
 
-    SearchWorkspace workspace;
+    QueryWorkspace workspace;
     Array<uint32_t> scratch_agents;
     Array<uint32_t> scratch_cells;
     Array<uint32_t> scratch_cell_starts;
     Array<uint32_t> scratch_cell_agents;
     SlicedNodePathQuery topology_query;
+    Array<NodeRef> scratch_request_path;
     Array<NodeRef> scratch_merged_path;
 };
 

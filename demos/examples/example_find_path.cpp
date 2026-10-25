@@ -12,7 +12,7 @@ struct FindPathExample {
     TiledNavMeshResult result;
     StaticDrawing nav_mesh_drawing;
     StaticDrawing path_drawing;
-    SearchWorkspace workspace;
+    QueryWorkspace workspace;
     StraightPathPoint points[MAX_PATH_POINTS];
     NodeRef node_path[MAX_NODE_PATH];
     Vec3 start;
@@ -86,7 +86,7 @@ static void init(App &app) {
     state.start = {-3.94f, 0.26f, 4.71f};
     state.end = {2.52f, 2.39f, -2.2f};
     state.show_search_nodes = true;
-    state.workspace = nav_mesh_search::create_search_workspace();
+    state.workspace = nav_mesh_search::create_query_workspace();
 
     app::load_level(app, "nav-test.glb");
 

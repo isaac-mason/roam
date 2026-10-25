@@ -131,7 +131,7 @@ struct GetEdgeMidPointResult {
     Vec3 position;
 };
 
-struct SearchWorkspace {
+struct QueryWorkspace {
     SearchNodePool nodes;
     SearchNodeQueue open_list;
     SearchNodePool local_nodes;
@@ -141,7 +141,6 @@ struct SearchWorkspace {
     Array<NodeRef> neighbours;
     Array<NodeRef> node_path;
     Array<NodeRef> visited;
-    Array<NodeRef> raycast_path;
     Array<NodeRef> local_refs;
     int32_t last_path_node = NULL_SEARCH_NODE;
 };
@@ -156,9 +155,9 @@ using RandomFunction = float (*)(void *user_data);
 
 namespace nav_mesh_search {
 
-SearchWorkspace create_search_workspace();
-void release(SearchWorkspace &workspace);
-uint32_t get_search_node_count(const SearchWorkspace &workspace);
+QueryWorkspace create_query_workspace();
+void release(QueryWorkspace &workspace);
+uint32_t get_search_node_count(const QueryWorkspace &workspace);
 
 int32_t get_search_node(const SearchNodePool &pool, NodeRef node_ref, int state);
 int32_t get_first_search_node(const SearchNodePool &pool, NodeRef node_ref);
@@ -175,8 +174,8 @@ void get_portal_points(GetPortalPointsResult &out, const NavMesh &nav_mesh, Node
 void get_portal_points_unchecked(GetPortalPointsResult &out, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref);
 void get_edge_mid_point(GetEdgeMidPointResult &out, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref);
 
-void copy_last_node_path(FindNodePathResult &out, const SearchWorkspace &workspace, Span<NodeRef> path);
-void find_node_path(FindNodePathResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref, NodeRef end_node_ref,
+void copy_last_node_path(FindNodePathResult &out, const QueryWorkspace &workspace, Span<NodeRef> path);
+void find_node_path(FindNodePathResult &out, QueryWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref, NodeRef end_node_ref,
                     Vec3 start_position, Vec3 end_position, const QueryFilter &filter, Span<NodeRef> path, FindNodePathOptions options = {});
 
 SlicedNodePathQuery create_sliced_node_path_query();
@@ -188,7 +187,7 @@ void finalize_sliced_find_node_path_partial(SlicedFindNodePathResult &out, const
                                             Span<const NodeRef> existing_path, Span<NodeRef> path);
 void release(SlicedNodePathQuery &query);
 
-void move_along_surface(MoveAlongSurfaceResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
+void move_along_surface(MoveAlongSurfaceResult &out, QueryWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
                         Vec3 start_position, Vec3 end_position, const QueryFilter &filter, Span<NodeRef> visited);
 
 void raycast(RaycastResult &out, const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter,
@@ -197,7 +196,7 @@ void raycast_with_costs(RaycastResult &out, const NavMesh &nav_mesh, NodeRef sta
                         const QueryFilter &filter, NodeRef previous_ref, Span<NodeRef> path);
 
 void find_random_point(FindRandomPointResult &out, const NavMesh &nav_mesh, const QueryFilter &filter, RandomFunction random, void *random_user_data);
-void find_random_point_around_circle(FindRandomPointResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
+void find_random_point_around_circle(FindRandomPointResult &out, QueryWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
                                      Vec3 position, float max_radius, const QueryFilter &filter, RandomFunction random, void *random_user_data);
 
 }

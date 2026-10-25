@@ -49,7 +49,7 @@ struct FindShortestPathsExample {
     ShortestPathsMoving moving;
     uint32_t path_count;
     double query_milliseconds;
-    SearchWorkspace workspace;
+    QueryWorkspace workspace;
     NodeRef node_path[MAX_NODE_PATH];
     StraightPathPoint points[MAX_PATH_POINTS];
 };
@@ -110,7 +110,7 @@ static float calculate_path_cost(const NavMesh &nav_mesh, const Array<NodeRef> &
     return total_cost;
 }
 
-static Array<ShortestNodePath> find_shortest_paths(SearchWorkspace &workspace, Span<NodeRef> buffer, const NavMesh &nav_mesh, Vec3 start, Vec3 end,
+static Array<ShortestNodePath> find_shortest_paths(QueryWorkspace &workspace, Span<NodeRef> buffer, const NavMesh &nav_mesh, Vec3 start, Vec3 end,
                                                    Vec3 half_extents, const QueryFilter &base_filter, int k) {
     Array<ShortestNodePath> accepted = {};
     Array<ShortestNodePath> candidates = {};
@@ -254,7 +254,7 @@ static void update_path() {
 static void init(App &app) {
     FindShortestPathsExample &state = find_shortest_paths_example;
     state = {};
-    state.workspace = nav_mesh_search::create_search_workspace();
+    state.workspace = nav_mesh_search::create_query_workspace();
     state.start = {-3.94f, 0.26f, 4.71f};
     state.end = {2.52f, 2.39f, -2.2f};
     state.k = 3;

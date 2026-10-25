@@ -26,7 +26,7 @@ struct CustomGltfNavMeshExample {
     bool success;
     uint32_t point_count;
     float previous_fov_y;
-    SearchWorkspace workspace;
+    QueryWorkspace workspace;
     StraightPathPoint points[MAX_PATH_POINTS];
     NodeRef node_path[MAX_NODE_PATH];
 };
@@ -92,7 +92,7 @@ static void update_path() {
 static void init(App &app) {
     CustomGltfNavMeshExample &state = custom_gltf;
     state = {};
-    state.workspace = nav_mesh_search::create_search_workspace();
+    state.workspace = nav_mesh_search::create_query_workspace();
     state.show_nav_mesh = true;
     state.start = {-2.6f, 1.1f, 2.1f};
     state.end = {0.5f, 11.1f, 0.5f};

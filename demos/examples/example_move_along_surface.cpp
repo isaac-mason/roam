@@ -23,7 +23,7 @@ struct MoveAlongSurfaceExample {
     uint32_t visited_count;
     float requested_distance;
     float actual_distance;
-    SearchWorkspace workspace;
+    QueryWorkspace workspace;
     NodeRef visited[MAX_NODE_PATH];
 };
 
@@ -77,7 +77,7 @@ static void update_move_along_surface() {
 static void init(App &app) {
     MoveAlongSurfaceExample &state = move_along_surface_example;
     state = {};
-    state.workspace = nav_mesh_search::create_search_workspace();
+    state.workspace = nav_mesh_search::create_query_workspace();
     state.start = {-3.641054110753002f, 1.3775759935379028f, 2.7671564887530034f};
     state.end = {-2.857031378804761f, 0.2670568953640924f, 3.088813745131878f};
     app.want_hover = true;

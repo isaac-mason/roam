@@ -809,7 +809,7 @@ DebugPrimitives create_search_nodes_helper(const SearchNodePool &pool) {
     return primitives;
 }
 
-DebugPrimitives create_search_nodes_helper(const SearchWorkspace &workspace) { return create_search_nodes_helper(workspace.nodes); }
+DebugPrimitives create_search_nodes_helper(const QueryWorkspace &workspace) { return create_search_nodes_helper(workspace.nodes); }
 
 static void push_circle(DebugPrimitive &lines, Vec3 center, float radius, Vec3 color) {
     const int segment_count = 20;

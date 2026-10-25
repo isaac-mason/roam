@@ -28,7 +28,7 @@ struct PolyWallSegmentsResult {
 
 namespace local_neighbourhood {
 
-void find_local_neighbourhood(FindLocalNeighbourhoodResult &out, SearchWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
+void find_local_neighbourhood(FindLocalNeighbourhoodResult &out, QueryWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
                               Vec3 position, float radius, const QueryFilter &filter, Span<NodeRef> polys);
 
 void get_poly_wall_segments(PolyWallSegmentsResult &out, const NavMesh &nav_mesh, NodeRef node_ref, const QueryFilter &filter, bool include_portals,

@@ -72,13 +72,13 @@ static NavMesh create_strip_nav_mesh() {
 static const uint32_t MAX_REFS = 64;
 static const uint32_t MAX_POINTS = 64;
 
-TEST_CASE("search workspace reuse matches fresh queries") {
+TEST_CASE("query workspace reuse matches fresh queries") {
     NavMesh nav_mesh = create_strip_nav_mesh();
     const QueryFilter &filter = nav_mesh_api::DEFAULT_QUERY_FILTER;
 
-    SearchWorkspace reused = nav_mesh_search::create_search_workspace();
+    QueryWorkspace reused = nav_mesh_search::create_query_workspace();
     for (int round = 0; round < 3; round++) {
-        SearchWorkspace fresh = nav_mesh_search::create_search_workspace();
+        QueryWorkspace fresh = nav_mesh_search::create_query_workspace();
 
         StraightPathPoint fresh_points[MAX_POINTS];
         StraightPathPoint reused_points[MAX_POINTS];
@@ -121,7 +121,7 @@ TEST_CASE("search workspace reuse matches fresh queries") {
 TEST_CASE("small buffers keep the start of the path and report its full length") {
     NavMesh nav_mesh = create_strip_nav_mesh();
     const QueryFilter &filter = nav_mesh_api::DEFAULT_QUERY_FILTER;
-    SearchWorkspace workspace = nav_mesh_search::create_search_workspace();
+    QueryWorkspace workspace = nav_mesh_search::create_query_workspace();
 
     FindNearestPolyResult start;
     nav_mesh_api::find_nearest_poly(start, nav_mesh, {1.5f, 0, 0.5f}, {1, 1, 1}, filter);
@@ -243,7 +243,7 @@ TEST_CASE("warm queries do not allocate") {
 
     NavMesh nav_mesh = create_strip_nav_mesh();
     const QueryFilter &filter = nav_mesh_api::DEFAULT_QUERY_FILTER;
-    SearchWorkspace workspace = nav_mesh_search::create_search_workspace();
+    QueryWorkspace workspace = nav_mesh_search::create_query_workspace();
     StraightPathPoint points[MAX_POINTS];
     NodeRef refs[MAX_REFS];
     int64_t allocations_after_warm_up = 0;

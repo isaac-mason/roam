@@ -14,6 +14,7 @@ struct PathCorridor {
     Vec3 position;
     Vec3 target;
     Array<NodeRef> path;
+    Array<NodeRef> scratch;
 };
 
 struct FindCornersResult {
@@ -42,7 +43,7 @@ void set_path(PathCorridor &corridor, Vec3 target, Span<const NodeRef> path);
 void merge_start_moved(Array<NodeRef> &current_path, const Array<NodeRef> &visited);
 void merge_start_shortcut(Array<NodeRef> &current_path, const Array<NodeRef> &visited);
 
-bool move_position(PathCorridor &corridor, SearchWorkspace &workspace, Vec3 new_position, const NavMesh &nav_mesh, const QueryFilter &filter);
+bool move_position(PathCorridor &corridor, QueryWorkspace &workspace, Vec3 new_position, const NavMesh &nav_mesh, const QueryFilter &filter);
 
 void find_corners(FindCornersResult &out, const PathCorridor &corridor, const NavMesh &nav_mesh, Span<StraightPathPoint> corners);
 
@@ -52,11 +53,9 @@ bool fix_path_start(PathCorridor &corridor, NodeRef safe_ref, Vec3 safe_position
 
 void move_over_off_mesh_connection(MoveOverOffMeshConnectionResult &out, PathCorridor &corridor, NodeRef off_mesh_node_ref, const NavMesh &nav_mesh);
 
-bool optimize_path_topology(PathCorridor &corridor, SlicedNodePathQuery &query, SearchWorkspace &workspace, const NavMesh &nav_mesh,
-                            const QueryFilter &filter);
+bool optimize_path_topology(PathCorridor &corridor, SlicedNodePathQuery &query, const NavMesh &nav_mesh, const QueryFilter &filter);
 
-void optimize_path_visibility(PathCorridor &corridor, SearchWorkspace &workspace, Vec3 next, float path_optimization_range, const NavMesh &nav_mesh,
-                              const QueryFilter &filter);
+void optimize_path_visibility(PathCorridor &corridor, Vec3 next, float path_optimization_range, const NavMesh &nav_mesh, const QueryFilter &filter);
 
 }
 

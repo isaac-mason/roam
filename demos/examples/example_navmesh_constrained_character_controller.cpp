@@ -32,7 +32,7 @@ struct CharacterControllerExample {
     bool sprinting;
     bool first_position_update;
     Vec3 camera_position;
-    SearchWorkspace workspace;
+    QueryWorkspace workspace;
 };
 
 static CharacterControllerExample character_controller_example;
@@ -83,7 +83,7 @@ static void generate_nav_mesh(const Model &level) {
 static void init(App &app) {
     CharacterControllerExample &state = character_controller_example;
     state = {};
-    state.workspace = nav_mesh_search::create_search_workspace();
+    state.workspace = nav_mesh_search::create_query_workspace();
     state.show_nav_mesh_helper = true;
     state.cell_size = 0.2f;
     state.cell_height = 0.2f;

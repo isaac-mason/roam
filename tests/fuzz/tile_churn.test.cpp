@@ -34,7 +34,7 @@ static void add_saved_tile(NavMesh &nav_mesh, const SavedTile &saved) {
 
 static Vec3 random_point(test::Random &random) { return {test::next_float(random, 0, 24), 0, test::next_float(random, 0, 24)}; }
 
-static void check_paths(test::Random &random, const NavMesh &nav_mesh, SearchWorkspace &workspace) {
+static void check_paths(test::Random &random, const NavMesh &nav_mesh, QueryWorkspace &workspace) {
     StraightPathPoint points[64];
     NodeRef node_path[128];
     for (int i = 0; i < 3; i++) {
@@ -59,7 +59,7 @@ TEST_CASE("random tile and off mesh churn keeps the nav mesh consistent") {
     }
     REQUIRE(saved.length > 2);
 
-    SearchWorkspace workspace = nav_mesh_search::create_search_workspace();
+    QueryWorkspace workspace = nav_mesh_search::create_query_workspace();
     Array<uint32_t> connections = {};
     uint32_t fewest_tiles = saved.length;
     uint32_t attached_connections = 0;

@@ -169,7 +169,7 @@ TEST_CASE("queries match navcat on nav test") {
     node_path.resize(MAX_REFS);
     other_refs.resize(MAX_REFS);
     segments.resize(MAX_REFS);
-    SearchWorkspace workspace = nav_mesh_search::create_search_workspace();
+    QueryWorkspace workspace = nav_mesh_search::create_query_workspace();
     SlicedNodePathQuery query = nav_mesh_search::create_sliced_node_path_query();
 
     uint32_t pair_count = path_success.count;

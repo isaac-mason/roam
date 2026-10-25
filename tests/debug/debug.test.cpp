@@ -80,7 +80,7 @@ TEST_CASE("debug helpers draw a generated nav mesh") {
     FindNearestPolyResult far = {};
     nav_mesh_api::find_nearest_poly(far, nav_mesh, {9, 0, 1}, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
     REQUIRE(far.success);
-    SearchWorkspace workspace = nav_mesh_search::create_search_workspace();
+    QueryWorkspace workspace = nav_mesh_search::create_query_workspace();
     FindNodePathResult node_path;
     nav_mesh_search::find_node_path(node_path, workspace, nav_mesh, nearest.node_ref, far.node_ref, {1, 0, 1}, {9, 0, 1},
                                     nav_mesh_api::DEFAULT_QUERY_FILTER, {});

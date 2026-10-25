@@ -34,7 +34,7 @@ static NavMesh create_long_corridor_nav_mesh() {
 static const uint32_t MAX_VISITED = 16;
 
 static MoveAlongSurfaceResult move(const NavMesh &nav_mesh, Vec3 start, Vec3 end, Span<NodeRef> visited) {
-    SearchWorkspace workspace = nav_mesh_search::create_search_workspace();
+    QueryWorkspace workspace = nav_mesh_search::create_query_workspace();
     MoveAlongSurfaceResult result;
     nav_mesh_search::move_along_surface(result, workspace, nav_mesh, nav_mesh.nodes[0].ref, start, end, nav_mesh_api::DEFAULT_QUERY_FILTER, visited);
     nav_mesh_search::release(workspace);

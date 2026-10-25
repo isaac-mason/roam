@@ -476,7 +476,7 @@ TEST_CASE("local boundary matches navcat on nav test") {
     fixture::F64 polys = fixture::f64(expected, "boundary.polys");
     REQUIRE(segment_counts.count == points.length);
 
-    SearchWorkspace workspace = nav_mesh_search::create_search_workspace();
+    QueryWorkspace workspace = nav_mesh_search::create_query_workspace();
     uint32_t segment_cursor = 0;
     uint32_t poly_cursor = 0;
     uint32_t mismatches = 0;

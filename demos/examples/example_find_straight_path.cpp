@@ -28,7 +28,7 @@ struct FindStraightPathExample {
     uint32_t straight_flags;
     uint32_t point_count;
     double straight_milliseconds;
-    SearchWorkspace workspace;
+    QueryWorkspace workspace;
     NodeRef node_path[MAX_NODE_PATH];
     StraightPathPoint points[MAX_PATH_POINTS];
 };
@@ -107,7 +107,7 @@ static void update_path() {
 static void init(App &app) {
     FindStraightPathExample &state = find_straight_path_example;
     state = {};
-    state.workspace = nav_mesh_search::create_search_workspace();
+    state.workspace = nav_mesh_search::create_query_workspace();
     state.start = {-3.94f, 0.26f, 4.71f};
     state.end = {2.52f, 2.39f, -2.2f};
     app.want_hover = true;

@@ -63,7 +63,7 @@ static void add_segment_to_boundary(LocalBoundary &boundary, float distance_sqr,
 constexpr uint32_t INLINE_WALL_SEGMENTS = 32;
 
 void update_local_boundary(LocalBoundary &boundary, NodeRef node_ref, Vec3 position, float collision_query_range, const NavMesh &nav_mesh,
-                           const QueryFilter &filter, SearchWorkspace &workspace) {
+                           const QueryFilter &filter, QueryWorkspace &workspace) {
     if (!nav_mesh_api::is_valid_node_ref(nav_mesh, node_ref)) {
         reset_local_boundary(boundary);
         return;

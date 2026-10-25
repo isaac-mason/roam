@@ -57,7 +57,7 @@ struct AreaFiltersExample {
     bool success;
     bool partial;
     uint32_t point_count;
-    SearchWorkspace workspace;
+    QueryWorkspace workspace;
     StraightPathPoint points[MAX_PATH_POINTS];
     NodeRef node_path[MAX_NODE_PATH];
 };
@@ -242,7 +242,7 @@ static void update_path() {
 static void init(App &app) {
     AreaFiltersExample &state = area_filters_example;
     state = {};
-    state.workspace = nav_mesh_search::create_search_workspace();
+    state.workspace = nav_mesh_search::create_query_workspace();
     state.filter = AREA_FILTERS_FILTER_GROUND;
     state.start = {-8, 1.5f, -2.3f};
     state.end = {8, 1, -0.5f};
