@@ -142,6 +142,9 @@ struct QueryWorkspace {
     Array<NodeRef> node_path;
     Array<NodeRef> visited;
     Array<NodeRef> local_refs;
+    Array<uint32_t> cluster_stamps;
+    Array<uint32_t> cluster_queue;
+    uint32_t cluster_stamp;
     int32_t last_path_node = NULL_SEARCH_NODE;
 };
 
@@ -194,6 +197,8 @@ void raycast(RaycastResult &out, const NavMesh &nav_mesh, NodeRef start_node_ref
              Span<NodeRef> path);
 void raycast_with_costs(RaycastResult &out, const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position,
                         const QueryFilter &filter, NodeRef previous_ref, Span<NodeRef> path);
+
+bool is_reachable(QueryWorkspace &workspace, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref);
 
 void find_random_point(FindRandomPointResult &out, const NavMesh &nav_mesh, const QueryFilter &filter, RandomFunction random, void *random_user_data);
 void find_random_point_around_circle(FindRandomPointResult &out, QueryWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,

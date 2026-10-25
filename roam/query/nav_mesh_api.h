@@ -154,6 +154,7 @@ uint32_t get_max_node_count(const NavMesh &nav_mesh);
 NavMeshTile build_tile(const NavMeshTileParams &params);
 void release(NavMeshTile &tile);
 void build_tile_portals(NavMeshTile &tile);
+void rebuild_clusters(NavMesh &nav_mesh);
 uint64_t get_tile_position_key(int x, int y, int layer);
 uint64_t get_tile_column_key(int x, int y);
 uint32_t add_tile(NavMesh &nav_mesh, NavMeshTile tile);

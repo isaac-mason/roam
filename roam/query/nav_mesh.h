@@ -131,6 +131,19 @@ struct NavMeshTilePortal {
     Vec2 bmax;
 };
 
+struct NavMeshCluster {
+    bool allocated;
+    int32_t tile_id;
+    int32_t first_link;
+};
+
+struct NavMeshClusterLink {
+    uint32_t to_cluster;
+    int32_t to_tile_id;
+    int32_t next;
+    int32_t off_mesh_connection_id;
+};
+
 struct NavMeshTile {
     bool allocated;
     uint32_t id;
@@ -147,6 +160,8 @@ struct NavMeshTile {
     Array<float> detail_vertices;
     Array<uint8_t> detail_triangles;
     Array<uint32_t> poly_nodes;
+    Array<uint32_t> poly_clusters;
+    Array<uint32_t> clusters;
     Array<NavMeshTilePortal> portals;
     uint32_t portal_starts[9];
     NavMeshTileBvTree bv_tree;
@@ -163,6 +178,8 @@ struct NavMesh {
     float tile_height;
     Array<NavMeshNode> nodes;
     Array<NavMeshLink> links;
+    Array<NavMeshCluster> clusters;
+    Array<NavMeshClusterLink> cluster_links;
     Array<OffMeshConnection> off_mesh_connections;
     Array<OffMeshConnectionAttachment> off_mesh_connection_attachments;
     Array<NavMeshTile> tiles;
@@ -174,6 +191,8 @@ struct NavMesh {
     IndexPool tile_index_pool;
     IndexPool off_mesh_connection_index_pool;
     IndexPool link_index_pool;
+    IndexPool cluster_index_pool;
+    IndexPool cluster_link_index_pool;
 };
 
 }

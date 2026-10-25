@@ -19,13 +19,14 @@ enum TiledHelper {
     TILED_HELPER_NAV_MESH,
     TILED_HELPER_NAV_MESH_LINKS,
     TILED_HELPER_NAV_MESH_PORTALS,
+    TILED_HELPER_NAV_MESH_ISLANDS,
     TILED_HELPER_COUNT,
 };
 
 static const char *const TILED_HELPER_NAMES[TILED_HELPER_COUNT] = {
     "heightfield", "compact heightfield solid", "compact heightfield distances", "compact heightfield regions",
     "raw contours", "simplified contours", "poly mesh", "poly mesh detail",
-    "nav mesh bv tree", "nav mesh", "nav mesh links", "nav mesh portals",
+    "nav mesh bv tree", "nav mesh", "nav mesh links", "nav mesh portals", "nav mesh islands",
 };
 
 struct TiledNavMeshExample {
@@ -67,6 +68,7 @@ static DebugPrimitives create_nav_mesh_helper(int helper) {
         }
         case TILED_HELPER_NAV_MESH_LINKS: return debug::create_nav_mesh_links_helper(nav_mesh);
         case TILED_HELPER_NAV_MESH_PORTALS: return debug::create_nav_mesh_portals_helper(nav_mesh);
+        case TILED_HELPER_NAV_MESH_ISLANDS: return debug::create_nav_mesh_islands_helper(nav_mesh);
     }
     return {};
 }

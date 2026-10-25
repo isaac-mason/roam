@@ -304,6 +304,15 @@ static void fuzz_sliced_path(QueryFuzz &fuzz) {
     nav_mesh_search::release(query);
 }
 
+static void fuzz_is_reachable(QueryFuzz &fuzz) {
+    NodeRef from = pick_ref(fuzz);
+    NodeRef to = pick_ref(fuzz);
+    INFO("from ", from, " to ", to);
+    bool reachable = nav_mesh_search::is_reachable(fuzz.workspace, fuzz.nav_mesh, from, to);
+    CHECK(reachable == reachable_by_links(fuzz.nav_mesh, from, to));
+    if (reachable) fuzz.successes++;
+}
+
 using QueryFuzzer = void (*)(QueryFuzz &fuzz);
 
 struct NamedFuzzer {
@@ -325,6 +334,7 @@ static const NamedFuzzer FUZZERS[] = {
     {"random points", fuzz_random_points},
     {"closest points and portals", fuzz_closest_points},
     {"sliced node path", fuzz_sliced_path},
+    {"is reachable", fuzz_is_reachable},
 };
 
 TEST_CASE("queries handle stale refs, bad positions and small buffers") {

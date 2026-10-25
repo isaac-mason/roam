@@ -743,6 +743,7 @@ LoadStatus load_nav_mesh(NavMesh &nav_mesh, Span<const uint8_t> bytes) {
     ByteReader reader = {bytes.data, bytes.capacity, 0, false};
     LoadStatus status = read_nav_mesh(reader, nav_mesh);
     if (status == LOAD_STATUS_OK && !(valid_nav_mesh(nav_mesh) && restore_tile_positions(nav_mesh))) status = LOAD_STATUS_INVALID_DATA;
+    if (status == LOAD_STATUS_OK) nav_mesh_api::rebuild_clusters(nav_mesh);
     if (status != LOAD_STATUS_OK) nav_mesh_api::release(nav_mesh);
     return status;
 }

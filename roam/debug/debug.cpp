@@ -459,12 +459,14 @@ static NavMeshTileDrawing create_nav_mesh_tile_drawing() {
     return drawing;
 }
 
-static void draw_nav_mesh_tile(NavMeshTileDrawing &drawing, const NavMeshTile &tile) {
+static void draw_nav_mesh_tile(NavMeshTileDrawing &drawing, const NavMeshTile &tile, const Array<uint32_t> *cluster_islands = nullptr) {
     for (uint32_t poly_index = 0; poly_index < tile.polys.length; poly_index++) {
         if (poly_index >= tile.detail_meshes.length) continue;
         const NavMeshPoly &poly = tile.polys[poly_index];
         const NavMeshPolyDetail &detail = tile.detail_meshes[poly_index];
-        Vec3 color = area_to_color(poly.area, 0.4f);
+        Vec3 color = cluster_islands && poly_index < tile.poly_clusters.length
+                         ? hashed_color((int)(*cluster_islands)[tile.poly_clusters[poly_index]] + 1, 0.4f)
+                         : area_to_color(poly.area, 0.4f);
 
         for (uint32_t j = 0; j < detail.triangles_count; j++) {
             const uint8_t *t = &tile.detail_triangles[(detail.triangles_base + j) * 4];
@@ -514,6 +516,36 @@ DebugPrimitives create_nav_mesh_helper(const NavMesh &nav_mesh) {
     for (const NavMeshTile &tile : nav_mesh.tiles) {
         if (tile.allocated) draw_nav_mesh_tile(drawing, tile);
     }
+    return finish_nav_mesh_tile_drawing(drawing);
+}
+
+static uint32_t find_island(Array<uint32_t> &islands, uint32_t cluster) {
+    while (islands[cluster] != cluster) {
+        islands[cluster] = islands[islands[cluster]];
+        cluster = islands[cluster];
+    }
+    return cluster;
+}
+
+DebugPrimitives create_nav_mesh_islands_helper(const NavMesh &nav_mesh) {
+    Array<uint32_t> islands = {};
+    islands.resize(nav_mesh.clusters.length);
+    for (uint32_t i = 0; i < islands.length; i++) islands[i] = i;
+    for (uint32_t cluster = 0; cluster < nav_mesh.clusters.length; cluster++) {
+        if (!nav_mesh.clusters[cluster].allocated) continue;
+        for (int32_t i = nav_mesh.clusters[cluster].first_link; i != NULL_LINK; i = nav_mesh.cluster_links[(uint32_t)i].next) {
+            uint32_t a = find_island(islands, cluster);
+            uint32_t b = find_island(islands, nav_mesh.cluster_links[(uint32_t)i].to_cluster);
+            if (a != b) islands[a < b ? b : a] = a < b ? a : b;
+        }
+    }
+    for (uint32_t cluster = 0; cluster < islands.length; cluster++) islands[cluster] = find_island(islands, cluster);
+
+    NavMeshTileDrawing drawing = create_nav_mesh_tile_drawing();
+    for (const NavMeshTile &tile : nav_mesh.tiles) {
+        if (tile.allocated) draw_nav_mesh_tile(drawing, tile, &islands);
+    }
+    islands.release();
     return finish_nav_mesh_tile_drawing(drawing);
 }
 

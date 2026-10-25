@@ -51,6 +51,7 @@ DebugPrimitives create_simplified_contours_helper(const ContourSet &contour_set)
 DebugPrimitives create_poly_mesh_helper(const PolyMesh &poly_mesh);
 DebugPrimitives create_poly_mesh_detail_helper(const PolyMeshDetail &poly_mesh_detail);
 DebugPrimitives create_nav_mesh_helper(const NavMesh &nav_mesh);
+DebugPrimitives create_nav_mesh_islands_helper(const NavMesh &nav_mesh);
 DebugPrimitives create_nav_mesh_tile_helper(const NavMeshTile &tile);
 DebugPrimitives create_nav_mesh_poly_helper(const NavMesh &nav_mesh, NodeRef node_ref, Vec3 color = {0, 0.75f, 1});
 DebugPrimitives create_nav_mesh_tile_bv_tree_helper(const NavMeshTile &tile);

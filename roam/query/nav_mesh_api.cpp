@@ -33,6 +33,8 @@ void release(NavMeshTile &tile) {
     tile.detail_vertices.release();
     tile.detail_triangles.release();
     tile.poly_nodes.release();
+    tile.poly_clusters.release();
+    tile.clusters.release();
     tile.portals.release();
     tile.bv_tree.nodes.release();
 }
@@ -42,6 +44,8 @@ void release(NavMesh &nav_mesh) {
     nav_mesh.tiles.release();
     nav_mesh.nodes.release();
     nav_mesh.links.release();
+    nav_mesh.clusters.release();
+    nav_mesh.cluster_links.release();
     nav_mesh.off_mesh_connections.release();
     nav_mesh.off_mesh_connection_attachments.release();
     nav_mesh.tile_position_to_tile_id.release();
@@ -54,6 +58,8 @@ void release(NavMesh &nav_mesh) {
     index_pool::release(nav_mesh.tile_index_pool);
     index_pool::release(nav_mesh.off_mesh_connection_index_pool);
     index_pool::release(nav_mesh.link_index_pool);
+    index_pool::release(nav_mesh.cluster_index_pool);
+    index_pool::release(nav_mesh.cluster_link_index_pool);
 }
 
 static const NavMeshTile *tile_by_id(const NavMesh &nav_mesh, int32_t tile_id) {
@@ -588,6 +594,87 @@ static void add_link(NavMesh &nav_mesh, uint32_t from_node_index, NodeRef to_nod
     append_link(nav_mesh, from_node_index, link_index);
 }
 
+static uint32_t allocate_cluster(NavMesh &nav_mesh, int32_t tile_id) {
+    uint32_t cluster_index = index_pool::request(nav_mesh.cluster_index_pool);
+    if (cluster_index == nav_mesh.clusters.length) nav_mesh.clusters.push({});
+    nav_mesh.clusters[cluster_index] = {true, tile_id, NULL_LINK};
+    return cluster_index;
+}
+
+template <typename ShouldRelease>
+static void release_cluster_links_where(NavMesh &nav_mesh, uint32_t cluster_index, ShouldRelease should_release) {
+    int32_t *tail = &nav_mesh.clusters[cluster_index].first_link;
+    while (*tail != NULL_LINK) {
+        uint32_t link_index = (uint32_t)*tail;
+        NavMeshClusterLink &link = nav_mesh.cluster_links[link_index];
+        if (should_release(link)) {
+            *tail = link.next;
+            link = {0, -1, NULL_LINK, -1};
+            index_pool::release_index(nav_mesh.cluster_link_index_pool, link_index);
+        } else {
+            tail = &link.next;
+        }
+    }
+}
+
+static void release_cluster(NavMesh &nav_mesh, uint32_t cluster_index) {
+    release_cluster_links_where(nav_mesh, cluster_index, [](const NavMeshClusterLink &) { return true; });
+    nav_mesh.clusters[cluster_index] = {false, -1, NULL_LINK};
+    index_pool::release_index(nav_mesh.cluster_index_pool, cluster_index);
+}
+
+static void add_cluster_link(NavMesh &nav_mesh, uint32_t from_cluster, uint32_t to_cluster, int32_t to_tile_id, int32_t off_mesh_connection_id) {
+    if (from_cluster == to_cluster) return;
+    if (off_mesh_connection_id < 0) {
+        for (int32_t i = nav_mesh.clusters[from_cluster].first_link; i != NULL_LINK; i = nav_mesh.cluster_links[(uint32_t)i].next) {
+            const NavMeshClusterLink &link = nav_mesh.cluster_links[(uint32_t)i];
+            if (link.to_cluster == to_cluster && link.off_mesh_connection_id < 0) return;
+        }
+    }
+    uint32_t link_index = index_pool::request(nav_mesh.cluster_link_index_pool);
+    if (link_index == nav_mesh.cluster_links.length) nav_mesh.cluster_links.push({});
+    nav_mesh.cluster_links[link_index] = {to_cluster, to_tile_id, nav_mesh.clusters[from_cluster].first_link, off_mesh_connection_id};
+    nav_mesh.clusters[from_cluster].first_link = (int32_t)link_index;
+}
+
+static uint32_t get_poly_cluster(const NavMesh &nav_mesh, NodeRef node_ref) {
+    const NavMeshNode &node = get_node_by_ref(nav_mesh, node_ref);
+    return nav_mesh.tiles[(uint32_t)node.tile_id].poly_clusters[(uint32_t)node.poly_index];
+}
+
+static void create_tile_clusters(NavMesh &nav_mesh, uint32_t tile_id) {
+    NavMeshTile &tile = nav_mesh.tiles[tile_id];
+    uint32_t poly_count = tile.polys.length;
+
+    tile.poly_clusters.resize(poly_count * 2);
+    uint32_t *poly_clusters = tile.poly_clusters.data;
+    uint32_t *queue = poly_clusters + poly_count;
+    for (uint32_t i = 0; i < poly_count; i++) poly_clusters[i] = UINT32_MAX;
+
+    tile.clusters.clear();
+    for (uint32_t seed = 0; seed < poly_count; seed++) {
+        if (poly_clusters[seed] != UINT32_MAX) continue;
+        uint32_t cluster = allocate_cluster(nav_mesh, (int32_t)tile_id);
+        tile.clusters.push(cluster);
+        poly_clusters[seed] = cluster;
+        queue[0] = seed;
+        uint32_t queue_length = 1;
+        for (uint32_t head = 0; head < queue_length; head++) {
+            const NavMeshPoly &poly = tile.polys[queue[head]];
+            for (uint32_t edge_index = 0; edge_index < poly.vertex_count; edge_index++) {
+                int nei = tile.poly_neis[poly.vertex_base + edge_index];
+                if (nei == 0 || nei & POLY_NEIS_FLAG_EXT_LINK) continue;
+                uint32_t neighbour_poly_index = (uint32_t)(nei - 1);
+                if (neighbour_poly_index >= poly_count || poly_clusters[neighbour_poly_index] != UINT32_MAX) continue;
+                poly_clusters[neighbour_poly_index] = cluster;
+                queue[queue_length++] = neighbour_poly_index;
+            }
+        }
+    }
+
+    tile.poly_clusters.resize(poly_count);
+}
+
 static void connect_internal_links(NavMesh &nav_mesh, const NavMeshTile &tile) {
     for (uint32_t poly_index = 0; poly_index < tile.polys.length; poly_index++) {
         const NavMeshPoly &poly = tile.polys[poly_index];
@@ -656,6 +743,7 @@ static bool overlap_slabs(Vec2 amin, Vec2 amax, Vec2 bmin, Vec2 bmax, float px, 
 
 struct ConnectingPoly {
     NodeRef node_ref;
+    uint32_t cluster;
     float umin;
     float umax;
 };
@@ -710,7 +798,7 @@ static void find_connecting_polys(Array<ConnectingPoly> &results, const NavMesh 
         if (!overlap_slabs(amin, amax, portal.bmin, portal.bmax, 0.01f, target.walkable_climb)) continue;
 
         NodeRef node_ref = get_node_by_tile_and_poly(nav_mesh, target, (int)portal.poly_index).ref;
-        results.push({node_ref, fmaxf(amin.x, portal.bmin.x), fminf(amax.x, portal.bmax.x)});
+        results.push({node_ref, target.poly_clusters[portal.poly_index], fmaxf(amin.x, portal.bmin.x), fminf(amax.x, portal.bmax.x)});
         connected_poly = portal.poly_index;
     }
 }
@@ -724,6 +812,8 @@ static void connect_portal(NavMesh &nav_mesh, Array<ConnectingPoly> &overlaps, c
     Vec3 va = portal.start;
     Vec3 vb = portal.end;
     uint32_t node_index = tile.poly_nodes[portal.poly_index];
+    uint32_t cluster = tile.poly_clusters[portal.poly_index];
+    uint32_t linked_cluster = cluster;
     for (const ConnectingPoly &overlap : overlaps) {
         float tmin;
         float tmax;
@@ -745,6 +835,10 @@ static void connect_portal(NavMesh &nav_mesh, Array<ConnectingPoly> &overlaps, c
         tmax = fmaxf(0, fminf(1, tmax));
 
         add_link(nav_mesh, node_index, overlap.node_ref, portal.edge, (uint8_t)direction, portal_fraction(tmin), portal_fraction(tmax));
+        if (overlap.cluster != linked_cluster) {
+            add_cluster_link(nav_mesh, cluster, overlap.cluster, (int32_t)target.id, -1);
+            linked_cluster = overlap.cluster;
+        }
     }
 }
 
@@ -772,12 +866,31 @@ static void connect_external_links(NavMesh &nav_mesh, const NavMeshTile &tile, c
     overlaps.release();
 }
 
-static void disconnect_external_links(NavMesh &nav_mesh, const NavMeshTile &tile, const NavMeshTile &target) {
+static void disconnect_external_links(NavMesh &nav_mesh, const NavMeshTile &tile, const NavMeshTile &target, int side) {
     int32_t target_id = (int32_t)target.id;
-    for (uint32_t poly_index = 0; poly_index < tile.polys.length; poly_index++) {
-        release_links_where(nav_mesh, tile.poly_nodes[poly_index], [&](const NavMeshLink &link) {
-            return link.side != 0xff && get_node_by_ref(nav_mesh, link.to_node_ref).tile_id == target_id;
-        });
+    auto links_to_target = [&](const NavMeshLink &link) {
+        return link.side != 0xff && get_node_by_ref(nav_mesh, link.to_node_ref).tile_id == target_id;
+    };
+    if (side == -1) {
+        for (uint32_t poly_index = 0; poly_index < tile.polys.length; poly_index++) {
+            release_links_where(nav_mesh, tile.poly_nodes[poly_index], links_to_target);
+        }
+        return;
+    }
+    uint32_t released_poly = UINT32_MAX;
+    for (uint32_t k = tile.portal_starts[side]; k < tile.portal_starts[side + 1]; k++) {
+        uint32_t poly_index = tile.portals[k].poly_index;
+        if (poly_index == released_poly) continue;
+        release_links_where(nav_mesh, tile.poly_nodes[poly_index], links_to_target);
+        released_poly = poly_index;
+    }
+}
+
+static void disconnect_cluster_links(NavMesh &nav_mesh, const NavMeshTile &tile, const NavMeshTile &target) {
+    int32_t target_id = (int32_t)target.id;
+    for (uint32_t cluster_index : tile.clusters) {
+        release_cluster_links_where(nav_mesh, cluster_index,
+                                    [&](const NavMeshClusterLink &link) { return link.to_tile_id == target_id && link.off_mesh_connection_id < 0; });
     }
 }
 
@@ -816,6 +929,13 @@ static bool connect_off_mesh_connection(NavMesh &nav_mesh, uint32_t id) {
         add_link(nav_mesh, off_mesh_node_index, start.node_ref, 0, 0, 0, 0);
     }
 
+    uint32_t start_cluster = get_poly_cluster(nav_mesh, start.node_ref);
+    uint32_t end_cluster = get_poly_cluster(nav_mesh, end.node_ref);
+    add_cluster_link(nav_mesh, start_cluster, end_cluster, nav_mesh.clusters[end_cluster].tile_id, (int32_t)id);
+    if (connection.direction == OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL) {
+        add_cluster_link(nav_mesh, end_cluster, start_cluster, nav_mesh.clusters[start_cluster].tile_id, (int32_t)id);
+    }
+
     return true;
 }
 
@@ -828,6 +948,13 @@ static bool disconnect_off_mesh_connection(NavMesh &nav_mesh, uint32_t id) {
     NodeRef end_poly_node = attachment->end_poly_node;
 
     auto links_to_off_mesh_node = [&](const NavMeshLink &link) { return link.to_node_ref == off_mesh_node_ref; };
+    auto cluster_links_of_connection = [&](const NavMeshClusterLink &link) { return link.off_mesh_connection_id == (int32_t)id; };
+    if (is_valid_node_ref(nav_mesh, start_poly_node)) {
+        release_cluster_links_where(nav_mesh, get_poly_cluster(nav_mesh, start_poly_node), cluster_links_of_connection);
+    }
+    if (is_valid_node_ref(nav_mesh, end_poly_node)) {
+        release_cluster_links_where(nav_mesh, get_poly_cluster(nav_mesh, end_poly_node), cluster_links_of_connection);
+    }
 
     uint32_t start_node_index = node::get_node_ref_index(start_poly_node);
     if (start_node_index < nav_mesh.nodes.length) release_links_where(nav_mesh, start_node_index, links_to_off_mesh_node);
@@ -943,6 +1070,7 @@ uint32_t add_tile(NavMesh &nav_mesh, NavMeshTile tile) {
     }
 
     connect_internal_links(nav_mesh, nav_mesh.tiles[id]);
+    create_tile_clusters(nav_mesh, id);
 
     connect_with_column(nav_mesh, id);
 
@@ -973,8 +1101,8 @@ bool remove_tile(NavMesh &nav_mesh, int x, int y, int layer) {
     if (column) {
         for (uint32_t other_id : *column) {
             if (other_id == tile_id) continue;
-            disconnect_external_links(nav_mesh, nav_mesh.tiles[other_id], tile);
-            disconnect_external_links(nav_mesh, tile, nav_mesh.tiles[other_id]);
+            disconnect_external_links(nav_mesh, nav_mesh.tiles[other_id], tile, -1);
+            disconnect_cluster_links(nav_mesh, nav_mesh.tiles[other_id], tile);
         }
     }
 
@@ -982,8 +1110,8 @@ bool remove_tile(NavMesh &nav_mesh, int x, int y, int layer) {
         const Array<uint32_t> *neighbours = neighbour_tile_column(nav_mesh, x, y, side);
         if (!neighbours) continue;
         for (uint32_t neighbour_id : *neighbours) {
-            disconnect_external_links(nav_mesh, nav_mesh.tiles[neighbour_id], tile);
-            disconnect_external_links(nav_mesh, tile, nav_mesh.tiles[neighbour_id]);
+            disconnect_external_links(nav_mesh, nav_mesh.tiles[neighbour_id], tile, opposite_tile(side));
+            disconnect_cluster_links(nav_mesh, nav_mesh.tiles[neighbour_id], tile);
         }
     }
 
@@ -992,6 +1120,7 @@ bool remove_tile(NavMesh &nav_mesh, int x, int y, int layer) {
     }
 
     for (uint32_t node_index : tile.poly_nodes) release_node(nav_mesh, node_index);
+    for (uint32_t cluster_index : tile.clusters) release_cluster(nav_mesh, cluster_index);
 
     release(tile);
     tile = {};
@@ -1043,6 +1172,42 @@ void remove_off_mesh_connection(NavMesh &nav_mesh, uint32_t off_mesh_connection_
     disconnect_off_mesh_connection(nav_mesh, off_mesh_connection_id);
 
     nav_mesh.off_mesh_connections[off_mesh_connection_id] = {};
+}
+
+void rebuild_clusters(NavMesh &nav_mesh) {
+    nav_mesh.clusters.release();
+    nav_mesh.cluster_links.release();
+    index_pool::release(nav_mesh.cluster_index_pool);
+    index_pool::release(nav_mesh.cluster_link_index_pool);
+
+    for (NavMeshTile &tile : nav_mesh.tiles) {
+        if (tile.allocated) create_tile_clusters(nav_mesh, tile.id);
+    }
+
+    for (const NavMeshTile &tile : nav_mesh.tiles) {
+        if (!tile.allocated) continue;
+        for (uint32_t poly_index = 0; poly_index < tile.polys.length; poly_index++) {
+            const NavMeshNode &node = nav_mesh.nodes[tile.poly_nodes[poly_index]];
+            for (int32_t i = node.first_link; i != NULL_LINK; i = nav_mesh.links[(uint32_t)i].next) {
+                const NavMeshLink &link = nav_mesh.links[(uint32_t)i];
+                if (link.side == 0xff || get_node_by_ref(nav_mesh, link.to_node_ref).type != NODE_TYPE_POLY) continue;
+                uint32_t to_cluster = get_poly_cluster(nav_mesh, link.to_node_ref);
+                add_cluster_link(nav_mesh, tile.poly_clusters[poly_index], to_cluster, nav_mesh.clusters[to_cluster].tile_id, -1);
+            }
+        }
+    }
+
+    for (uint32_t id = 0; id < nav_mesh.off_mesh_connection_attachments.length; id++) {
+        const OffMeshConnectionAttachment &attachment = nav_mesh.off_mesh_connection_attachments[id];
+        if (!attachment.attached) continue;
+        if (!is_valid_node_ref(nav_mesh, attachment.start_poly_node) || !is_valid_node_ref(nav_mesh, attachment.end_poly_node)) continue;
+        uint32_t start_cluster = get_poly_cluster(nav_mesh, attachment.start_poly_node);
+        uint32_t end_cluster = get_poly_cluster(nav_mesh, attachment.end_poly_node);
+        add_cluster_link(nav_mesh, start_cluster, end_cluster, nav_mesh.clusters[end_cluster].tile_id, (int32_t)id);
+        if (nav_mesh.off_mesh_connections[id].direction == OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL) {
+            add_cluster_link(nav_mesh, end_cluster, start_cluster, nav_mesh.clusters[start_cluster].tile_id, (int32_t)id);
+        }
+    }
 }
 
 bool is_off_mesh_connection_connected(const NavMesh &nav_mesh, uint32_t off_mesh_connection_id) {

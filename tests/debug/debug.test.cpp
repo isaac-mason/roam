@@ -67,6 +67,7 @@ TEST_CASE("debug helpers draw a generated nav mesh") {
     check_helper(debug::create_poly_mesh_helper(intermediates.poly_mesh), "poly mesh");
     check_helper(debug::create_poly_mesh_detail_helper(intermediates.poly_mesh_detail), "poly mesh detail");
     check_helper(debug::create_nav_mesh_helper(nav_mesh), "nav mesh");
+    check_helper(debug::create_nav_mesh_islands_helper(nav_mesh), "nav mesh islands");
     check_helper(debug::create_nav_mesh_tile_helper(nav_mesh.tiles[0]), "nav mesh tile");
     check_helper(debug::create_nav_mesh_bv_tree_helper(nav_mesh), "bv tree");
     check_helper(debug::create_nav_mesh_links_helper(nav_mesh), "links");

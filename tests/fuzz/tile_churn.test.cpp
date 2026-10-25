@@ -47,6 +47,22 @@ static void check_paths(test::Random &random, const NavMesh &nav_mesh, QueryWork
     }
 }
 
+static void check_reachability(test::Random &random, const NavMesh &nav_mesh, QueryWorkspace &workspace, uint32_t &reachable_pairs,
+                               uint32_t &unreachable_pairs) {
+    Array<NodeRef> refs = {};
+    for (const NavMeshNode &node : nav_mesh.nodes) {
+        if (node.allocated) refs.push(node.ref);
+    }
+    for (uint32_t i = 0; i < 20 && refs.length > 0; i++) {
+        NodeRef from = refs[test::next_below(random, refs.length)];
+        NodeRef to = refs[test::next_below(random, refs.length)];
+        bool expected = reachable_by_links(nav_mesh, from, to);
+        CHECK(nav_mesh_search::is_reachable(workspace, nav_mesh, from, to) == expected);
+        (expected ? reachable_pairs : unreachable_pairs)++;
+    }
+    refs.release();
+}
+
 TEST_CASE("random tile and off mesh churn keeps the nav mesh consistent") {
     test::Random random = {0xc0ffeeull};
     NavMesh nav_mesh = create_tiled_terrain();
@@ -63,6 +79,8 @@ TEST_CASE("random tile and off mesh churn keeps the nav mesh consistent") {
     Array<uint32_t> connections = {};
     uint32_t fewest_tiles = saved.length;
     uint32_t attached_connections = 0;
+    uint32_t reachable_pairs = 0;
+    uint32_t unreachable_pairs = 0;
 
     for (uint32_t step = 0; step < 300; step++) {
         const SavedTile &tile = saved[test::next_below(random, saved.length)];
@@ -89,7 +107,9 @@ TEST_CASE("random tile and off mesh churn keeps the nav mesh consistent") {
                 break;
         }
         REQUIRE(snapshot_is_valid(nav_mesh));
+        REQUIRE(clusters_are_consistent(nav_mesh));
         check_paths(random, nav_mesh, workspace);
+        check_reachability(random, nav_mesh, workspace, reachable_pairs, unreachable_pairs);
 
         uint32_t tile_count = 0;
         for (const SavedTile &candidate : saved) tile_count += has_tile(nav_mesh, candidate) ? 1 : 0;
@@ -98,6 +118,8 @@ TEST_CASE("random tile and off mesh churn keeps the nav mesh consistent") {
     }
     CHECK(fewest_tiles < saved.length / 2);
     CHECK(attached_connections > 0);
+    CHECK(reachable_pairs > 500);
+    CHECK(unreachable_pairs > 500);
 
     for (uint32_t id : connections) nav_mesh_api::remove_off_mesh_connection(nav_mesh, id);
     for (const SavedTile &tile : saved) {

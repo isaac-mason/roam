@@ -31,6 +31,8 @@ void release(QueryWorkspace &workspace) {
     workspace.node_path.release();
     workspace.visited.release();
     workspace.local_refs.release();
+    workspace.cluster_stamps.release();
+    workspace.cluster_queue.release();
 }
 
 uint32_t get_search_node_count(const QueryWorkspace &workspace) { return workspace.nodes.nodes.length; }
@@ -1215,6 +1217,72 @@ void find_random_point_around_circle(FindRandomPointResult &out, QueryWorkspace 
     random_point_in_poly(out, nav_mesh, *random_tile, *random_poly, random_poly_ref, random, random_user_data);
 }
 
+
+
+static uint32_t gather_reachability_clusters(const NavMesh &nav_mesh, NodeRef node_ref, bool as_target, uint32_t *clusters) {
+    if (!nav_mesh_api::is_valid_node_ref(nav_mesh, node_ref)) return 0;
+    const NavMeshNode &node = nav_mesh_api::get_node_by_ref(nav_mesh, node_ref);
+    if (node.type == NODE_TYPE_POLY) {
+        clusters[0] = nav_mesh.tiles[(uint32_t)node.tile_id].poly_clusters[(uint32_t)node.poly_index];
+        return 1;
+    }
+
+    uint32_t id = (uint32_t)node.off_mesh_connection_id;
+    const OffMeshConnectionAttachment &attachment = nav_mesh.off_mesh_connection_attachments[id];
+    bool bidirectional = nav_mesh.off_mesh_connections[id].direction == OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL;
+    uint32_t count = 0;
+    if (as_target || bidirectional) {
+        const NavMeshNode &start = nav_mesh_api::get_node_by_ref(nav_mesh, attachment.start_poly_node);
+        clusters[count++] = nav_mesh.tiles[(uint32_t)start.tile_id].poly_clusters[(uint32_t)start.poly_index];
+    }
+    if (!as_target || bidirectional) {
+        const NavMeshNode &end = nav_mesh_api::get_node_by_ref(nav_mesh, attachment.end_poly_node);
+        clusters[count++] = nav_mesh.tiles[(uint32_t)end.tile_id].poly_clusters[(uint32_t)end.poly_index];
+    }
+    return count;
+}
+
+bool is_reachable(QueryWorkspace &workspace, const NavMesh &nav_mesh, NodeRef from_node_ref, NodeRef to_node_ref) {
+    uint32_t sources[2];
+    uint32_t targets[2];
+    uint32_t source_count = gather_reachability_clusters(nav_mesh, from_node_ref, false, sources);
+    uint32_t target_count = gather_reachability_clusters(nav_mesh, to_node_ref, true, targets);
+    if (source_count == 0 || target_count == 0) return false;
+    if (from_node_ref == to_node_ref) return true;
+
+    for (uint32_t i = 0; i < source_count; i++) {
+        for (uint32_t j = 0; j < target_count; j++) {
+            if (sources[i] == targets[j]) return true;
+        }
+    }
+
+    Array<uint32_t> &stamps = workspace.cluster_stamps;
+    if (stamps.length < nav_mesh.clusters.length) stamps.resize(nav_mesh.clusters.length, 0);
+    if (++workspace.cluster_stamp == 0) {
+        for (uint32_t &stamp : stamps) stamp = 0;
+        workspace.cluster_stamp = 1;
+    }
+    uint32_t stamp = workspace.cluster_stamp;
+
+    Array<uint32_t> &queue = workspace.cluster_queue;
+    queue.clear();
+    for (uint32_t i = 0; i < source_count; i++) {
+        stamps[sources[i]] = stamp;
+        queue.push(sources[i]);
+    }
+
+    for (uint32_t head = 0; head < queue.length; head++) {
+        for (int32_t i = nav_mesh.clusters[queue[head]].first_link; i != NULL_LINK; i = nav_mesh.cluster_links[(uint32_t)i].next) {
+            uint32_t cluster = nav_mesh.cluster_links[(uint32_t)i].to_cluster;
+            if (stamps[cluster] == stamp) continue;
+            if (cluster == targets[0] || (target_count > 1 && cluster == targets[1])) return true;
+            stamps[cluster] = stamp;
+            queue.push(cluster);
+        }
+    }
+
+    return false;
+}
 
 }
 

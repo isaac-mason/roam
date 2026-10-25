@@ -259,6 +259,31 @@ static void run_find_path() {
     }
 }
 
+static Array<NodeRef> tiled_center_refs;
+static volatile uint32_t reachable_sink;
+
+static void prepare_reachable() {
+    tiled_center_refs.clear();
+    for (const Vec3 &center : state.centers) {
+        FindNearestPolyResult nearest = {};
+        nav_mesh_api::find_nearest_poly(nearest, state.tiled_nav_mesh, center, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER);
+        tiled_center_refs.push(nearest.success ? nearest.node_ref : INVALID_NODE_REF);
+    }
+}
+
+static void run_reachable() {
+    uint32_t reachable = 0;
+    for (uint32_t i = 0; i < QUERY_COUNT; i++) {
+        uint32_t a = i % state.centers.length;
+        NodeRef from = tiled_center_refs[a];
+        NodeRef to = tiled_center_refs[pair_end(i)];
+        reachable += nav_mesh_search::is_reachable(query_workspace, state.tiled_nav_mesh, from, to) ? 1 : 0;
+    }
+    reachable_sink = reachable;
+}
+
+static void finish_reachable() { tiled_center_refs.release(); }
+
 static void run_raycast() {
     NodeRef path[MAX_PATH];
     for (uint32_t i = 0; i < QUERY_COUNT; i++) {
@@ -556,6 +581,7 @@ int main(int argc, char **argv) {
     cases[case_count++] = {"local neighbourhood (100 circles)", nullptr, run_local_neighbourhood, nullptr};
     cases[case_count++] = {"wall segments (100 polys)", nullptr, run_wall_segments, nullptr};
     cases[case_count++] = {"random point around circle (100)", nullptr, run_random_points, nullptr};
+    cases[case_count++] = {"is reachable (100 tiled pairs)", prepare_reachable, run_reachable, finish_reachable};
     cases[case_count++] = {"remove and add every tile", prepare_tiles, run_tiles, finish_tiles};
     cases[case_count++] = {"crowd (100 agents, 60 updates)", prepare_crowd, run_crowd, finish_crowd};
     cases[case_count++] = {"crowd (100 agents, 60 updates, 6 neighbours)", prepare_capped_crowd, run_crowd, finish_crowd};
