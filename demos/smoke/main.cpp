@@ -35,22 +35,27 @@ static bool run_example(int index) {
     uint64_t start = stm_now();
 
     shell::setup(headless_environment(), index);
+    int clicks_hit = 0;
     for (int frame = 0; frame < FRAMES; frame++) {
         if (frame == 10) shell::click(WIDTH * 0.5f, HEIGHT * 0.5f, false, false);
         if (frame == 15) shell::click(WIDTH * 0.6f, HEIGHT * 0.45f, false, false);
         if (frame == 20) shell::click(WIDTH * 0.4f, HEIGHT * 0.55f, true, false);
+        if (frame == 10 || frame == 15 || frame == 20) clicks_hit += shell::app().click.hit ? 1 : 0;
         FrameInput input = {WIDTH, HEIGHT, 1.0f / 60.0f, 1.0f, WIDTH * 0.5f, HEIGHT * 0.5f, headless_swapchain()};
         shell::frame(input);
     }
+    bool has_level = shell::app().level.loaded;
     shell::shutdown();
 
     memory::MemoryStats after = memory::outstanding();
     bool leaked = after.allocations != before.allocations;
-    printf("%-4s %-48s %8.1f ms", leaked ? "LEAK" : "ok", EXAMPLES[index]->name, stm_ms(stm_since(start)));
+    bool missed = has_level && clicks_hit == 0;
+    printf("%-4s %-48s %8.1f ms", leaked ? "LEAK" : missed ? "MISS" : "ok", EXAMPLES[index]->name, stm_ms(stm_since(start)));
     if (leaked) printf("  %lld allocations", (long long)(after.allocations - before.allocations));
+    if (missed) printf("  no click hit the level");
     printf("\n");
     fflush(stdout);
-    return !leaked;
+    return !leaked && !missed;
 }
 
 int main(int argc, char **argv) {

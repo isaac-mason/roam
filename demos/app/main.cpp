@@ -131,7 +131,8 @@ static void event(const sapp_event *e) {
             if (!input.down) break;
             float moved_x = e->mouse_x - input.down_x;
             float moved_y = e->mouse_y - input.down_y;
-            if (moved_x * moved_x + moved_y * moved_y > 16) input.dragging = true;
+            float threshold = 5 * sapp_dpi_scale();
+            if (moved_x * moved_x + moved_y * moved_y > threshold * threshold) input.dragging = true;
             if (!input.dragging) break;
             if (input.button == SAPP_MOUSEBUTTON_LEFT && (e->modifiers & SAPP_MODIFIER_SHIFT) == 0) {
                 camera::orbit(shell::app().camera, dx, dy);

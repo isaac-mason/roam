@@ -21,6 +21,13 @@ void load_level(App &app, const char *name, ModelLoadOptions options) { set_leve
 
 void set_level(App &app, Model level) {
     model::release(app.level);
+    if (level.nodes.length == 0 && level.indices.length > 0) {
+        ModelNode root = {};
+        root.parent = -1;
+        root.index_count = level.indices.length;
+        root.bounds = level.bounds;
+        level.nodes.push(root);
+    }
     app.level = level;
     renderer::set_level(app.renderer, app.level);
     if (app.level.loaded) camera::frame_bounds(app.camera, app.level.bounds);
