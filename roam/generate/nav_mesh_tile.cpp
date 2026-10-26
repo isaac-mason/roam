@@ -29,7 +29,7 @@ NavMeshTilePolys poly_mesh_to_tile_polys(const PolyMesh &poly_mesh) {
         tile_polys.polys.push(poly);
     }
 
-    poly_neighbours::build_poly_neighbours(tile_polys.polys, tile_polys.poly_vertices, tile_polys.poly_neis, tile_polys.vertices.data, tile_polys.vertices.length / 3, poly_mesh.border_size, 0, 0,
+    poly_neighbours::build_poly_neighbours(tile_polys.polys, tile_polys.poly_vertices, tile_polys.poly_neis, tile_polys.vertices, poly_mesh.border_size, 0, 0,
                                            (float)poly_mesh.local_width, (float)poly_mesh.local_height);
 
     for (uint32_t i = 0; i < tile_polys.vertices.length; i += 3) {
@@ -41,17 +41,16 @@ NavMeshTilePolys poly_mesh_to_tile_polys(const PolyMesh &poly_mesh) {
     return tile_polys;
 }
 
-NavMeshTilePolys polygons_to_nav_mesh_tile_polys(const ExternalPolygon *polygons, uint32_t polygon_count, const float *vertices,
-                                                 uint32_t vertex_count, int border_size, Box3 bounds) {
+NavMeshTilePolys polygons_to_nav_mesh_tile_polys(Span<const ExternalPolygon> polygons, Span<const float> vertices, int border_size, Box3 bounds) {
     NavMeshTilePolys tile_polys = {};
-    for (uint32_t i = 0; i < vertex_count * 3; i++) tile_polys.vertices.push(vertices[i]);
+    for (float value : vertices) tile_polys.vertices.push(value);
 
-    for (uint32_t i = 0; i < polygon_count; i++) {
-        tile_polys.polys.push({tile_polys.poly_vertices.length, polygons[i].vertex_count, polygons[i].flags, polygons[i].area});
-        for (uint32_t j = 0; j < polygons[i].vertex_count; j++) tile_polys.poly_vertices.push(polygons[i].vertices[j]);
+    for (const ExternalPolygon &polygon : polygons) {
+        tile_polys.polys.push({tile_polys.poly_vertices.length, polygon.vertices.length, polygon.flags, polygon.area});
+        for (uint32_t vertex : polygon.vertices) tile_polys.poly_vertices.push(vertex);
     }
 
-    poly_neighbours::build_poly_neighbours(tile_polys.polys, tile_polys.poly_vertices, tile_polys.poly_neis, tile_polys.vertices.data, vertex_count, border_size, bounds.min.x, bounds.min.z,
+    poly_neighbours::build_poly_neighbours(tile_polys.polys, tile_polys.poly_vertices, tile_polys.poly_neis, tile_polys.vertices, border_size, bounds.min.x, bounds.min.z,
                                            bounds.max.x, bounds.max.z);
 
     return tile_polys;

@@ -87,7 +87,7 @@ static Vec3 walkable_area_color(int area) {
 DebugPrimitives create_triangle_area_ids_helper(const InputTriangleMesh &mesh, Span<const uint8_t> tri_area_ids) {
     const float *positions = mesh.positions.data;
     const uint32_t *indices = mesh.indices.data;
-    uint32_t index_count = mesh.indices.capacity;
+    uint32_t index_count = mesh.indices.length;
     DebugPrimitives primitives = {};
     DebugPrimitive triangles = create_primitive(DEBUG_PRIMITIVE_TRIANGLES);
     triangles.transparent = true;

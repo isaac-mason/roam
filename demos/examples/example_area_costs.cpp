@@ -117,7 +117,7 @@ static NavMesh generate_flat_nav_mesh(const InputTriangleMesh &mesh) {
     BuildContext context = {};
 
     Array<uint8_t> tri_area_ids = {};
-    tri_area_ids.resize(mesh.indices.capacity / 3, 0);
+    tri_area_ids.resize(mesh.indices.length / 3, 0);
     input_triangle_mesh::mark_walkable_triangles(tri_area_ids, mesh, walkable_slope_angle_degrees);
 
     Box3 bounds = input_triangle_mesh::calculate_mesh_bounds(mesh);

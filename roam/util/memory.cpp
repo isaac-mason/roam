@@ -17,9 +17,9 @@ namespace roam {
 
 namespace memory {
 
-static void *system_allocate(size_t size, void *) { return malloc(size); }
+static void *system_allocate(size_t size, size_t, void *) { return malloc(size); }
 
-static void system_free(void *block, size_t, void *) { ::free(block); }
+static void system_free(void *block, size_t, size_t, void *) { ::free(block); }
 
 static Allocator current = {system_allocate, system_free, nullptr};
 
@@ -46,9 +46,9 @@ void set_allocator(const Allocator &allocator) { current = allocator; }
 
 void reset_allocator() { current = {system_allocate, system_free, nullptr}; }
 
-void *allocate(size_t size) {
+void *allocate(size_t size, size_t alignment) {
     if (size == 0) return nullptr;
-    void *block = current.allocate(size, current.user_data);
+    void *block = current.allocate(size, alignment, current.user_data);
     if (block == nullptr) {
         fprintf(stderr, "roam: out of memory allocating %zu bytes\n", size);
         abort();
@@ -59,12 +59,12 @@ void *allocate(size_t size) {
     return block;
 }
 
-void free(void *block, size_t size) {
+void free(void *block, size_t size, size_t alignment) {
     if (block == nullptr) return;
 #if ROAM_MEMORY_TRACKING
     track(-1, -(int64_t)size);
 #endif
-    current.free(block, size, current.user_data);
+    current.free(block, size, alignment, current.user_data);
 }
 
 bool tracking_enabled() { return ROAM_MEMORY_TRACKING != 0; }

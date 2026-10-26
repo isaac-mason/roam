@@ -110,10 +110,9 @@ static void init(App &app) {
     for (uint32_t i = 0; i < positions.length / 3; i++) bounds = box3::expand_by_point(bounds, vec3::load(positions.data, i * 3));
 
     Array<ExternalPolygon> polys = {};
-    for (uint32_t i = 0; i + 2 < indices.length; i += 3) polys.push({&indices[i], 3, 1, 0});
+    for (uint32_t i = 0; i + 2 < indices.length; i += 3) polys.push({{&indices[i], 3}, 1, 0});
 
-    NavMeshTilePolys tile_polys =
-        nav_mesh_tile::polygons_to_nav_mesh_tile_polys(polys.data, polys.length, positions.data, positions.length / 3, 0, bounds);
+    NavMeshTilePolys tile_polys = nav_mesh_tile::polygons_to_nav_mesh_tile_polys(polys, positions, 0, bounds);
     NavMeshTileDetailMesh tile_detail_mesh = nav_mesh_tile::polys_to_tile_detail_mesh(tile_polys.polys);
 
     NavMeshTileParams tile_params = {

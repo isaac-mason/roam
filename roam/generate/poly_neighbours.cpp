@@ -6,12 +6,12 @@ namespace roam {
 
 namespace poly_neighbours {
 
-void build_poly_neighbours(const Array<NavMeshPoly> &polys, const Array<uint32_t> &poly_vertices, Array<int> &poly_neis, const float *vertices,
-                           uint32_t vertex_count, int border_size, float min_x, float min_z, float max_x, float max_z) {
+void build_poly_neighbours(const Array<NavMeshPoly> &polys, const Array<uint32_t> &poly_vertices, Array<int> &poly_neis, Span<const float> vertices,
+                           int border_size, float min_x, float min_z, float max_x, float max_z) {
     poly_neis.clear();
     poly_neis.resize(poly_vertices.length, MESH_NULL_IDX);
 
-    build_mesh_adjacency(polys, poly_vertices, poly_neis, vertex_count);
+    build_mesh_adjacency(polys, poly_vertices, poly_neis, vertices.length / 3);
 
     if (border_size > 0) find_portal_edges(polys, poly_vertices, poly_neis, vertices, min_x, min_z, max_x, max_z);
 
@@ -73,7 +73,7 @@ void build_mesh_adjacency(const Array<NavMeshPoly> &polys, const Array<uint32_t>
     edges.release();
 }
 
-void find_portal_edges(const Array<NavMeshPoly> &polys, const Array<uint32_t> &poly_vertices, Array<int> &poly_neis, const float *vertices,
+void find_portal_edges(const Array<NavMeshPoly> &polys, const Array<uint32_t> &poly_vertices, Array<int> &poly_neis, Span<const float> vertices,
                        float min_x, float min_z, float max_x, float max_z) {
     for (const NavMeshPoly &poly : polys) {
         for (uint32_t j = 0; j < poly.vertex_count; j++) {

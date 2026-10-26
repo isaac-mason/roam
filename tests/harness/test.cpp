@@ -13,7 +13,7 @@ void fail(const char *file, int line, const char *message) { ADD_FAIL_CHECK_AT(f
 int leak_count() { return leaking_tests; }
 
 struct LeakListener : doctest::IReporter {
-    roam::memory::MemoryStats before = {};
+    roam::MemoryStats before = {};
     const doctest::TestCaseData *test_case = nullptr;
 
     LeakListener(const doctest::ContextOptions &) {}
@@ -27,7 +27,7 @@ struct LeakListener : doctest::IReporter {
     }
     void test_case_reenter(const doctest::TestCaseData &) override {}
     void test_case_end(const doctest::CurrentTestCaseStats &stats) override {
-        roam::memory::MemoryStats after = roam::memory::outstanding();
+        roam::MemoryStats after = roam::memory::outstanding();
         if (stats.failure_flags != 0) return;
         if (after.allocations == before.allocations && after.bytes == before.bytes) return;
         printf("%s:%d: %s leaked %lld allocations (%lld bytes)\n", test_case->m_file.c_str(), test_case->m_line, test_case->m_name,

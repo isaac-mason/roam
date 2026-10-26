@@ -14,9 +14,9 @@ inline roam::NavMesh create_nav_mesh_from_triangles(const float *positions, uint
     for (uint32_t i = 0; i < vertex_count; i++) bounds = box3::expand_by_point(bounds, vec3::load(positions, i * 3));
 
     Array<ExternalPolygon> polygons = {};
-    for (uint32_t i = 0; i < index_count; i += 3) polygons.push({&indices[i], 3, 1, 0});
+    for (uint32_t i = 0; i < index_count; i += 3) polygons.push({{&indices[i], 3}, 1, 0});
 
-    NavMeshTilePolys tile_polys = nav_mesh_tile::polygons_to_nav_mesh_tile_polys(polygons.data, polygons.length, positions, vertex_count, 0, bounds);
+    NavMeshTilePolys tile_polys = nav_mesh_tile::polygons_to_nav_mesh_tile_polys(polygons, {positions, vertex_count * 3}, 0, bounds);
     NavMeshTileDetailMesh detail_mesh = nav_mesh_tile::polys_to_tile_detail_mesh(tile_polys.polys);
 
     NavMeshTileParams params = {};

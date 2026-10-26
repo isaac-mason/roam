@@ -23,8 +23,7 @@ struct NavMeshTileDetailMesh {
 };
 
 struct ExternalPolygon {
-    const uint32_t *vertices;
-    uint32_t vertex_count;
+    Span<const uint32_t> vertices;
     uint32_t flags;
     uint8_t area;
 };
@@ -33,8 +32,7 @@ namespace nav_mesh_tile {
 
 NavMeshTilePolys poly_mesh_to_tile_polys(const PolyMesh &poly_mesh);
 
-NavMeshTilePolys polygons_to_nav_mesh_tile_polys(const ExternalPolygon *polygons, uint32_t polygon_count, const float *vertices,
-                                                 uint32_t vertex_count, int border_size, Box3 bounds);
+NavMeshTilePolys polygons_to_nav_mesh_tile_polys(Span<const ExternalPolygon> polygons, Span<const float> vertices, int border_size, Box3 bounds);
 
 NavMeshTileDetailMesh polys_to_tile_detail_mesh(const Array<NavMeshPoly> &polys);
 

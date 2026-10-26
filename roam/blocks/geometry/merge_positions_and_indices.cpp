@@ -23,7 +23,7 @@ MergedMesh merge_positions_and_indices(Span<const InputTriangleMesh> meshes) {
     Array<uint32_t> merged_bits = {};
 
     for (const InputTriangleMesh &mesh : meshes) {
-        for (uint32_t i = 0; i < mesh.indices.capacity; i++) {
+        for (uint32_t i = 0; i < mesh.indices.length; i++) {
             const float *position = &mesh.positions.data[mesh.indices[i] * 3];
             uint32_t x = position_bits(position[0]);
             uint32_t y = position_bits(position[1]);

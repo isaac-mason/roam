@@ -354,8 +354,8 @@ bool rasterize_triangles(BuildContext &context, Heightfield &heightfield, const 
                          int flag_merge_threshold) {
     const float *vertices = mesh.positions.data;
     const uint32_t *indices = mesh.indices.data;
-    uint32_t index_count = mesh.indices.capacity;
-    ROAM_ASSERT(tri_area_ids.capacity >= index_count / 3);
+    uint32_t index_count = mesh.indices.length;
+    ROAM_ASSERT(tri_area_ids.length >= index_count / 3);
 
     uint32_t triangle_count = index_count / 3;
 
@@ -930,9 +930,9 @@ static Plane scale_plane(Plane plane, float scale) { return {vec3::scale(plane.n
 
 void rasterize_convex(Heightfield &heightfield, const InputTriangleMesh &mesh, uint8_t area, int flag_merge_threshold) {
     const float *vertices = mesh.positions.data;
-    uint32_t vertex_float_count = mesh.positions.capacity;
+    uint32_t vertex_float_count = mesh.positions.length;
     const uint32_t *triangles = mesh.indices.data;
-    uint32_t triangle_index_count = mesh.indices.capacity;
+    uint32_t triangle_index_count = mesh.indices.length;
 
     Box3 bounds = {vec3::load(vertices, 0), vec3::load(vertices, 0)};
     for (uint32_t i = 0; i < vertex_float_count; i += 3) bounds = box3::expand_by_point(bounds, vec3::load(vertices, i));

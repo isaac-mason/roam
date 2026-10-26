@@ -147,7 +147,7 @@ void find_local_neighbourhood(FindLocalNeighbourhoodResult &result, QueryWorkspa
 
     result.success = true;
     result.poly_total = found.length;
-    result.poly_count = found.length < polys.capacity ? found.length : polys.capacity;
+    result.poly_count = found.length < polys.length ? found.length : polys.length;
     result.truncated = result.poly_count < result.poly_total;
     for (uint32_t i = 0; i < result.poly_count; i++) polys.data[i] = found[i];
 }
@@ -159,8 +159,8 @@ struct SegmentWriter {
 };
 
 static void push_segment(SegmentWriter &writer, Vec3 start, Vec3 end, NodeRef ref) {
-    if (writer.count < writer.segments.capacity) writer.segments.data[writer.count] = {start, end};
-    if (writer.count < writer.refs.capacity) writer.refs.data[writer.count] = ref;
+    if (writer.count < writer.segments.length) writer.segments.data[writer.count] = {start, end};
+    if (writer.count < writer.refs.length) writer.refs.data[writer.count] = ref;
     writer.count++;
 }
 
@@ -234,7 +234,7 @@ void get_poly_wall_segments(PolyWallSegmentsResult &result, const NavMesh &nav_m
     intervals.overflow.release();
     result.success = true;
     result.segment_total = writer.count;
-    result.segment_count = writer.count < segments.capacity ? writer.count : segments.capacity;
+    result.segment_count = writer.count < segments.length ? writer.count : segments.length;
     result.truncated = result.segment_count < result.segment_total;
 }
 

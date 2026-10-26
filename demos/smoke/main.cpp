@@ -31,7 +31,7 @@ static sg_swapchain headless_swapchain() {
 }
 
 static bool run_example(int index) {
-    memory::MemoryStats before = memory::outstanding();
+    MemoryStats before = memory::outstanding();
     uint64_t start = stm_now();
 
     shell::setup(headless_environment(), index);
@@ -47,7 +47,7 @@ static bool run_example(int index) {
     bool has_level = shell::app().level.loaded;
     shell::shutdown();
 
-    memory::MemoryStats after = memory::outstanding();
+    MemoryStats after = memory::outstanding();
     bool leaked = after.allocations != before.allocations;
     bool missed = has_level && clicks_hit == 0;
     printf("%-4s %-48s %8.1f ms", leaked ? "LEAK" : missed ? "MISS" : "ok", EXAMPLES[index]->name, stm_ms(stm_since(start)));

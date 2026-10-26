@@ -155,6 +155,7 @@ uint32_t gather_poly_vertices(const NavMeshTile &tile, const NavMeshPoly &poly, 
 void release(PolyVertices &vertices);
 
 void get_poly_height(GetPolyHeightResult &out, const NavMeshTile &tile, const NavMeshPoly &poly, int poly_index, Vec3 position);
+void get_poly_height(GetPolyHeightResult &out, const NavMesh &nav_mesh, NodeRef node_ref, Vec3 position);
 void get_closest_point_on_detail_edges(GetClosestPointOnDetailEdgesResult &out, const NavMeshTile &tile, const NavMeshPoly &poly, int poly_index,
                                        Vec3 position,
                                                             bool only_boundary);

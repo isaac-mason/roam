@@ -34,33 +34,33 @@ struct Span {
     using Element = typename WithoutConst<T>::Type;
 
     T *data;
-    uint32_t capacity;
+    uint32_t length;
 
-    Span() : data(nullptr), capacity(0) {}
-    Span(T *data, uint32_t capacity) : data(data), capacity(capacity) {}
+    Span() : data(nullptr), length(0) {}
+    Span(T *data, uint32_t length) : data(data), length(length) {}
 
     template <size_t N>
-    Span(T (&array)[N]) : data(array), capacity((uint32_t)N) {}
+    Span(T (&array)[N]) : data(array), length((uint32_t)N) {}
 
     Span(Array<Element> &array)
         requires(!IS_CONST<T>)
-        : data(array.data), capacity(array.capacity) {}
+        : data(array.data), length(array.capacity) {}
 
     Span(const Array<Element> &array)
         requires IS_CONST<T>
-        : data(array.data), capacity(array.length) {}
+        : data(array.data), length(array.length) {}
 
     template <typename U>
         requires IS_CONST<T> && IS_SAME<U, Element>
-    Span(const Span<U> &span) : data(span.data), capacity(span.capacity) {}
+    Span(const Span<U> &span) : data(span.data), length(span.length) {}
 
     T &operator[](uint32_t index) const {
-        ROAM_ASSERT(index < capacity);
+        ROAM_ASSERT(index < length);
         return data[index];
     }
 
     T *begin() const { return data; }
-    T *end() const { return data + capacity; }
+    T *end() const { return data + length; }
 };
 
 }

@@ -1,5 +1,6 @@
 #include "roam/blocks/generators/generate_tiled_nav_mesh.h"
 
+#include <math.h>
 #include <string.h>
 
 #include "roam/generate/common.h"
@@ -11,6 +12,14 @@
 namespace roam {
 
 namespace generate_tiled_nav_mesh {
+
+TiledNavMeshOptions derive_sizes(TiledNavMeshOptions options) {
+    options.tile_size_world = (float)options.tile_size_voxels * options.cell_size;
+    options.walkable_radius_voxels = (int)ceilf(options.walkable_radius_world / options.cell_size);
+    options.walkable_climb_voxels = (int)ceilf(options.walkable_climb_world / options.cell_height);
+    options.walkable_height_voxels = (int)ceilf(options.walkable_height_world / options.cell_height);
+    return options;
+}
 
 struct NavMeshTileBuild {
     Array<uint8_t> tri_area_ids;
@@ -34,7 +43,11 @@ static NavMeshTileBuild build_nav_mesh_tile(BuildContext &context, Span<const fl
     expanded.max.z += border;
     build.expanded_tile_bounds = expanded;
 
-    Array<uint32_t> chunks = chunky_tri_mesh::get_chunks_overlapping_rect(chunky_tri_mesh, {expanded.min.x, expanded.min.z}, {expanded.max.x, expanded.max.z});
+    Array<uint32_t> chunks = {};
+    chunks.reserve(chunky_tri_mesh.nodes.length);
+    ChunkyTriMeshChunksResult found;
+    chunky_tri_mesh::get_chunks_overlapping_rect(found, chunky_tri_mesh, {expanded.min.x, expanded.min.z}, {expanded.max.x, expanded.max.z}, chunks);
+    chunks.resize(found.chunk_count);
 
     int heightfield_size = options.tile_size_voxels + options.border_size * 2;
     build.heightfield = heightfield::create(heightfield_size, heightfield_size, expanded, options.cell_size, options.cell_height);

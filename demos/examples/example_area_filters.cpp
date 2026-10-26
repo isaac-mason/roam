@@ -102,7 +102,7 @@ static AreaFiltersNavMesh generate_nav_mesh(const InputTriangleMesh &mesh) {
     AreaFiltersNavMesh result = {};
     BuildContext &context = result.build_context;
 
-    result.tri_area_ids.resize(mesh.indices.capacity / 3, 0);
+    result.tri_area_ids.resize(mesh.indices.length / 3, 0);
     input_triangle_mesh::mark_walkable_triangles(result.tri_area_ids, mesh, walkable_slope_angle_degrees);
 
     Box3 bounds = input_triangle_mesh::calculate_mesh_bounds(mesh);

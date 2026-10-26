@@ -58,6 +58,8 @@ struct TiledNavMeshResult {
 
 namespace generate_tiled_nav_mesh {
 
+TiledNavMeshOptions derive_sizes(TiledNavMeshOptions options);
+
 TiledNavMeshResult generate_tiled_nav_mesh(const InputTriangleMesh &input, const TiledNavMeshOptions &options);
 
 void release(TiledNavMeshIntermediates &intermediates);

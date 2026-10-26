@@ -10,7 +10,7 @@ static Array<NodeRef> refs(Span<const NodeRef> values) {
 }
 
 static bool equals(const Array<NodeRef> &actual, Span<const NodeRef> expected) {
-    if (actual.length != expected.capacity) return false;
+    if (actual.length != expected.length) return false;
     for (uint32_t i = 0; i < actual.length; i++) {
         if (actual[i] != expected[i]) return false;
     }

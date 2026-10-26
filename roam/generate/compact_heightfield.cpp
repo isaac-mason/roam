@@ -346,7 +346,7 @@ void mark_rotated_box_area(CompactHeightfield &compact_heightfield, Vec3 center,
 
 void mark_convex_poly_area(CompactHeightfield &compact_heightfield, Span<const float> polygon, float min_y, float max_y, uint8_t area_id) {
     const float *vertices = polygon.data;
-    uint32_t vertex_count = polygon.capacity / 3;
+    uint32_t vertex_count = polygon.length / 3;
     Vec3 min = {vertices[0], min_y, vertices[2]};
     Vec3 max = {vertices[0], max_y, vertices[2]};
     for (uint32_t i = 1; i < vertex_count; ++i) {

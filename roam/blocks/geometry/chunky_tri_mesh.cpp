@@ -111,7 +111,7 @@ static void subdivide(Array<BoundsItem> &items, uint32_t min, uint32_t max, uint
 ChunkyTriMesh create(const InputTriangleMesh &input, uint32_t tris_per_chunk) {
     const float *vertices = input.positions.data;
     const uint32_t *indices = input.indices.data;
-    uint32_t index_count = input.indices.capacity;
+    uint32_t index_count = input.indices.length;
     ChunkyTriMesh mesh = {};
     uint32_t triangle_count = index_count / 3;
     if (triangle_count == 0) return mesh;
@@ -191,15 +191,18 @@ static bool overlaps(const ChunkQuery &query, const ChunkyTriMeshNode &node) {
     return query.segment ? overlap_segment(query.a, query.b, node.min, node.max) : overlap_rect(query.a, query.b, node.min, node.max);
 }
 
-static Array<uint32_t> collect_chunks(const ChunkyTriMesh &mesh, const ChunkQuery &query) {
-    Array<uint32_t> chunks = {};
+static void collect_chunks(ChunkyTriMeshChunksResult &out, const ChunkyTriMesh &mesh, const ChunkQuery &query, Span<uint32_t> chunks) {
+    out = {};
     uint32_t i = 0;
     while (i < mesh.nodes.length) {
         const ChunkyTriMeshNode &node = mesh.nodes[i];
         bool overlap = overlaps(query, node);
         bool leaf = is_leaf(node);
 
-        if (leaf && overlap) chunks.push(i);
+        if (leaf && overlap) {
+            if (out.chunk_count < chunks.length) chunks[out.chunk_count++] = i;
+            out.chunk_total++;
+        }
 
         if (overlap || leaf) {
             i++;
@@ -207,27 +210,41 @@ static Array<uint32_t> collect_chunks(const ChunkyTriMesh &mesh, const ChunkQuer
             i += (uint32_t)-node.index;
         }
     }
-    return chunks;
+    out.truncated = out.chunk_count < out.chunk_total;
 }
 
-Array<uint32_t> get_chunks_overlapping_rect(const ChunkyTriMesh &mesh, Vec2 min, Vec2 max) {
-    return collect_chunks(mesh, {false, min, max});
+void get_chunks_overlapping_rect(ChunkyTriMeshChunksResult &out, const ChunkyTriMesh &mesh, Vec2 min, Vec2 max, Span<uint32_t> chunks) {
+    collect_chunks(out, mesh, {false, min, max}, chunks);
 }
 
-Array<uint32_t> get_triangles_in_rect(const ChunkyTriMesh &mesh, Vec2 min, Vec2 max) {
-    Array<uint32_t> chunks = get_chunks_overlapping_rect(mesh, min, max);
-    Array<uint32_t> triangles = {};
-    for (uint32_t chunk : chunks) {
-        const ChunkyTriMeshNode &node = mesh.nodes[chunk];
-        uint32_t start = (uint32_t)node.index * 3;
-        for (uint32_t i = start; i < start + node.count * 3; i++) triangles.push(mesh.triangles[i]);
+void get_triangles_in_rect(ChunkyTriMeshTrianglesResult &out, const ChunkyTriMesh &mesh, Vec2 min, Vec2 max, Span<uint32_t> indices) {
+    out = {};
+    ChunkQuery query = {false, min, max};
+    uint32_t i = 0;
+    while (i < mesh.nodes.length) {
+        const ChunkyTriMeshNode &node = mesh.nodes[i];
+        bool overlap = overlaps(query, node);
+        bool leaf = is_leaf(node);
+
+        if (leaf && overlap) {
+            uint32_t start = (uint32_t)node.index * 3;
+            for (uint32_t j = start; j < start + node.count * 3; j++) {
+                if (out.index_count < indices.length) indices[out.index_count++] = mesh.triangles[j];
+                out.index_total++;
+            }
+        }
+
+        if (overlap || leaf) {
+            i++;
+        } else {
+            i += (uint32_t)-node.index;
+        }
     }
-    chunks.release();
-    return triangles;
+    out.truncated = out.index_count < out.index_total;
 }
 
-Array<uint32_t> get_chunks_overlapping_segment(const ChunkyTriMesh &mesh, Vec2 p, Vec2 q) {
-    return collect_chunks(mesh, {true, p, q});
+void get_chunks_overlapping_segment(ChunkyTriMeshChunksResult &out, const ChunkyTriMesh &mesh, Vec2 p, Vec2 q, Span<uint32_t> chunks) {
+    collect_chunks(out, mesh, {true, p, q}, chunks);
 }
 
 }

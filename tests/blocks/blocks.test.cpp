@@ -5,6 +5,7 @@
 #include "roam/blocks/search/flood_fill_nav_mesh.h"
 #include "roam/query/find_path.h"
 #include "roam/query/node.h"
+#include "tests/blocks/chunky_tri_mesh_queries.h"
 #include "tests/harness/test.h"
 #include "tests/query/test_nav_meshes.h"
 
@@ -45,7 +46,7 @@ TEST_CASE("chunky tri mesh of nothing is empty") {
     CHECK(mesh.nodes.length == 0);
     CHECK(mesh.max_tris_per_chunk == 0);
 
-    Array<uint32_t> chunks = chunky_tri_mesh::get_chunks_overlapping_rect(mesh, {0, 0}, {1, 1});
+    Array<uint32_t> chunks = chunks_in_rect(mesh, {0, 0}, {1, 1});
     CHECK(chunks.length == 0);
 
     chunks.release();
@@ -69,14 +70,14 @@ TEST_CASE("chunky tri mesh finds every triangle in a covering rect") {
     CHECK(mesh.max_tris_per_chunk <= 16);
     CHECK(mesh.triangles.length == indices.length);
 
-    Array<uint32_t> all = chunky_tri_mesh::get_triangles_in_rect(mesh, {-1, -1}, {11, 11});
+    Array<uint32_t> all = triangles_in_rect(mesh, {-1, -1}, {11, 11});
     CHECK(all.length == indices.length);
 
-    Array<uint32_t> corner = chunky_tri_mesh::get_triangles_in_rect(mesh, {0.1f, 0.1f}, {0.2f, 0.2f});
+    Array<uint32_t> corner = triangles_in_rect(mesh, {0.1f, 0.1f}, {0.2f, 0.2f});
     CHECK(corner.length > 0);
     CHECK(corner.length < indices.length);
 
-    Array<uint32_t> missed = chunky_tri_mesh::get_chunks_overlapping_segment(mesh, {20, 20}, {30, 30});
+    Array<uint32_t> missed = chunks_on_segment(mesh, {20, 20}, {30, 30});
     CHECK(missed.length == 0);
 
     missed.release();
@@ -195,4 +196,24 @@ TEST_CASE("generate tiled nav mesh connects tiles across a plane") {
     nav_mesh_search::release(workspace);
     generate_tiled_nav_mesh::release(result.intermediates);
     nav_mesh_api::release(result.nav_mesh);
+}
+
+TEST_CASE("derive sizes rounds each agent measure up to whole voxels and sizes tiles in metres") {
+    SoloNavMeshOptions solo = generate_solo_nav_mesh::derive_sizes(
+        {.cell_size = 0.2f, .cell_height = 0.25f, .walkable_radius_world = 0.3f, .walkable_climb_world = 0.5f, .walkable_height_world = 1.8f});
+    CHECK(solo.walkable_radius_voxels == 2);
+    CHECK(solo.walkable_climb_voxels == 2);
+    CHECK(solo.walkable_height_voxels == 8);
+    CHECK(solo.walkable_radius_world == 0.3f);
+
+    TiledNavMeshOptions tiled = generate_tiled_nav_mesh::derive_sizes({.cell_size = 0.2f,
+                                                                       .cell_height = 0.25f,
+                                                                       .tile_size_voxels = 32,
+                                                                       .walkable_radius_world = 0.3f,
+                                                                       .walkable_climb_world = 0.5f,
+                                                                       .walkable_height_world = 1.8f});
+    CHECK(tiled.tile_size_world == doctest::Approx(6.4f));
+    CHECK(tiled.walkable_radius_voxels == 2);
+    CHECK(tiled.walkable_climb_voxels == 2);
+    CHECK(tiled.walkable_height_voxels == 8);
 }

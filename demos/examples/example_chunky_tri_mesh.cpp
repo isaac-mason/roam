@@ -46,7 +46,11 @@ static void visualize_triangles(const App &app, DrawList &list, Vec2 query_min, 
     const float *positions = app.level.walkable_positions.data;
     const Array<uint32_t> &indices = app.level.walkable_indices;
 
-    Array<uint32_t> in_query = chunky_tri_mesh::get_triangles_in_rect(chunky.chunky_tri_mesh, query_min, query_max);
+    Array<uint32_t> in_query = {};
+    in_query.reserve(chunky.chunky_tri_mesh.triangles.length);
+    ChunkyTriMeshTrianglesResult found;
+    chunky_tri_mesh::get_triangles_in_rect(found, chunky.chunky_tri_mesh, query_min, query_max, in_query);
+    in_query.resize(found.index_count);
     Map<uint64_t, uint8_t> in_query_set = {};
     for (uint32_t j = 0; j + 2 < in_query.length; j += 3) in_query_set.set(triangle_key(in_query[j], in_query[j + 1], in_query[j + 2]), 1);
 
@@ -76,7 +80,11 @@ static void visualize_triangles(const App &app, DrawList &list, Vec2 query_min, 
 static void visualize_chunk_bounds(DrawList &list, Vec2 query_min, Vec2 query_max) {
     if (!chunky.show_chunk_bounds) return;
 
-    Array<uint32_t> chunk_indices = chunky_tri_mesh::get_chunks_overlapping_rect(chunky.chunky_tri_mesh, query_min, query_max);
+    Array<uint32_t> chunk_indices = {};
+    chunk_indices.reserve(chunky.chunky_tri_mesh.nodes.length);
+    ChunkyTriMeshChunksResult found;
+    chunky_tri_mesh::get_chunks_overlapping_rect(found, chunky.chunky_tri_mesh, query_min, query_max, chunk_indices);
+    chunk_indices.resize(found.chunk_count);
     Map<uint32_t, uint8_t> overlapping_chunks = {};
     for (uint32_t chunk : chunk_indices) overlapping_chunks.set(chunk, 1);
 

@@ -51,6 +51,8 @@ struct SoloNavMeshResult {
 
 namespace generate_solo_nav_mesh {
 
+SoloNavMeshOptions derive_sizes(SoloNavMeshOptions options);
+
 SoloNavMeshResult generate_solo_nav_mesh(const InputTriangleMesh &input, const SoloNavMeshOptions &options);
 
 void release(SoloNavMeshIntermediates &intermediates);

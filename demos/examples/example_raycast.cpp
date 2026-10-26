@@ -109,14 +109,11 @@ static void perform_raycast() {
 
     state.has_actual_hit_position = false;
     if (reached_end && state.hit_node_ref != end.node_ref) {
-        TileAndPoly tile_and_poly = nav_mesh_api::get_tile_and_poly_by_ref(nav_mesh, state.hit_node_ref);
-        if (tile_and_poly.success) {
-            GetPolyHeightResult height = {};
-            nav_mesh_api::get_poly_height(height, *tile_and_poly.tile, *tile_and_poly.poly, tile_and_poly.poly_index, state.hit_position);
-            if (height.success) {
-                state.has_actual_hit_position = true;
-                state.actual_hit_position = {state.hit_position.x, height.height, state.hit_position.z};
-            }
+        GetPolyHeightResult height;
+        nav_mesh_api::get_poly_height(height, nav_mesh, state.hit_node_ref, state.hit_position);
+        if (height.success) {
+            state.has_actual_hit_position = true;
+            state.actual_hit_position = {state.hit_position.x, height.height, state.hit_position.z};
         }
     }
 

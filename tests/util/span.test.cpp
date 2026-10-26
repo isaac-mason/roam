@@ -11,7 +11,7 @@ static uint32_t sum(Span<const int> values) {
 }
 
 static void fill(Span<int> values) {
-    for (uint32_t i = 0; i < values.capacity; i++) values[i] = (int)i + 1;
+    for (uint32_t i = 0; i < values.length; i++) values[i] = (int)i + 1;
 }
 
 TEST_CASE("span comes from arrays and c arrays") {
@@ -24,9 +24,9 @@ TEST_CASE("span comes from arrays and c arrays") {
     values.reserve(16);
     values.resize(4);
     Span<int> written = values;
-    CHECK(written.capacity == 16);
+    CHECK(written.length == 16);
     Span<const int> elements = values;
-    CHECK(elements.capacity == 4);
+    CHECK(elements.length == 4);
     fill(values);
     CHECK(sum(values) == 10);
 

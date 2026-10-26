@@ -265,6 +265,12 @@ void get_poly_height(GetPolyHeightResult &out, const NavMeshTile &tile, const Na
     release(vertices);
 }
 
+void get_poly_height(GetPolyHeightResult &out, const NavMesh &nav_mesh, NodeRef node_ref, Vec3 position) {
+    out = {};
+    TileAndPoly tile_and_poly = get_tile_and_poly_by_ref(nav_mesh, node_ref);
+    if (tile_and_poly.success) get_poly_height(out, *tile_and_poly.tile, *tile_and_poly.poly, tile_and_poly.poly_index, position);
+}
+
 void get_closest_point_on_poly(GetClosestPointOnPolyResult &out, const NavMesh &nav_mesh, NodeRef node_ref, Vec3 position) {
     out = {false, false, position};
 
@@ -508,13 +514,13 @@ static void finish_query(QueryPolygonsResult &out, const PolyWriter &writer) {
 
 void query_polygons_in_tile(QueryPolygonsResult &out, const NavMesh &nav_mesh, const NavMeshTile &tile, Box3 bounds, const QueryFilter &filter,
                             Span<NodeRef> polys) {
-    PolyWriter writer = {polys.data, polys.capacity, 0};
+    PolyWriter writer = {polys.data, polys.length, 0};
     visit_polygons_in_tile(nav_mesh, tile, bounds, filter, write_poly, &writer);
     finish_query(out, writer);
 }
 
 void query_polygons(QueryPolygonsResult &out, const NavMesh &nav_mesh, Box3 bounds, const QueryFilter &filter, Span<NodeRef> polys) {
-    PolyWriter writer = {polys.data, polys.capacity, 0};
+    PolyWriter writer = {polys.data, polys.length, 0};
     visit_polygons(nav_mesh, bounds, filter, write_poly, &writer);
     finish_query(out, writer);
 }
@@ -942,9 +948,8 @@ static void clip_segment_to_poly(const NavMeshTile &tile, int poly_index, NodeRe
 }
 
 static float vertical_distance(const NavMesh &nav_mesh, NodeRef poly_node, Vec3 position) {
-    TileAndPoly tile_and_poly = get_tile_and_poly_by_ref(nav_mesh, poly_node);
-    GetPolyHeightResult height = {};
-    if (tile_and_poly.success) get_poly_height(height, *tile_and_poly.tile, *tile_and_poly.poly, tile_and_poly.poly_index, position);
+    GetPolyHeightResult height;
+    get_poly_height(height, nav_mesh, poly_node, position);
     return height.success ? fabsf(height.height - position.y) : INFINITY;
 }
 
@@ -1252,8 +1257,8 @@ static void update_off_mesh_connections(NavMesh &nav_mesh, Box3 changed_bounds) 
 template <typename T>
 static Array<T> copy_array(Span<const T> source) {
     Array<T> copy = {};
-    copy.resize(source.capacity);
-    for (uint32_t i = 0; i < source.capacity; i++) copy[i] = source[i];
+    copy.resize(source.length);
+    for (uint32_t i = 0; i < source.length; i++) copy[i] = source[i];
     return copy;
 }
 

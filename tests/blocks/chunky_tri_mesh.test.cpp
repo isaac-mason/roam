@@ -1,4 +1,5 @@
 #include "roam/blocks/geometry/chunky_tri_mesh.h"
+#include "tests/blocks/chunky_tri_mesh_queries.h"
 #include "tests/harness/test.h"
 
 using namespace roam;
@@ -72,7 +73,7 @@ TEST_CASE("chunky tri mesh get chunks overlapping rect should find chunks overla
     TestGrid grid = create_test_grid(10);
     ChunkyTriMesh mesh = chunky_tri_mesh::create({grid.positions, grid.indices}, 16);
 
-    Array<uint32_t> chunks = chunky_tri_mesh::get_chunks_overlapping_rect(mesh, {4, 4}, {6, 6});
+    Array<uint32_t> chunks = chunks_in_rect(mesh, {4, 4}, {6, 6});
     CHECK(chunks.length > 0);
     for (uint32_t chunk_index : chunks) CHECK(mesh.nodes[chunk_index].index >= 0);
 
@@ -85,7 +86,7 @@ TEST_CASE("chunky tri mesh get chunks overlapping rect should return empty array
     TestGrid grid = create_test_grid(5);
     ChunkyTriMesh mesh = chunky_tri_mesh::create({grid.positions, grid.indices});
 
-    Array<uint32_t> chunks = chunky_tri_mesh::get_chunks_overlapping_rect(mesh, {100, 100}, {200, 200});
+    Array<uint32_t> chunks = chunks_in_rect(mesh, {100, 100}, {200, 200});
     CHECK(chunks.length == 0);
 
     chunks.release();
@@ -97,7 +98,7 @@ TEST_CASE("chunky tri mesh get chunks overlapping rect should find all chunks wh
     TestGrid grid = create_test_grid(5);
     ChunkyTriMesh mesh = chunky_tri_mesh::create({grid.positions, grid.indices}, 8);
 
-    Array<uint32_t> chunks = chunky_tri_mesh::get_chunks_overlapping_rect(mesh, {-1, -1}, {10, 10});
+    Array<uint32_t> chunks = chunks_in_rect(mesh, {-1, -1}, {10, 10});
     uint32_t leaf_count = 0;
     for (const ChunkyTriMeshNode &node : mesh.nodes) {
         if (node.index >= 0) leaf_count++;
@@ -113,7 +114,7 @@ TEST_CASE("chunky tri mesh get triangles in rect should return all triangles in 
     TestGrid grid = create_test_grid(4);
     ChunkyTriMesh mesh = chunky_tri_mesh::create({grid.positions, grid.indices});
 
-    Array<uint32_t> triangles = chunky_tri_mesh::get_triangles_in_rect(mesh, {0, 0}, {2, 2});
+    Array<uint32_t> triangles = triangles_in_rect(mesh, {0, 0}, {2, 2});
     CHECK(triangles.length > 0);
     CHECK(triangles.length % 3 == 0);
 
@@ -126,7 +127,7 @@ TEST_CASE("chunky tri mesh get triangles in rect should return valid triangle in
     TestGrid grid = create_test_grid(3);
     ChunkyTriMesh mesh = chunky_tri_mesh::create({grid.positions, grid.indices});
 
-    Array<uint32_t> triangles = chunky_tri_mesh::get_triangles_in_rect(mesh, {0, 0}, {3, 3});
+    Array<uint32_t> triangles = triangles_in_rect(mesh, {0, 0}, {3, 3});
     for (uint32_t index : triangles) CHECK(index < grid.positions.length / 3);
 
     triangles.release();
@@ -138,7 +139,7 @@ TEST_CASE("chunky tri mesh get triangles in rect should return empty array for r
     TestGrid grid = create_test_grid(5);
     ChunkyTriMesh mesh = chunky_tri_mesh::create({grid.positions, grid.indices});
 
-    Array<uint32_t> triangles = chunky_tri_mesh::get_triangles_in_rect(mesh, {100, 100}, {200, 200});
+    Array<uint32_t> triangles = triangles_in_rect(mesh, {100, 100}, {200, 200});
     CHECK(triangles.length == 0);
 
     triangles.release();
@@ -150,7 +151,7 @@ TEST_CASE("chunky tri mesh get chunks overlapping segment should find chunks ove
     TestGrid grid = create_test_grid(10);
     ChunkyTriMesh mesh = chunky_tri_mesh::create({grid.positions, grid.indices}, 16);
 
-    Array<uint32_t> chunks = chunky_tri_mesh::get_chunks_overlapping_segment(mesh, {0, 0}, {5, 5});
+    Array<uint32_t> chunks = chunks_on_segment(mesh, {0, 0}, {5, 5});
     CHECK(chunks.length > 0);
     for (uint32_t chunk_index : chunks) CHECK(mesh.nodes[chunk_index].index >= 0);
 
@@ -163,7 +164,7 @@ TEST_CASE("chunky tri mesh get chunks overlapping segment should handle horizont
     TestGrid grid = create_test_grid(10);
     ChunkyTriMesh mesh = chunky_tri_mesh::create({grid.positions, grid.indices});
 
-    Array<uint32_t> chunks = chunky_tri_mesh::get_chunks_overlapping_segment(mesh, {0, 5}, {10, 5});
+    Array<uint32_t> chunks = chunks_on_segment(mesh, {0, 5}, {10, 5});
     CHECK(chunks.length > 0);
 
     chunks.release();
@@ -175,7 +176,7 @@ TEST_CASE("chunky tri mesh get chunks overlapping segment should handle vertical
     TestGrid grid = create_test_grid(10);
     ChunkyTriMesh mesh = chunky_tri_mesh::create({grid.positions, grid.indices});
 
-    Array<uint32_t> chunks = chunky_tri_mesh::get_chunks_overlapping_segment(mesh, {5, 0}, {5, 10});
+    Array<uint32_t> chunks = chunks_on_segment(mesh, {5, 0}, {5, 10});
     CHECK(chunks.length > 0);
 
     chunks.release();
@@ -187,7 +188,7 @@ TEST_CASE("chunky tri mesh get chunks overlapping segment should return empty ar
     TestGrid grid = create_test_grid(5);
     ChunkyTriMesh mesh = chunky_tri_mesh::create({grid.positions, grid.indices});
 
-    Array<uint32_t> chunks = chunky_tri_mesh::get_chunks_overlapping_segment(mesh, {100, 100}, {200, 200});
+    Array<uint32_t> chunks = chunks_on_segment(mesh, {100, 100}, {200, 200});
     CHECK(chunks.length == 0);
 
     chunks.release();
@@ -202,10 +203,32 @@ TEST_CASE("chunky tri mesh queries every region of a large mesh") {
     for (int i = 0; i < 100; i++) {
         float x = (float)((i % 10) * 5);
         float z = (float)((i / 10) * 5);
-        Array<uint32_t> triangles = chunky_tri_mesh::get_triangles_in_rect(mesh, {x, z}, {x + 5, z + 5});
+        Array<uint32_t> triangles = triangles_in_rect(mesh, {x, z}, {x + 5, z + 5});
         CHECK(triangles.length > 0);
         triangles.release();
     }
+
+    chunky_tri_mesh::release(mesh);
+    release_test_grid(grid);
+}
+
+TEST_CASE("chunky tri mesh queries fill the caller's buffer and report the full count") {
+    TestGrid grid = create_test_grid(10);
+    ChunkyTriMesh mesh = chunky_tri_mesh::create({grid.positions, grid.indices}, 8);
+
+    uint32_t one_chunk[1];
+    ChunkyTriMeshChunksResult chunks;
+    chunky_tri_mesh::get_chunks_overlapping_rect(chunks, mesh, {-1, -1}, {10, 10}, one_chunk);
+    CHECK(chunks.chunk_count == 1);
+    CHECK(chunks.chunk_total > 1);
+    CHECK(chunks.truncated);
+
+    uint32_t three_indices[3];
+    ChunkyTriMeshTrianglesResult triangles;
+    chunky_tri_mesh::get_triangles_in_rect(triangles, mesh, {-1, -1}, {10, 10}, three_indices);
+    CHECK(triangles.index_count == 3);
+    CHECK(triangles.index_total == grid.indices.length);
+    CHECK(triangles.truncated);
 
     chunky_tri_mesh::release(mesh);
     release_test_grid(grid);

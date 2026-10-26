@@ -310,10 +310,9 @@ static void generate_nav_mesh() {
     for (uint32_t i = 0; i < state.walkable_points.length / 3; i++) bounds = box3::expand_by_point(bounds, vec3::load(state.walkable_points.data, i * 3));
 
     Array<ExternalPolygon> polys = {};
-    for (uint32_t i = 0; i + 2 < state.indices.length; i += 3) polys.push({&state.indices[i], 3, 1, 0});
+    for (uint32_t i = 0; i + 2 < state.indices.length; i += 3) polys.push({{&state.indices[i], 3}, 1, 0});
 
-    NavMeshTilePolys tile_polys = nav_mesh_tile::polygons_to_nav_mesh_tile_polys(polys.data, polys.length, state.walkable_points.data,
-                                                                                 state.walkable_points.length / 3, 0, bounds);
+    NavMeshTilePolys tile_polys = nav_mesh_tile::polygons_to_nav_mesh_tile_polys(polys, state.walkable_points, 0, bounds);
     NavMeshTileDetailMesh tile_detail_mesh = nav_mesh_tile::polys_to_tile_detail_mesh(tile_polys.polys);
 
     NavMeshTileParams tile_params = {

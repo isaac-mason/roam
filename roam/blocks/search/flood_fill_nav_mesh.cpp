@@ -8,7 +8,7 @@ namespace roam {
 namespace flood_fill_nav_mesh {
 
 static void write_ref(Span<NodeRef> refs, uint32_t &count, NodeRef ref) {
-    if (count < refs.capacity) refs.data[count] = ref;
+    if (count < refs.length) refs.data[count] = ref;
     count++;
 }
 
@@ -42,8 +42,8 @@ void flood_fill_nav_mesh(FloodFillNavMeshResult &result, const NavMesh &nav_mesh
         }
     }
 
-    result.reachable_count = result.reachable_total < reachable.capacity ? result.reachable_total : reachable.capacity;
-    result.unreachable_count = result.unreachable_total < unreachable.capacity ? result.unreachable_total : unreachable.capacity;
+    result.reachable_count = result.reachable_total < reachable.length ? result.reachable_total : reachable.length;
+    result.unreachable_count = result.unreachable_total < unreachable.length ? result.unreachable_total : unreachable.length;
     result.truncated = result.reachable_count < result.reachable_total || result.unreachable_count < result.unreachable_total;
 
     visited.release();

@@ -135,7 +135,7 @@ static void move_with_visited(MoveAlongSurfaceResult &moved, QueryWorkspace &wor
 void find_smooth_path(FindSmoothPathResult &result, QueryWorkspace &workspace, const NavMesh &nav_mesh, Vec3 start, Vec3 end, Vec3 half_extents,
                       const QueryFilter &filter, Span<SmoothPathPoint> point_buffer, const FindSmoothPathOptions &options) {
     SmoothPathPoint *points = point_buffer.data;
-    uint32_t max_points = point_buffer.capacity;
+    uint32_t max_points = point_buffer.length;
     result = {};
     result.flags = FIND_SMOOTH_PATH_RESULT_NONE | FIND_SMOOTH_PATH_RESULT_INVALID_INPUT;
     result.start_node_ref = INVALID_NODE_REF;
@@ -167,7 +167,7 @@ void find_smooth_path(FindSmoothPathResult &result, QueryWorkspace &workspace, c
     polys.resize(node_path.path_count);
     result.node_path_flags = node_path.flags;
     result.node_path_total = polys.length;
-    result.node_path_count = polys.length < options.node_path.capacity ? polys.length : options.node_path.capacity;
+    result.node_path_count = polys.length < options.node_path.length ? polys.length : options.node_path.length;
     for (uint32_t i = 0; i < result.node_path_count; i++) options.node_path.data[i] = polys[i];
 
     if (!node_path.success || polys.length == 0) {

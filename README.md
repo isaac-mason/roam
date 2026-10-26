@@ -64,24 +64,23 @@ JavaScript, use navcat: roam has no JS bindings.
 
 roam's `CMakeLists.txt` makes two libraries:
 
-- `roam`: generation, queries and debug drawing.
-- `roam_blocks`: the generators, agents and helpers built on `roam`, ported from navcat's `blocks`. It links `roam`.
+- `roam` (alias `roam::roam`): generation, queries and debug drawing.
+- `roam_blocks` (alias `roam::blocks`): the generators, agents and helpers built on `roam`, ported from navcat's
+  `blocks`. It links `roam`.
 
 Fetch roam, or add a checkout (a git submodule, say) with `add_subdirectory(path/to/roam)`, then link a target. roam's
-headers need C++20, so set it for your project too:
+headers need C++20, and linking either target asks for it:
 
 ```cmake
 cmake_minimum_required(VERSION 3.24)
 project(game LANGUAGES CXX)
-
-set(CMAKE_CXX_STANDARD 20)
 
 include(FetchContent)
 FetchContent_Declare(roam GIT_REPOSITORY https://github.com/isaac-mason/roam.git GIT_TAG main)
 FetchContent_MakeAvailable(roam)
 
 add_executable(game main.cpp)
-target_link_libraries(game PRIVATE roam_blocks)
+target_link_libraries(game PRIVATE roam::blocks)
 ```
 
 The tests and benchmarks build only when roam is the top-level project. Its options:
@@ -130,14 +129,11 @@ int main() {
     // voxels of 0.2 m for an agent 0.3 m wide and 1.8 m tall, which can climb 0.4 m and walk up 45 degree slopes
     const float cell_size = 0.2f;
     const float cell_height = 0.2f;
-    const SoloNavMeshOptions options = {
+    const SoloNavMeshOptions options = generate_solo_nav_mesh::derive_sizes({
         .cell_size = cell_size,
         .cell_height = cell_height,
-        .walkable_radius_voxels = 2,
         .walkable_radius_world = 0.3f,
-        .walkable_climb_voxels = 2,
         .walkable_climb_world = 0.4f,
-        .walkable_height_voxels = 9,
         .walkable_height_world = 1.8f,
         .walkable_slope_angle_degrees = 45,
         .border_size = 0,
@@ -148,7 +144,7 @@ int main() {
         .max_vertices_per_poly = 6,
         .detail_sample_distance = 6 * cell_size,
         .detail_sample_max_error = 1 * cell_height,
-    };
+    });
     SoloNavMeshResult result = generate_solo_nav_mesh::generate_solo_nav_mesh(level, options);
     // the stages it went through are kept for debugging; let them go
     generate_solo_nav_mesh::release(result.intermediates);
@@ -245,13 +241,13 @@ Level create_level() {
 Queries write their result into `out`, their first parameter. A result is a plain value: flags, refs, positions and
 counts. It never owns memory, so it needs no release, and it can be reused from call to call.
 
-Anything of variable size goes into a buffer of yours, passed as a `Span<T>`: a pointer and a capacity. A span converts
-from a C array, from an `Array` (roam's growable array), or is built as `{data, capacity}`. A writable span of an
+Anything of variable size goes into a buffer of yours, passed as a `Span<T>`: a pointer and a `length`. A span converts
+from a C array, from an `Array` (roam's growable array), or is built as `{data, length}`. A writable span of an
 `Array` covers its capacity; a read-only one, `Span<const T>`, covers its length. Here with `start` and `end` from
 [`find_nearest_poly`](#nearest-poly):
 
 ```cpp
-// a C array: its size is the span's capacity
+// a C array: its size is the span's length
 NodeRef fixed[256];
 FindNodePathResult path = {};
 nav_mesh_search::find_node_path(path, workspace, nav_mesh, start.node_ref, end.node_ref, start.position, end.position, filter, fixed);
@@ -262,7 +258,7 @@ grown.reserve(16);
 nav_mesh_search::find_node_path(path, workspace, nav_mesh, start.node_ref, end.node_ref, start.position, end.position, filter, grown);
 grown.resize(path.path_count);
 
-// a pointer and a capacity, and a read-only span of the refs written so far
+// a pointer and a length, and a read-only span of the refs written so far
 NodeRef *heap = memory::allocate_array<NodeRef>(256);
 nav_mesh_search::find_node_path(path, workspace, nav_mesh, start.node_ref, end.node_ref, start.position, end.position, filter, {heap, 256});
 Span<const NodeRef> written = {heap, path.path_count};
@@ -291,8 +287,8 @@ roam's headers are its API: there are no private ones. The ones most programs us
 ## Memory
 
 roam takes all its memory through one allocator, `malloc` and `free` to start with. Set your own before anything
-allocates. Every block comes back with the size it was asked for, so your allocator needs no headers of its own. Blocks
-need `malloc`'s alignment:
+allocates. Every block comes back with the size and alignment it was asked for, so your allocator needs no headers of its own.
+roam asks for at most `alignof(max_align_t)`:
 
 ```cpp
 struct CountingAllocator {
@@ -300,14 +296,16 @@ struct CountingAllocator {
     size_t peak;
 };
 
-void *counting_allocate(size_t size, void *user_data) {
+void *counting_allocate(size_t size, size_t alignment, void *user_data) {
+    (void)alignment;
     CountingAllocator &counter = *static_cast<CountingAllocator *>(user_data);
     counter.bytes += size;
     if (counter.bytes > counter.peak) counter.peak = counter.bytes;
     return malloc(size);
 }
 
-void counting_free(void *block, size_t size, void *user_data) {
+void counting_free(void *block, size_t size, size_t alignment, void *user_data) {
+    (void)alignment;
     static_cast<CountingAllocator *>(user_data)->bytes -= size;
     free(block);
 }
@@ -328,7 +326,7 @@ roam built for debug, or with `ROAM_TRACK_MEMORY` defined, counts what it holds:
 ```cpp
 printf("%zu bytes in use, %zu at most\n", counter.bytes, counter.peak);
 if (memory::tracking_enabled()) {
-    memory::MemoryStats stats = memory::outstanding();
+    MemoryStats stats = memory::outstanding();
     printf("%lld live allocations, %lld bytes\n", (long long)stats.allocations, (long long)stats.bytes);
 }
 ```
@@ -384,21 +382,16 @@ anything that moves.
 
 ```cpp
 // voxels of 0.2 m, for an agent 0.3 m in radius and 1.8 m tall that climbs steps of 0.4 m and slopes of 45 degrees.
-// each agent measure is given in voxels and in metres: the voxels drive the build, the metres are kept in the tiles
+// each agent measure has a voxel and a metre field: the voxels drive the build, the metres are kept in the tiles.
+// derive_sizes fills the voxel fields from the metres, rounding up; set them yourself to choose otherwise
 const float cell_size = 0.2f;
 const float cell_height = 0.2f;
-const float agent_radius = 0.3f;
-const float agent_height = 1.8f;
-const float agent_climb = 0.4f;
-const SoloNavMeshOptions options = {
+const SoloNavMeshOptions options = generate_solo_nav_mesh::derive_sizes({
     .cell_size = cell_size,
     .cell_height = cell_height,
-    .walkable_radius_voxels = (int)ceilf(agent_radius / cell_size),
-    .walkable_radius_world = agent_radius,
-    .walkable_climb_voxels = (int)ceilf(agent_climb / cell_height),
-    .walkable_climb_world = agent_climb,
-    .walkable_height_voxels = (int)ceilf(agent_height / cell_height),
-    .walkable_height_world = agent_height,
+    .walkable_radius_world = 0.3f,
+    .walkable_climb_world = 0.4f,
+    .walkable_height_world = 1.8f,
     .walkable_slope_angle_degrees = 45,
     .border_size = 0,
     .min_region_area = 8,
@@ -408,7 +401,7 @@ const SoloNavMeshOptions options = {
     .max_vertices_per_poly = 6,
     .detail_sample_distance = 6 * cell_size,
     .detail_sample_max_error = 1 * cell_height,
-};
+});
 
 // the mesh is borrowed for the call: spans of the level's positions and indices
 SoloNavMeshResult result = generate_solo_nav_mesh::generate_solo_nav_mesh({level.positions, level.indices}, options);
@@ -430,21 +423,17 @@ its whole heightfield in memory at once, and tiles also give better results over
 stream in and out at runtime, or to rebuild only the part of a level that changed.
 
 ```cpp
-// the same settings as a solo build, plus the tile size. the border is the agent radius and a few voxels more, so
-// each tile sees the geometry just past its edges and neighbouring tiles meet cleanly
+// the same settings as a solo build, plus the tile size in voxels (derive_sizes also sets tile_size_world). the
+// border is the agent radius and a few voxels more, so each tile sees the geometry just past its edges and
+// neighbouring tiles meet cleanly
 const float cell_size = 0.2f;
 const float cell_height = 0.2f;
-const int tile_size_voxels = 32;
-const TiledNavMeshOptions options = {
+const TiledNavMeshOptions options = generate_tiled_nav_mesh::derive_sizes({
     .cell_size = cell_size,
     .cell_height = cell_height,
-    .tile_size_voxels = tile_size_voxels,
-    .tile_size_world = tile_size_voxels * cell_size,
-    .walkable_radius_voxels = 2,
+    .tile_size_voxels = 32,
     .walkable_radius_world = 0.3f,
-    .walkable_climb_voxels = 2,
     .walkable_climb_world = 0.4f,
-    .walkable_height_voxels = 9,
     .walkable_height_world = 1.8f,
     .walkable_slope_angle_degrees = 45,
     .border_size = 2 + 3,
@@ -455,7 +444,7 @@ const TiledNavMeshOptions options = {
     .max_vertices_per_poly = 6,
     .detail_sample_distance = 6 * cell_size,
     .detail_sample_max_error = 1 * cell_height,
-};
+});
 TiledNavMeshResult result = generate_tiled_nav_mesh::generate_tiled_nav_mesh({level.positions, level.indices}, options);
 generate_tiled_nav_mesh::release(result.intermediates);
 NavMesh nav_mesh = result.nav_mesh;
@@ -498,7 +487,7 @@ BuildContext context = {};
 
 // one area id per triangle: WALKABLE_AREA where the slope is walkable, NULL_AREA elsewhere
 Array<uint8_t> tri_area_ids = {};
-tri_area_ids.resize(mesh.indices.capacity / 3, NULL_AREA);
+tri_area_ids.resize(mesh.indices.length / 3, NULL_AREA);
 input_triangle_mesh::mark_walkable_triangles(tri_area_ids, mesh, 45.0f);
 ```
 
@@ -616,12 +605,12 @@ const float vertices[] = {0, 0, 0, 4, 0, 0, 8, 0, 0, 0, 0, 4, 4, 0, 4, 8, 0, 4};
 const uint32_t left[] = {0, 3, 4, 1};
 const uint32_t right[] = {1, 4, 5, 2};
 const ExternalPolygon polygons[] = {
-    {.vertices = left, .vertex_count = 4, .flags = 1, .area = 0},
-    {.vertices = right, .vertex_count = 4, .flags = 1, .area = 0},
+    {.vertices = left, .flags = 1, .area = 0},
+    {.vertices = right, .flags = 1, .area = 0},
 };
 const Box3 bounds = {{0, 0, 0}, {8, 1, 4}};
 
-NavMeshTilePolys tile_polys = nav_mesh_tile::polygons_to_nav_mesh_tile_polys(polygons, 2, vertices, 6, 0, bounds);
+NavMeshTilePolys tile_polys = nav_mesh_tile::polygons_to_nav_mesh_tile_polys(polygons, vertices, 0, bounds);
 // no detail mesh of its own: one built from the polygons themselves
 NavMeshTileDetailMesh tile_detail = nav_mesh_tile::polys_to_tile_detail_mesh(tile_polys.polys);
 
@@ -780,8 +769,7 @@ for (uint32_t i = 0; i < path.point_count; i++) {
 }
 ```
 
-`truncated` is set when either buffer fills up, and that includes a node path buffer you do not pass: check
-`FIND_PATH_RESULT_MAX_POINTS_REACHED` in `flags` for the points alone. When the end cannot be reached, the path goes to
+`truncated` is set when the points buffer or a node path buffer you pass fills up. When the end cannot be reached, the path goes to
 the reachable poly nearest it, `success` is still true, and `flags` has `FIND_PATH_RESULT_PARTIAL_PATH`.
 
 ```cpp
@@ -903,9 +891,8 @@ MoveAlongSurfaceResult move = {};
 nav_mesh_search::move_along_surface(move, workspace, nav_mesh, start.node_ref, start.position, {0, 0, 0.5f}, filter, visited);
 if (move.success) {
     // the move is in 2D: the height is the detail mesh's under the new position
-    TileAndPoly found = nav_mesh_api::get_tile_and_poly_by_ref(nav_mesh, move.node_ref);
-    GetPolyHeightResult height = {};
-    nav_mesh_api::get_poly_height(height, *found.tile, *found.poly, found.poly_index, move.position);
+    GetPolyHeightResult height;
+    nav_mesh_api::get_poly_height(height, nav_mesh, move.node_ref, move.position);
     Vec3 position = {move.position.x, height.success ? height.height : move.position.y, move.position.z};
     printf("now at %.2f %.2f %.2f, on poly %llu\n", position.x, position.y, position.z, (unsigned long long)move.node_ref);
 }
@@ -1003,8 +990,8 @@ Each poly has an `area` and `flags`. The area is what the ground is (grass, wate
 it (walkers, swimmers, vehicles). Both are set at build time, or after (the step by step build above marks water and
 sets flags), and both are yours to give meaning to.
 
-The generators set walkable polys to area 0 with flags 1, as navcat's do. A poly with no flags passes no filter that
-checks flags, the default one included.
+The generators give their polys area 0 and flags 1, as navcat's do. Built step by step, polys start with flags 0, so
+set flags for every area you mark: a poly with no flags passes no filter that checks flags, the default one included.
 
 A `QueryFilter` is two functions and their data. `pass_filter` decides whether a query may use a node, and `get_cost`
 what crossing it costs. The default, `pass_flags`, checks the node's flags against `include_flags` and
@@ -1170,7 +1157,9 @@ for (uint32_t agent : agents) {
 An agent's `update_flags` choose what it does each update: `CROWD_UPDATE_ANTICIPATE_TURNS` slows into corners,
 `_OBSTACLE_AVOIDANCE` steers around other agents, `_SEPARATION` keeps them apart (by `separation_weight`),
 `_OPTIMIZE_VIS` shortcuts the path where the agent can see further along it, and `_OPTIMIZE_TOPO` searches again
-nearby now and then for a better path. Each agent's fields, `position` and `velocity` among them, are yours to read
+nearby now and then for a better path. `add_agent` places the agent on the nearest poly within the crowd's
+`agent_placement_half_extents`; with none in reach it still returns an id, but the agent's `state` is
+`AGENT_STATE_INVALID` and the crowd leaves it where it is. Each agent's fields, `position` and `velocity` among them, are yours to read
 after an update.
 
 ```cpp
@@ -1297,15 +1286,17 @@ const InputTriangleMesh input = {merged.positions, merged.indices};
 // triangles bucketed in xz, for the triangles under an area without visiting them all: what the tiled generator
 // builds each tile from
 ChunkyTriMesh chunks = chunky_tri_mesh::create(input, 256);
-Array<uint32_t> nodes = chunky_tri_mesh::get_chunks_overlapping_rect(chunks, {-4, -4}, {4, 4});
-for (uint32_t node_index : nodes) {
+uint32_t nodes[64];
+ChunkyTriMeshChunksResult found;
+chunky_tri_mesh::get_chunks_overlapping_rect(found, chunks, {-4, -4}, {4, 4}, nodes);
+for (uint32_t n = 0; n < found.chunk_count; n++) {
+    const uint32_t node_index = nodes[n];
     const ChunkyTriMeshNode &node = chunks.nodes[node_index];
     for (uint32_t i = 0; i < node.count; i++) {
         const uint32_t triangle = chunks.triangles[(uint32_t)node.index + i];
         (void)triangle;
     }
 }
-nodes.release();
 chunky_tri_mesh::release(chunks);
 ```
 

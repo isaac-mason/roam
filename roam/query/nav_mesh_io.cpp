@@ -305,13 +305,13 @@ static LoadStatus read_tile(ByteReader &reader, NavMeshTile &tile) {
 }
 
 void save_tile(SaveResult &out, const NavMeshTile &tile, Span<uint8_t> bytes) {
-    ByteWriter writer = {bytes.data, bytes.capacity, 0};
+    ByteWriter writer = {bytes.data, bytes.length, 0};
     write_tile(writer, tile);
     finish_save(out, writer);
 }
 
 LoadStatus load_tile(NavMeshTile &tile, Span<const uint8_t> bytes) {
-    ByteReader reader = {bytes.data, bytes.capacity, 0, false};
+    ByteReader reader = {bytes.data, bytes.length, 0, false};
     LoadStatus status = read_tile(reader, tile);
     if (status != LOAD_STATUS_OK) nav_mesh_api::release(tile);
     return status;
@@ -460,7 +460,7 @@ static void write_nav_mesh(ByteWriter &writer, const NavMesh &nav_mesh) {
 }
 
 void save_nav_mesh(SaveResult &out, const NavMesh &nav_mesh, Span<uint8_t> bytes) {
-    ByteWriter writer = {bytes.data, bytes.capacity, 0};
+    ByteWriter writer = {bytes.data, bytes.length, 0};
     write_nav_mesh(writer, nav_mesh);
     finish_save(out, writer);
 }
@@ -811,7 +811,7 @@ static bool restore_tile_positions(NavMesh &nav_mesh) {
 
 LoadStatus load_nav_mesh(NavMesh &nav_mesh, Span<const uint8_t> bytes) {
     nav_mesh = nav_mesh_api::create_nav_mesh();
-    ByteReader reader = {bytes.data, bytes.capacity, 0, false};
+    ByteReader reader = {bytes.data, bytes.length, 0, false};
     LoadStatus status = read_nav_mesh(reader, nav_mesh);
     if (status == LOAD_STATUS_OK && !(valid_nav_mesh(nav_mesh) && restore_tile_positions(nav_mesh))) status = LOAD_STATUS_INVALID_DATA;
     if (status == LOAD_STATUS_OK) nav_mesh_api::rebuild_clusters(nav_mesh);

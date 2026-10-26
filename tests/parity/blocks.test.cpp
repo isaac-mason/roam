@@ -11,6 +11,7 @@
 #include "roam/blocks/search/flood_fill_nav_mesh.h"
 #include "roam/util/sort.h"
 #include "tests/harness/fixture.h"
+#include "tests/blocks/chunky_tri_mesh_queries.h"
 #include "tests/harness/test.h"
 #include "tests/parity/detail_ties.h"
 #include "tests/parity/nav_test_input.h"
@@ -244,18 +245,18 @@ TEST_CASE("chunky tri mesh matches navcat on nav test") {
         Vec2 min = {(float)rect[0], (float)rect[1]};
         Vec2 max = {(float)rect[2], (float)rect[3]};
 
-        Array<uint32_t> chunks = chunky_tri_mesh::get_chunks_overlapping_rect(mesh, min, max);
+        Array<uint32_t> chunks = chunks_in_rect(mesh, min, max);
         bool same = chunks.length == (uint32_t)rect_counts.data[i];
         for (uint32_t k = 0; same && k < chunks.length; k++) same = (int32_t)chunks[k] == rect_chunks.data[rect_cursor + k];
         rect_cursor += (uint32_t)rect_counts.data[i];
         chunks.release();
 
-        Array<uint32_t> rect_triangles = chunky_tri_mesh::get_triangles_in_rect(mesh, min, max);
+        Array<uint32_t> rect_triangles = triangles_in_rect(mesh, min, max);
         same = same && (int32_t)rect_triangles.length == rect_triangle_counts.data[i];
         rect_triangles.release();
 
         const double *segment = &segments.data[i * 4];
-        Array<uint32_t> hits = chunky_tri_mesh::get_chunks_overlapping_segment(mesh, {(float)segment[0], (float)segment[1]}, {(float)segment[2], (float)segment[3]});
+        Array<uint32_t> hits = chunks_on_segment(mesh, {(float)segment[0], (float)segment[1]}, {(float)segment[2], (float)segment[3]});
         same = same && hits.length == (uint32_t)segment_counts.data[i];
         for (uint32_t k = 0; same && k < hits.length; k++) same = (int32_t)hits[k] == segment_chunks.data[segment_cursor + k];
         segment_cursor += (uint32_t)segment_counts.data[i];

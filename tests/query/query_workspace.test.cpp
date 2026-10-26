@@ -206,6 +206,30 @@ TEST_CASE("small buffers keep the start of the path and report its full length")
     nav_mesh_api::release(nav_mesh);
 }
 
+TEST_CASE("find path only reports a truncated node path when a node path buffer is too small") {
+    NavMesh nav_mesh = create_strip_nav_mesh();
+    QueryWorkspace workspace = nav_mesh_search::create_query_workspace();
+    StraightPathPoint points[MAX_POINTS];
+
+    FindPathResult without_buffer;
+    find_path::find_path(without_buffer, workspace, nav_mesh, {0.5f, 0, 0.5f}, {5.5f, 0, 1.5f}, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER, points);
+    REQUIRE(without_buffer.success);
+    CHECK(without_buffer.node_path_total > 1);
+    CHECK(without_buffer.node_path_count == 0);
+    CHECK_FALSE(without_buffer.truncated);
+
+    NodeRef one_ref[1];
+    FindPathResult small_buffer;
+    find_path::find_path(small_buffer, workspace, nav_mesh, {0.5f, 0, 0.5f}, {5.5f, 0, 1.5f}, {1, 1, 1}, nav_mesh_api::DEFAULT_QUERY_FILTER, points,
+                         {.node_path = one_ref});
+    REQUIRE(small_buffer.success);
+    CHECK(small_buffer.node_path_count == 1);
+    CHECK(small_buffer.truncated);
+
+    nav_mesh_search::release(workspace);
+    nav_mesh_api::release(nav_mesh);
+}
+
 TEST_CASE("sliced finalize can be repeated to grow the buffer") {
     NavMesh nav_mesh = create_strip_nav_mesh();
     const QueryFilter &filter = nav_mesh_api::DEFAULT_QUERY_FILTER;

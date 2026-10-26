@@ -446,8 +446,8 @@ void find_node_path(FindNodePathResult &out, QueryWorkspace &workspace, const Na
 
 void copy_last_node_path(FindNodePathResult &out, const QueryWorkspace &workspace, Span<NodeRef> path) {
     int32_t last_node = workspace.last_path_node;
-    uint32_t total = last_node == NULL_SEARCH_NODE ? 0 : collect_path(workspace.nodes, last_node, path.data, path.capacity);
-    set_counts(out.path_count, out.path_total, out.truncated, total, path.capacity);
+    uint32_t total = last_node == NULL_SEARCH_NODE ? 0 : collect_path(workspace.nodes, last_node, path.data, path.length);
+    set_counts(out.path_count, out.path_total, out.truncated, total, path.length);
 }
 
 SlicedNodePathQuery create_sliced_node_path_query() {
@@ -656,14 +656,14 @@ static void build_sliced_path(RefWriter &path, const NavMesh &nav_mesh, SlicedNo
 
 static void finish_sliced_path(SlicedFindNodePathResult &out, const NavMesh &nav_mesh, SlicedNodePathQuery &query, int32_t last_node,
                                Span<NodeRef> path) {
-    RefWriter writer = {path.data, path.capacity, 0, INVALID_NODE_REF};
+    RefWriter writer = {path.data, path.length, 0, INVALID_NODE_REF};
     build_sliced_path(writer, nav_mesh, query, last_node);
-    set_counts(out.path_count, out.path_total, out.truncated, writer.count, path.capacity);
+    set_counts(out.path_count, out.path_total, out.truncated, writer.count, path.length);
 }
 
 static void single_node_path(SlicedFindNodePathResult &out, SlicedNodePathQuery &query, Span<NodeRef> path) {
-    if (path.capacity > 0) path.data[0] = query.start_node_ref;
-    set_counts(out.path_count, out.path_total, out.truncated, 1, path.capacity);
+    if (path.length > 0) path.data[0] = query.start_node_ref;
+    set_counts(out.path_count, out.path_total, out.truncated, 1, path.length);
     out.status = SLICED_FIND_NODE_PATH_SUCCESS;
     query.status = SLICED_FIND_NODE_PATH_NOT_INITIALIZED;
 }
@@ -693,7 +693,7 @@ void finalize_sliced_find_node_path(SlicedFindNodePathResult &out, const NavMesh
 }
 
 static int32_t furthest_existing_node(const SlicedNodePathQuery &query, Span<const NodeRef> existing_path) {
-    for (uint32_t i = existing_path.capacity; i-- > 0;) {
+    for (uint32_t i = existing_path.length; i-- > 0;) {
         int32_t first = get_first_search_node(query.nodes, existing_path[i]);
         if (first != NULL_SEARCH_NODE) return first;
     }
@@ -857,19 +857,16 @@ void move_along_surface(MoveAlongSurfaceResult &result, QueryWorkspace &workspac
     uint32_t index = visited_count;
     for (int32_t current = best_node; current != NULL_SEARCH_NODE; current = surface_parent(nodes, current)) {
         index--;
-        if (index < visited.capacity) visited.data[index] = nodes.nodes[(uint32_t)current].node_ref;
+        if (index < visited.length) visited.data[index] = nodes.nodes[(uint32_t)current].node_ref;
     }
-    set_counts(result.visited_count, result.visited_total, result.truncated, visited_count, visited.capacity);
+    set_counts(result.visited_count, result.visited_total, result.truncated, visited_count, visited.length);
 
     result.position = best_position;
     result.node_ref = nodes.nodes[(uint32_t)best_node].node_ref;
 
-    TileAndPoly tile_and_poly = nav_mesh_api::get_tile_and_poly_by_ref(nav_mesh, result.node_ref);
-    if (tile_and_poly.success) {
-        GetPolyHeightResult height;
-        nav_mesh_api::get_poly_height(height, *tile_and_poly.tile, *tile_and_poly.poly, tile_and_poly.poly_index, result.position);
-        if (height.success) result.position.y = height.height;
-    }
+    GetPolyHeightResult height;
+    nav_mesh_api::get_poly_height(height, nav_mesh, result.node_ref, result.position);
+    if (height.success) result.position.y = height.height;
 }
 
 
@@ -1030,13 +1027,13 @@ static void raycast_base(RaycastResult &result, const NavMesh &nav_mesh, NodeRef
 
 void raycast(RaycastResult &out, const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position, const QueryFilter &filter,
              Span<NodeRef> path) {
-    RefWriter writer = {path.data, path.capacity, 0, INVALID_NODE_REF};
+    RefWriter writer = {path.data, path.length, 0, INVALID_NODE_REF};
     raycast_base(out, nav_mesh, start_node_ref, start_position, end_position, filter, false, INVALID_NODE_REF, &writer);
 }
 
 void raycast_with_costs(RaycastResult &out, const NavMesh &nav_mesh, NodeRef start_node_ref, Vec3 start_position, Vec3 end_position,
                         const QueryFilter &filter, NodeRef previous_ref, Span<NodeRef> path) {
-    RefWriter writer = {path.data, path.capacity, 0, INVALID_NODE_REF};
+    RefWriter writer = {path.data, path.length, 0, INVALID_NODE_REF};
     raycast_base(out, nav_mesh, start_node_ref, start_position, end_position, filter, true, previous_ref, &writer);
 }
 

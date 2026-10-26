@@ -36,8 +36,8 @@ void find_path(FindPathResult &out, QueryWorkspace &workspace, const NavMesh &na
     node_refs.resize(node_path.path_count);
     out.node_path_flags = node_path.flags;
     out.node_path_total = node_refs.length;
-    out.node_path_count = node_refs.length < options.node_path.capacity ? node_refs.length : options.node_path.capacity;
-    out.truncated = out.node_path_count < out.node_path_total;
+    out.node_path_count = node_refs.length < options.node_path.length ? node_refs.length : options.node_path.length;
+    out.truncated = options.node_path.data != nullptr && out.node_path_count < out.node_path_total;
     for (uint32_t i = 0; i < out.node_path_count; i++) options.node_path.data[i] = node_refs[i];
 
     if (!node_path.success) {

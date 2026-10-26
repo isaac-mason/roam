@@ -1,5 +1,7 @@
 #include "roam/blocks/generators/generate_solo_nav_mesh.h"
 
+#include <math.h>
+
 #include "roam/generate/common.h"
 #include "roam/generate/compact_heightfield_regions.h"
 #include "roam/generate/input_triangle_mesh.h"
@@ -10,13 +12,20 @@ namespace roam {
 
 namespace generate_solo_nav_mesh {
 
+SoloNavMeshOptions derive_sizes(SoloNavMeshOptions options) {
+    options.walkable_radius_voxels = (int)ceilf(options.walkable_radius_world / options.cell_size);
+    options.walkable_climb_voxels = (int)ceilf(options.walkable_climb_world / options.cell_height);
+    options.walkable_height_voxels = (int)ceilf(options.walkable_height_world / options.cell_height);
+    return options;
+}
+
 SoloNavMeshResult generate_solo_nav_mesh(const InputTriangleMesh &input, const SoloNavMeshOptions &options) {
     SoloNavMeshResult result = {};
     SoloNavMeshIntermediates &intermediates = result.intermediates;
     BuildContext &context = intermediates.build_context;
     intermediates.input = input;
 
-    intermediates.tri_area_ids.resize(input.indices.capacity / 3, 0);
+    intermediates.tri_area_ids.resize(input.indices.length / 3, 0);
     input_triangle_mesh::mark_walkable_triangles(intermediates.tri_area_ids, input, options.walkable_slope_angle_degrees);
 
     Box3 bounds = input_triangle_mesh::calculate_mesh_bounds(input);

@@ -78,7 +78,7 @@ static void query_everywhere(const NavMesh &nav_mesh, Box3 bounds) {
 
 static uint32_t generate_both(Span<const float> positions, Span<const uint32_t> indices) {
     Box3 bounds = {{-1, -1, -1}, {1, 1, 1}};
-    for (uint32_t i = 0; i + 2 < positions.capacity; i += 3) {
+    for (uint32_t i = 0; i + 2 < positions.length; i += 3) {
         Vec3 position = {positions[i], positions[i + 1], positions[i + 2]};
         if (isfinite(position.x) && isfinite(position.y) && isfinite(position.z)) bounds = box3::expand_by_point(bounds, position);
     }
