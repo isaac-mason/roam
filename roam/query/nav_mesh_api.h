@@ -20,6 +20,23 @@ struct QueryFilter {
     void *user_data;
 };
 
+struct OffMeshPieceEdge {
+    bool success;
+    Vec3 left;
+    Vec3 right;
+};
+
+struct OffMeshCrossing {
+    bool success;
+    bool from_start;
+    Vec3 start;
+    Vec3 end;
+    Vec3 landing;
+    float t;
+    NodeRef start_poly_ref;
+    NodeRef end_poly_ref;
+};
+
 struct TileAndPoly {
     bool success;
     const NavMeshTile *tile;
@@ -161,9 +178,14 @@ uint32_t add_tile(NavMesh &nav_mesh, NavMeshTile tile);
 bool remove_tile(NavMesh &nav_mesh, int x, int y, int layer);
 
 uint32_t add_off_mesh_connection(NavMesh &nav_mesh, const OffMeshConnectionParams &params);
+uint32_t add_off_mesh_segment_connection(NavMesh &nav_mesh, const OffMeshSegmentConnectionParams &params);
+OffMeshSegmentConnectionParams off_mesh_segment_connection_from_width(Vec3 start, Vec3 end, float width, float radius,
+                                                                      OffMeshConnectionDirection direction, uint32_t flags, uint8_t area);
 void remove_off_mesh_connection(NavMesh &nav_mesh, uint32_t off_mesh_connection_id);
 bool reconnect_off_mesh_connection(NavMesh &nav_mesh, uint32_t off_mesh_connection_id);
 bool is_off_mesh_connection_connected(const NavMesh &nav_mesh, uint32_t off_mesh_connection_id);
+void get_off_mesh_piece_edge(OffMeshPieceEdge &out, const NavMesh &nav_mesh, NodeRef off_mesh_node_ref, int side);
+void get_off_mesh_crossing(OffMeshCrossing &out, const NavMesh &nav_mesh, NodeRef previous_node_ref, NodeRef off_mesh_node_ref, Vec3 position);
 
 }
 

@@ -159,24 +159,11 @@ static FindStraightPathResult find_straight_path_in(const NavMesh &nav_mesh, Vec
                 }
 
                 if (to_type == NODE_TYPE_OFFMESH) {
-                    const NavMeshNode &off_mesh_node = nav_mesh_api::get_node_by_ref(nav_mesh, to_ref);
-                    const OffMeshConnection &connection = nav_mesh.off_mesh_connections[(uint32_t)off_mesh_node.off_mesh_connection_id];
-                    const OffMeshConnectionAttachment &attachment =
-                        nav_mesh.off_mesh_connection_attachments[(uint32_t)off_mesh_node.off_mesh_connection_id];
-
-                    const NavMeshNode &previous_node = nav_mesh_api::get_node_by_ref(nav_mesh, path_node_refs[i]);
-                    int link_edge = 0;
-                    for (int32_t link = previous_node.first_link; link != NULL_LINK; link = nav_mesh.links[(uint32_t)link].next) {
-                        if (nav_mesh.links[(uint32_t)link].to_node_ref == to_ref) {
-                            link_edge = nav_mesh.links[(uint32_t)link].edge;
-                            break;
-                        }
-                    }
-
-                    bool entering_from_start = link_edge == 0;
-                    Vec3 off_mesh_start = entering_from_start ? connection.start : connection.end;
-                    Vec3 off_mesh_end = entering_from_start ? connection.end : connection.start;
-                    NodeRef to_poly_ref = entering_from_start ? attachment.end_poly_node : attachment.start_poly_node;
+                    OffMeshCrossing crossing;
+                    nav_mesh_api::get_off_mesh_crossing(crossing, nav_mesh, path_node_refs[i], to_ref, portal_apex);
+                    Vec3 off_mesh_start = crossing.start;
+                    Vec3 off_mesh_end = crossing.end;
+                    NodeRef to_poly_ref = crossing.end_poly_ref;
 
                     if (straight_path_options & ANY_CROSSINGS) {
                         uint32_t status =

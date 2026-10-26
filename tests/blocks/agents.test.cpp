@@ -89,7 +89,7 @@ static NavMesh create_two_islands() {
 
 TEST_CASE("path corridor move over off mesh connection lands on the far side") {
     NavMesh nav_mesh = create_two_islands();
-    const OffMeshConnectionAttachment &attachment = nav_mesh.off_mesh_connection_attachments[0];
+    const OffMeshConnectionPiece &attachment = first_piece(nav_mesh, 0);
 
     PathCorridor corridor = path_corridor::create();
     NodeRef path[] = {attachment.start_poly_node, attachment.off_mesh_node, attachment.end_poly_node};

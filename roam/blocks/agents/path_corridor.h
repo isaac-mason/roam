@@ -30,6 +30,7 @@ struct MoveOverOffMeshConnectionResult {
     NodeRef end_node_ref;
     NodeRef prev_node_ref;
     NodeRef off_mesh_node_ref;
+    float t;
 };
 
 namespace path_corridor {

@@ -63,6 +63,11 @@ enum OffMeshConnectionDirection : uint32_t {
     OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL = 1,
 };
 
+enum OffMeshConnectionType : uint8_t {
+    OFF_MESH_CONNECTION_TYPE_POINT = 0,
+    OFF_MESH_CONNECTION_TYPE_SEGMENT = 1,
+};
+
 struct OffMeshConnectionParams {
     Vec3 start;
     Vec3 end;
@@ -72,23 +77,59 @@ struct OffMeshConnectionParams {
     uint8_t area;
 };
 
-struct OffMeshConnection {
-    bool allocated;
-    uint32_t id;
-    uint32_t sequence;
+struct OffMeshSegmentConnectionParams {
+    Vec3 start_a;
+    Vec3 start_b;
+    Vec3 end_a;
+    Vec3 end_b;
+    float radius;
+    float inset;
+    OffMeshConnectionDirection direction;
+    uint32_t flags;
+    uint8_t area;
+    bool align;
+};
+
+struct OffMeshConnectionPoint {
     Vec3 start;
     Vec3 end;
+};
+
+struct OffMeshConnectionSegment {
+    Vec3 start_a;
+    Vec3 start_b;
+    Vec3 end_a;
+    Vec3 end_b;
+    float inset;
+};
+
+struct OffMeshConnection {
+    bool allocated;
+    OffMeshConnectionType type;
+    uint32_t id;
+    uint32_t sequence;
+    union {
+        OffMeshConnectionPoint point;
+        OffMeshConnectionSegment segment;
+    };
     float radius;
     OffMeshConnectionDirection direction;
     uint32_t flags;
     uint8_t area;
 };
 
-struct OffMeshConnectionAttachment {
-    bool attached;
+struct OffMeshConnectionPiece {
     NodeRef off_mesh_node;
     NodeRef start_poly_node;
     NodeRef end_poly_node;
+    float t0;
+    float t1;
+    int32_t next;
+};
+
+struct OffMeshConnectionAttachment {
+    bool attached;
+    int32_t first_piece;
 };
 
 struct NavMeshBvNode {
@@ -182,6 +223,7 @@ struct NavMesh {
     Array<NavMeshClusterLink> cluster_links;
     Array<OffMeshConnection> off_mesh_connections;
     Array<OffMeshConnectionAttachment> off_mesh_connection_attachments;
+    Array<OffMeshConnectionPiece> off_mesh_connection_pieces;
     Array<NavMeshTile> tiles;
     Map<uint64_t, uint32_t> tile_position_to_tile_id;
     Map<uint64_t, Array<uint32_t>> tile_column_to_tile_ids;
@@ -190,6 +232,7 @@ struct NavMesh {
     IndexPool node_index_pool;
     IndexPool tile_index_pool;
     IndexPool off_mesh_connection_index_pool;
+    IndexPool off_mesh_connection_piece_index_pool;
     IndexPool link_index_pool;
     IndexPool cluster_index_pool;
     IndexPool cluster_link_index_pool;

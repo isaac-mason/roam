@@ -143,6 +143,10 @@ inline bool same_links(const Array<LinkKey> &a, const Array<LinkKey> &b) {
     return true;
 }
 
+inline const OffMeshConnectionPiece &first_piece(const NavMesh &nav_mesh, uint32_t id) {
+    return nav_mesh.off_mesh_connection_pieces[(uint32_t)nav_mesh.off_mesh_connection_attachments[id].first_piece];
+}
+
 struct ClusterLinkKey {
     uint32_t from;
     uint32_t to;
@@ -230,11 +234,15 @@ inline bool clusters_are_consistent(const NavMesh &nav_mesh) {
     for (uint32_t id = 0; id < nav_mesh.off_mesh_connection_attachments.length; id++) {
         const OffMeshConnectionAttachment &attachment = nav_mesh.off_mesh_connection_attachments[id];
         if (!attachment.attached) continue;
-        uint32_t start = node_cluster(nav_mesh, attachment.start_poly_node);
-        uint32_t end = node_cluster(nav_mesh, attachment.end_poly_node);
-        if (start == end) continue;
-        expected.push({start, end, (int32_t)id});
-        if (nav_mesh.off_mesh_connections[id].direction == OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL) expected.push({end, start, (int32_t)id});
+        for (int32_t i = attachment.first_piece; i >= 0; i = nav_mesh.off_mesh_connection_pieces[(uint32_t)i].next) {
+            const OffMeshConnectionPiece &piece = nav_mesh.off_mesh_connection_pieces[(uint32_t)i];
+            uint32_t start = node_cluster(nav_mesh, piece.start_poly_node);
+            uint32_t end = node_cluster(nav_mesh, piece.end_poly_node);
+            if (start == end) continue;
+            expected.push({start, end, (int32_t)id});
+            bool bidirectional = nav_mesh.off_mesh_connections[id].direction == OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL;
+            if (bidirectional) expected.push({end, start, (int32_t)id});
+        }
     }
 
     Array<ClusterLinkKey> stored = {};
@@ -284,4 +292,31 @@ inline bool reachable_by_links(const NavMesh &nav_mesh, NodeRef from, NodeRef to
     seen.release();
     queue.release();
     return found;
+}
+
+inline bool segment_pieces_are_consistent(const NavMesh &nav_mesh) {
+    for (const OffMeshConnection &connection : nav_mesh.off_mesh_connections) {
+        if (!connection.allocated || connection.type != OFF_MESH_CONNECTION_TYPE_SEGMENT) continue;
+        if (connection.id >= nav_mesh.off_mesh_connection_attachments.length) continue;
+        const OffMeshConnectionAttachment &attachment = nav_mesh.off_mesh_connection_attachments[connection.id];
+        if (!attachment.attached) continue;
+        const OffMeshConnectionSegment &segment = connection.segment;
+        Vec3 half_extents = {connection.radius, connection.radius, connection.radius};
+        float previous_end = 0;
+        for (int32_t i = attachment.first_piece; i >= 0; i = nav_mesh.off_mesh_connection_pieces[(uint32_t)i].next) {
+            const OffMeshConnectionPiece &piece = nav_mesh.off_mesh_connection_pieces[(uint32_t)i];
+            if (piece.t0 < previous_end - 1e-5f || piece.t1 <= piece.t0) return false;
+            previous_end = piece.t1;
+            float t = (piece.t0 + piece.t1) * 0.5f;
+            FindNearestPolyResult start = {};
+            nav_mesh_api::find_nearest_poly(start, nav_mesh, vec3::lerp(segment.start_a, segment.start_b, t), half_extents,
+                                            nav_mesh_api::DEFAULT_QUERY_FILTER);
+            FindNearestPolyResult end = {};
+            nav_mesh_api::find_nearest_poly(end, nav_mesh, vec3::lerp(segment.end_a, segment.end_b, t), half_extents,
+                                            nav_mesh_api::DEFAULT_QUERY_FILTER);
+            if (!start.success || start.node_ref != piece.start_poly_node) return false;
+            if (!end.success || end.node_ref != piece.end_poly_node) return false;
+        }
+    }
+    return true;
 }

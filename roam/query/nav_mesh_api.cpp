@@ -48,6 +48,7 @@ void release(NavMesh &nav_mesh) {
     nav_mesh.cluster_links.release();
     nav_mesh.off_mesh_connections.release();
     nav_mesh.off_mesh_connection_attachments.release();
+    nav_mesh.off_mesh_connection_pieces.release();
     nav_mesh.tile_position_to_tile_id.release();
     for (uint32_t i = 0; i < nav_mesh.tile_column_to_tile_ids.capacity; i++) {
         if (nav_mesh.tile_column_to_tile_ids.slots[i] == MAP_SLOT_OCCUPIED) nav_mesh.tile_column_to_tile_ids.values[i].release();
@@ -57,6 +58,7 @@ void release(NavMesh &nav_mesh) {
     index_pool::release(nav_mesh.node_index_pool);
     index_pool::release(nav_mesh.tile_index_pool);
     index_pool::release(nav_mesh.off_mesh_connection_index_pool);
+    index_pool::release(nav_mesh.off_mesh_connection_piece_index_pool);
     index_pool::release(nav_mesh.link_index_pool);
     index_pool::release(nav_mesh.cluster_index_pool);
     index_pool::release(nav_mesh.cluster_link_index_pool);
@@ -894,82 +896,194 @@ static void disconnect_cluster_links(NavMesh &nav_mesh, const NavMeshTile &tile,
     }
 }
 
-static bool connect_off_mesh_connection(NavMesh &nav_mesh, uint32_t id) {
-    OffMeshConnection connection = nav_mesh.off_mesh_connections[id];
-    Vec3 half_extents = {connection.radius, connection.radius, connection.radius};
+struct PlannedPiece {
+    NodeRef start_poly_node;
+    NodeRef end_poly_node;
+    float t0;
+    float t1;
+};
 
-    FindNearestPolyResult start = {};
-    find_nearest_poly(start, nav_mesh, connection.start, half_extents, DEFAULT_QUERY_FILTER);
-    FindNearestPolyResult end = {};
-    find_nearest_poly(end, nav_mesh, connection.end, half_extents, DEFAULT_QUERY_FILTER);
+struct SegmentSample {
+    NodeRef start_poly_node;
+    NodeRef end_poly_node;
+};
 
-    if (!start.success || !end.success) return false;
+static const uint32_t MAX_SEGMENT_SAMPLES = 1024;
+static const int SEGMENT_REFINE_STEPS = 12;
+static const int MAX_SEGMENT_CHANGES_PER_SAMPLE = 32;
 
-    uint32_t start_node_index = node::get_node_ref_index(start.node_ref);
-    uint32_t end_node_index = node::get_node_ref_index(end.node_ref);
+static NodeRef nearest_poly_within(const NavMesh &nav_mesh, Vec3 position, float radius) {
+    FindNearestPolyResult nearest = {};
+    find_nearest_poly(nearest, nav_mesh, position, {radius, radius, radius}, DEFAULT_QUERY_FILTER);
+    return nearest.success ? nearest.node_ref : INVALID_NODE_REF;
+}
 
-    if (nav_mesh.off_mesh_connection_attachments.length <= id) nav_mesh.off_mesh_connection_attachments.resize(id + 1, {});
+static SegmentSample sample_segment(const NavMesh &nav_mesh, const OffMeshConnection &connection, float t) {
+    const OffMeshConnectionSegment &segment = connection.segment;
+    return {nearest_poly_within(nav_mesh, vec3::lerp(segment.start_a, segment.start_b, t), connection.radius),
+            nearest_poly_within(nav_mesh, vec3::lerp(segment.end_a, segment.end_b, t), connection.radius)};
+}
 
-    uint32_t off_mesh_node_index = allocate_node(nav_mesh);
-    NodeRef off_mesh_node_ref = node::ser_node_ref(NODE_TYPE_OFFMESH, off_mesh_node_index, connection.sequence);
-    NavMeshNode &off_mesh_node = nav_mesh.nodes[off_mesh_node_index];
-    off_mesh_node.type = NODE_TYPE_OFFMESH;
-    off_mesh_node.ref = off_mesh_node_ref;
-    off_mesh_node.area = connection.area;
-    off_mesh_node.flags = connection.flags;
-    off_mesh_node.off_mesh_connection_id = (int32_t)id;
+static bool same_sample(SegmentSample a, SegmentSample b) { return a.start_poly_node == b.start_poly_node && a.end_poly_node == b.end_poly_node; }
 
-    nav_mesh.off_mesh_connection_attachments[id] = {true, off_mesh_node_ref, start.node_ref, end.node_ref};
+static float segment_length(const OffMeshConnectionSegment &segment) {
+    return fmaxf(vec3::distance(segment.start_a, segment.start_b), vec3::distance(segment.end_a, segment.end_b));
+}
 
-    add_link(nav_mesh, start_node_index, off_mesh_node_ref, 0, 0, 0, 0);
-    add_link(nav_mesh, off_mesh_node_index, end.node_ref, 1, 0, 0, 0);
+static void plan_piece(Array<PlannedPiece> &pieces, const OffMeshConnection &connection, SegmentSample sample, float t0, float t1) {
+    if (sample.start_poly_node == INVALID_NODE_REF || sample.end_poly_node == INVALID_NODE_REF) return;
+    if ((t1 - t0) * segment_length(connection.segment) <= fmaxf(2 * connection.segment.inset, 1e-4f)) return;
+    pieces.push({sample.start_poly_node, sample.end_poly_node, t0, t1});
+}
 
-    if (connection.direction == OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL) {
-        add_link(nav_mesh, end_node_index, off_mesh_node_ref, 1, 0, 0, 0);
-        add_link(nav_mesh, off_mesh_node_index, start.node_ref, 0, 0, 0, 0);
+static void plan_segment_pieces(Array<PlannedPiece> &pieces, const NavMesh &nav_mesh, const OffMeshConnection &connection) {
+    float spacing = fmaxf(connection.radius * 0.5f, 0.01f);
+    uint32_t steps = (uint32_t)ceilf(segment_length(connection.segment) / spacing);
+    if (steps < 1) steps = 1;
+    if (steps > MAX_SEGMENT_SAMPLES) steps = MAX_SEGMENT_SAMPLES;
+
+    SegmentSample current = sample_segment(nav_mesh, connection, 0);
+    float piece_start = 0;
+    float previous_t = 0;
+    for (uint32_t i = 1; i <= steps; i++) {
+        float t = (float)i / (float)steps;
+        SegmentSample next = sample_segment(nav_mesh, connection, t);
+        for (int change = 0; change < MAX_SEGMENT_CHANGES_PER_SAMPLE && !same_sample(current, next); change++) {
+            float low = previous_t;
+            float high = t;
+            SegmentSample high_sample = next;
+            for (int k = 0; k < SEGMENT_REFINE_STEPS; k++) {
+                float middle = (low + high) * 0.5f;
+                SegmentSample middle_sample = sample_segment(nav_mesh, connection, middle);
+                if (same_sample(middle_sample, current)) {
+                    low = middle;
+                } else {
+                    high = middle;
+                    high_sample = middle_sample;
+                }
+            }
+            plan_piece(pieces, connection, current, piece_start, high);
+            piece_start = high;
+            previous_t = high;
+            current = high_sample;
+        }
+        previous_t = t;
     }
+    plan_piece(pieces, connection, current, piece_start, 1);
+}
 
-    uint32_t start_cluster = get_poly_cluster(nav_mesh, start.node_ref);
-    uint32_t end_cluster = get_poly_cluster(nav_mesh, end.node_ref);
-    add_cluster_link(nav_mesh, start_cluster, end_cluster, nav_mesh.clusters[end_cluster].tile_id, (int32_t)id);
-    if (connection.direction == OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL) {
-        add_cluster_link(nav_mesh, end_cluster, start_cluster, nav_mesh.clusters[start_cluster].tile_id, (int32_t)id);
+static void plan_pieces(Array<PlannedPiece> &pieces, const NavMesh &nav_mesh, const OffMeshConnection &connection) {
+    pieces.clear();
+    if (connection.type == OFF_MESH_CONNECTION_TYPE_SEGMENT) {
+        plan_segment_pieces(pieces, nav_mesh, connection);
+        return;
+    }
+    NodeRef start = nearest_poly_within(nav_mesh, connection.point.start, connection.radius);
+    NodeRef end = nearest_poly_within(nav_mesh, connection.point.end, connection.radius);
+    if (start != INVALID_NODE_REF && end != INVALID_NODE_REF) pieces.push({start, end, 0, 1});
+}
+
+static uint32_t allocate_piece(NavMesh &nav_mesh) {
+    uint32_t piece_index = index_pool::request(nav_mesh.off_mesh_connection_piece_index_pool);
+    if (piece_index == nav_mesh.off_mesh_connection_pieces.length) nav_mesh.off_mesh_connection_pieces.push({});
+    return piece_index;
+}
+
+static void release_piece(NavMesh &nav_mesh, uint32_t piece_index) {
+    nav_mesh.off_mesh_connection_pieces[piece_index] = {INVALID_NODE_REF, INVALID_NODE_REF, INVALID_NODE_REF, 0, 0, -1};
+    index_pool::release_index(nav_mesh.off_mesh_connection_piece_index_pool, piece_index);
+}
+
+static bool attach_pieces(NavMesh &nav_mesh, uint32_t id, const Array<PlannedPiece> &planned) {
+    if (planned.length == 0) return false;
+    const OffMeshConnection connection = nav_mesh.off_mesh_connections[id];
+
+    if (nav_mesh.off_mesh_connection_attachments.length <= id) nav_mesh.off_mesh_connection_attachments.resize(id + 1, {false, -1});
+    nav_mesh.off_mesh_connection_attachments[id] = {true, -1};
+
+    int32_t previous_piece = -1;
+    for (const PlannedPiece &plan : planned) {
+        uint32_t start_node_index = node::get_node_ref_index(plan.start_poly_node);
+        uint32_t end_node_index = node::get_node_ref_index(plan.end_poly_node);
+
+        uint32_t off_mesh_node_index = allocate_node(nav_mesh);
+        NodeRef off_mesh_node_ref = node::ser_node_ref(NODE_TYPE_OFFMESH, off_mesh_node_index, connection.sequence);
+        uint32_t piece_index = allocate_piece(nav_mesh);
+
+        NavMeshNode &off_mesh_node = nav_mesh.nodes[off_mesh_node_index];
+        off_mesh_node.type = NODE_TYPE_OFFMESH;
+        off_mesh_node.ref = off_mesh_node_ref;
+        off_mesh_node.area = connection.area;
+        off_mesh_node.flags = connection.flags;
+        off_mesh_node.off_mesh_connection_id = (int32_t)id;
+        off_mesh_node.poly_index = (int32_t)piece_index;
+
+        nav_mesh.off_mesh_connection_pieces[piece_index] = {off_mesh_node_ref, plan.start_poly_node, plan.end_poly_node, plan.t0, plan.t1, -1};
+        if (previous_piece < 0) nav_mesh.off_mesh_connection_attachments[id].first_piece = (int32_t)piece_index;
+        else nav_mesh.off_mesh_connection_pieces[(uint32_t)previous_piece].next = (int32_t)piece_index;
+        previous_piece = (int32_t)piece_index;
+
+        add_link(nav_mesh, start_node_index, off_mesh_node_ref, 0, 0, 0, 0);
+        add_link(nav_mesh, off_mesh_node_index, plan.end_poly_node, 1, 0, 0, 0);
+
+        if (connection.direction == OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL) {
+            add_link(nav_mesh, end_node_index, off_mesh_node_ref, 1, 0, 0, 0);
+            add_link(nav_mesh, off_mesh_node_index, plan.start_poly_node, 0, 0, 0, 0);
+        }
+
+        uint32_t start_cluster = get_poly_cluster(nav_mesh, plan.start_poly_node);
+        uint32_t end_cluster = get_poly_cluster(nav_mesh, plan.end_poly_node);
+        add_cluster_link(nav_mesh, start_cluster, end_cluster, nav_mesh.clusters[end_cluster].tile_id, (int32_t)id);
+        if (connection.direction == OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL) {
+            add_cluster_link(nav_mesh, end_cluster, start_cluster, nav_mesh.clusters[start_cluster].tile_id, (int32_t)id);
+        }
     }
 
     return true;
+}
+
+static bool connect_off_mesh_connection(NavMesh &nav_mesh, uint32_t id) {
+    Array<PlannedPiece> planned = {};
+    plan_pieces(planned, nav_mesh, nav_mesh.off_mesh_connections[id]);
+    bool attached = attach_pieces(nav_mesh, id, planned);
+    planned.release();
+    return attached;
 }
 
 static bool disconnect_off_mesh_connection(NavMesh &nav_mesh, uint32_t id) {
     const OffMeshConnectionAttachment *attachment = attachment_by_id(nav_mesh, id);
     if (!attachment) return false;
 
-    NodeRef off_mesh_node_ref = attachment->off_mesh_node;
-    NodeRef start_poly_node = attachment->start_poly_node;
-    NodeRef end_poly_node = attachment->end_poly_node;
+    int32_t piece_index = attachment->first_piece;
+    while (piece_index >= 0) {
+        OffMeshConnectionPiece piece = nav_mesh.off_mesh_connection_pieces[(uint32_t)piece_index];
 
-    auto links_to_off_mesh_node = [&](const NavMeshLink &link) { return link.to_node_ref == off_mesh_node_ref; };
-    auto cluster_links_of_connection = [&](const NavMeshClusterLink &link) { return link.off_mesh_connection_id == (int32_t)id; };
-    if (is_valid_node_ref(nav_mesh, start_poly_node)) {
-        release_cluster_links_where(nav_mesh, get_poly_cluster(nav_mesh, start_poly_node), cluster_links_of_connection);
+        auto links_to_off_mesh_node = [&](const NavMeshLink &link) { return link.to_node_ref == piece.off_mesh_node; };
+        auto cluster_links_of_connection = [&](const NavMeshClusterLink &link) { return link.off_mesh_connection_id == (int32_t)id; };
+        if (is_valid_node_ref(nav_mesh, piece.start_poly_node)) {
+            release_cluster_links_where(nav_mesh, get_poly_cluster(nav_mesh, piece.start_poly_node), cluster_links_of_connection);
+        }
+        if (is_valid_node_ref(nav_mesh, piece.end_poly_node)) {
+            release_cluster_links_where(nav_mesh, get_poly_cluster(nav_mesh, piece.end_poly_node), cluster_links_of_connection);
+        }
+
+        uint32_t start_node_index = node::get_node_ref_index(piece.start_poly_node);
+        if (start_node_index < nav_mesh.nodes.length) release_links_where(nav_mesh, start_node_index, links_to_off_mesh_node);
+
+        uint32_t end_node_index = node::get_node_ref_index(piece.end_poly_node);
+        if (end_node_index < nav_mesh.nodes.length) release_links_where(nav_mesh, end_node_index, links_to_off_mesh_node);
+
+        uint32_t off_mesh_node_index = node::get_node_ref_index(piece.off_mesh_node);
+        if (off_mesh_node_index < nav_mesh.nodes.length) {
+            release_links_where(nav_mesh, off_mesh_node_index, [](const NavMeshLink &) { return true; });
+        }
+        release_node(nav_mesh, off_mesh_node_index);
+
+        release_piece(nav_mesh, (uint32_t)piece_index);
+        piece_index = piece.next;
     }
-    if (is_valid_node_ref(nav_mesh, end_poly_node)) {
-        release_cluster_links_where(nav_mesh, get_poly_cluster(nav_mesh, end_poly_node), cluster_links_of_connection);
-    }
 
-    uint32_t start_node_index = node::get_node_ref_index(start_poly_node);
-    if (start_node_index < nav_mesh.nodes.length) release_links_where(nav_mesh, start_node_index, links_to_off_mesh_node);
-
-    uint32_t end_node_index = node::get_node_ref_index(end_poly_node);
-    if (end_node_index < nav_mesh.nodes.length) release_links_where(nav_mesh, end_node_index, links_to_off_mesh_node);
-
-    uint32_t off_mesh_node_index = node::get_node_ref_index(off_mesh_node_ref);
-    if (off_mesh_node_index < nav_mesh.nodes.length) {
-        release_links_where(nav_mesh, off_mesh_node_index, [](const NavMeshLink &) { return true; });
-    }
-
-    release_node(nav_mesh, off_mesh_node_index);
-
-    nav_mesh.off_mesh_connection_attachments[id] = {};
+    nav_mesh.off_mesh_connection_attachments[id] = {false, -1};
 
     return true;
 }
@@ -979,9 +1093,53 @@ bool reconnect_off_mesh_connection(NavMesh &nav_mesh, uint32_t off_mesh_connecti
     return connect_off_mesh_connection(nav_mesh, off_mesh_connection_id);
 }
 
-static void update_off_mesh_connections(NavMesh &nav_mesh) {
+static Box3 segment_connection_bounds(const OffMeshConnection &connection) {
+    const OffMeshConnectionSegment &segment = connection.segment;
+    Box3 bounds = {segment.start_a, segment.start_a};
+    bounds = box3::expand_by_point(bounds, segment.start_b);
+    bounds = box3::expand_by_point(bounds, segment.end_a);
+    bounds = box3::expand_by_point(bounds, segment.end_b);
+    Vec3 padding = {connection.radius, connection.radius, connection.radius};
+    return {vec3::subtract(bounds.min, padding), vec3::add(bounds.max, padding)};
+}
+
+static bool same_pieces(const NavMesh &nav_mesh, const OffMeshConnectionAttachment &attachment, const Array<PlannedPiece> &planned) {
+    int32_t piece_index = attachment.first_piece;
+    for (const PlannedPiece &plan : planned) {
+        if (piece_index < 0) return false;
+        const OffMeshConnectionPiece &piece = nav_mesh.off_mesh_connection_pieces[(uint32_t)piece_index];
+        if (piece.start_poly_node != plan.start_poly_node || piece.end_poly_node != plan.end_poly_node) return false;
+        if (fabsf(piece.t0 - plan.t0) > 1e-5f || fabsf(piece.t1 - plan.t1) > 1e-5f) return false;
+        piece_index = piece.next;
+    }
+    return piece_index < 0;
+}
+
+static void regenerate_segment_connection(NavMesh &nav_mesh, uint32_t id) {
+    Array<PlannedPiece> planned = {};
+    plan_pieces(planned, nav_mesh, nav_mesh.off_mesh_connections[id]);
+
+    const OffMeshConnectionAttachment *attachment = attachment_by_id(nav_mesh, id);
+    bool unchanged = attachment ? same_pieces(nav_mesh, *attachment, planned) : planned.length == 0;
+    if (!unchanged) {
+        disconnect_off_mesh_connection(nav_mesh, id);
+        OffMeshConnection &connection = nav_mesh.off_mesh_connections[id];
+        connection.sequence = nav_mesh.off_mesh_connection_sequence_counter;
+        nav_mesh.off_mesh_connection_sequence_counter = (nav_mesh.off_mesh_connection_sequence_counter + 1) % node::MAX_SEQUENCE;
+        attach_pieces(nav_mesh, id, planned);
+    }
+    planned.release();
+}
+
+static void update_off_mesh_connections(NavMesh &nav_mesh, Box3 changed_bounds) {
     for (uint32_t id = 0; id < nav_mesh.off_mesh_connections.length; id++) {
-        if (!nav_mesh.off_mesh_connections[id].allocated) continue;
+        const OffMeshConnection &connection = nav_mesh.off_mesh_connections[id];
+        if (!connection.allocated) continue;
+        if (connection.type == OFF_MESH_CONNECTION_TYPE_SEGMENT) {
+            bool affected = box3::intersects(segment_connection_bounds(connection), changed_bounds);
+            if (affected || !is_off_mesh_connection_connected(nav_mesh, id)) regenerate_segment_connection(nav_mesh, id);
+            continue;
+        }
         if (!is_off_mesh_connection_connected(nav_mesh, id)) reconnect_off_mesh_connection(nav_mesh, id);
     }
 }
@@ -1083,7 +1241,7 @@ uint32_t add_tile(NavMesh &nav_mesh, NavMeshTile tile) {
         }
     }
 
-    update_off_mesh_connections(nav_mesh);
+    update_off_mesh_connections(nav_mesh, nav_mesh.tiles[id].bounds);
 
     return id;
 }
@@ -1096,6 +1254,7 @@ bool remove_tile(NavMesh &nav_mesh, int x, int y, int layer) {
     if (!tile_by_id(nav_mesh, (int32_t)tile_id)) return false;
 
     NavMeshTile &tile = nav_mesh.tiles[tile_id];
+    Box3 removed_bounds = tile.bounds;
 
     const Array<uint32_t> *column = tile_column(nav_mesh, x, y);
     if (column) {
@@ -1144,7 +1303,7 @@ bool remove_tile(NavMesh &nav_mesh, int x, int y, int layer) {
 
     index_pool::release_index(nav_mesh.tile_index_pool, tile_id);
 
-    update_off_mesh_connections(nav_mesh);
+    update_off_mesh_connections(nav_mesh, removed_bounds);
 
     return true;
 }
@@ -1157,11 +1316,74 @@ uint32_t add_off_mesh_connection(NavMesh &nav_mesh, const OffMeshConnectionParam
 
     if (id == nav_mesh.off_mesh_connections.length) nav_mesh.off_mesh_connections.push({});
 
-    nav_mesh.off_mesh_connections[id] = {true, id, sequence, params.start, params.end, params.radius, params.direction, params.flags, params.area};
+    nav_mesh.off_mesh_connections[id] = {
+        .allocated = true,
+        .type = OFF_MESH_CONNECTION_TYPE_POINT,
+        .id = id,
+        .sequence = sequence,
+        .point = {params.start, params.end},
+        .radius = params.radius,
+        .direction = params.direction,
+        .flags = params.flags,
+        .area = params.area,
+    };
 
     connect_off_mesh_connection(nav_mesh, id);
 
     return id;
+}
+
+static float crossed_length(Vec3 a, Vec3 b, Vec3 c, Vec3 d) { return vec3::distance(a, c) + vec3::distance(b, d); }
+
+uint32_t add_off_mesh_segment_connection(NavMesh &nav_mesh, const OffMeshSegmentConnectionParams &params) {
+    uint32_t id = index_pool::request(nav_mesh.off_mesh_connection_index_pool);
+
+    uint32_t sequence = nav_mesh.off_mesh_connection_sequence_counter;
+    nav_mesh.off_mesh_connection_sequence_counter = (nav_mesh.off_mesh_connection_sequence_counter + 1) % node::MAX_SEQUENCE;
+
+    if (id == nav_mesh.off_mesh_connections.length) nav_mesh.off_mesh_connections.push({});
+
+    Vec3 end_a = params.end_a;
+    Vec3 end_b = params.end_b;
+    if (params.align && crossed_length(params.start_a, params.start_b, end_b, end_a) < crossed_length(params.start_a, params.start_b, end_a, end_b)) {
+        end_a = params.end_b;
+        end_b = params.end_a;
+    }
+
+    nav_mesh.off_mesh_connections[id] = {
+        .allocated = true,
+        .type = OFF_MESH_CONNECTION_TYPE_SEGMENT,
+        .id = id,
+        .sequence = sequence,
+        .segment = {params.start_a, params.start_b, end_a, end_b, fmaxf(params.inset, 0.0f)},
+        .radius = params.radius,
+        .direction = params.direction,
+        .flags = params.flags,
+        .area = params.area,
+    };
+
+    connect_off_mesh_connection(nav_mesh, id);
+
+    return id;
+}
+
+OffMeshSegmentConnectionParams off_mesh_segment_connection_from_width(Vec3 start, Vec3 end, float width, float radius,
+                                                                      OffMeshConnectionDirection direction, uint32_t flags, uint8_t area) {
+    Vec3 along = {end.x - start.x, 0, end.z - start.z};
+    float length = sqrtf(along.x * along.x + along.z * along.z);
+    Vec3 side = length > 1e-6f ? Vec3{-along.z / length * width * 0.5f, 0, along.x / length * width * 0.5f} : Vec3{width * 0.5f, 0, 0};
+    return {
+        .start_a = vec3::subtract(start, side),
+        .start_b = vec3::add(start, side),
+        .end_a = vec3::subtract(end, side),
+        .end_b = vec3::add(end, side),
+        .radius = radius,
+        .inset = 0,
+        .direction = direction,
+        .flags = flags,
+        .area = area,
+        .align = false,
+    };
 }
 
 void remove_off_mesh_connection(NavMesh &nav_mesh, uint32_t off_mesh_connection_id) {
@@ -1200,20 +1422,113 @@ void rebuild_clusters(NavMesh &nav_mesh) {
     for (uint32_t id = 0; id < nav_mesh.off_mesh_connection_attachments.length; id++) {
         const OffMeshConnectionAttachment &attachment = nav_mesh.off_mesh_connection_attachments[id];
         if (!attachment.attached) continue;
-        if (!is_valid_node_ref(nav_mesh, attachment.start_poly_node) || !is_valid_node_ref(nav_mesh, attachment.end_poly_node)) continue;
-        uint32_t start_cluster = get_poly_cluster(nav_mesh, attachment.start_poly_node);
-        uint32_t end_cluster = get_poly_cluster(nav_mesh, attachment.end_poly_node);
-        add_cluster_link(nav_mesh, start_cluster, end_cluster, nav_mesh.clusters[end_cluster].tile_id, (int32_t)id);
-        if (nav_mesh.off_mesh_connections[id].direction == OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL) {
-            add_cluster_link(nav_mesh, end_cluster, start_cluster, nav_mesh.clusters[start_cluster].tile_id, (int32_t)id);
+        for (int32_t i = attachment.first_piece; i >= 0; i = nav_mesh.off_mesh_connection_pieces[(uint32_t)i].next) {
+            const OffMeshConnectionPiece &piece = nav_mesh.off_mesh_connection_pieces[(uint32_t)i];
+            if (!is_valid_node_ref(nav_mesh, piece.start_poly_node) || !is_valid_node_ref(nav_mesh, piece.end_poly_node)) continue;
+            uint32_t start_cluster = get_poly_cluster(nav_mesh, piece.start_poly_node);
+            uint32_t end_cluster = get_poly_cluster(nav_mesh, piece.end_poly_node);
+            add_cluster_link(nav_mesh, start_cluster, end_cluster, nav_mesh.clusters[end_cluster].tile_id, (int32_t)id);
+            if (nav_mesh.off_mesh_connections[id].direction == OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL) {
+                add_cluster_link(nav_mesh, end_cluster, start_cluster, nav_mesh.clusters[start_cluster].tile_id, (int32_t)id);
+            }
         }
     }
 }
 
 bool is_off_mesh_connection_connected(const NavMesh &nav_mesh, uint32_t off_mesh_connection_id) {
     const OffMeshConnectionAttachment *attachment = attachment_by_id(nav_mesh, off_mesh_connection_id);
-    if (!attachment) return false;
-    return is_valid_node_ref(nav_mesh, attachment->start_poly_node) && is_valid_node_ref(nav_mesh, attachment->end_poly_node);
+    if (!attachment || attachment->first_piece < 0) return false;
+    for (int32_t i = attachment->first_piece; i >= 0; i = nav_mesh.off_mesh_connection_pieces[(uint32_t)i].next) {
+        const OffMeshConnectionPiece &piece = nav_mesh.off_mesh_connection_pieces[(uint32_t)i];
+        if (!is_valid_node_ref(nav_mesh, piece.start_poly_node) || !is_valid_node_ref(nav_mesh, piece.end_poly_node)) return false;
+    }
+    return true;
+}
+
+static float closest_t_on_segment_2d(Vec3 point, Vec3 a, Vec3 b) {
+    float dx = b.x - a.x;
+    float dz = b.z - a.z;
+    float length_sqr = dx * dx + dz * dz;
+    if (length_sqr < 1e-12f) return 0;
+    return ((point.x - a.x) * dx + (point.z - a.z) * dz) / length_sqr;
+}
+
+static const OffMeshConnectionPiece *piece_of(const NavMesh &nav_mesh, NodeRef off_mesh_node_ref, const OffMeshConnection **connection) {
+    uint32_t node_index = node::get_node_ref_index(off_mesh_node_ref);
+    if (node::get_node_ref_type(off_mesh_node_ref) != NODE_TYPE_OFFMESH || node_index >= nav_mesh.nodes.length) return nullptr;
+    const NavMeshNode &node = nav_mesh.nodes[node_index];
+    if (!node.allocated || node.ref != off_mesh_node_ref) return nullptr;
+    *connection = off_mesh_connection_by_id(nav_mesh, node.off_mesh_connection_id);
+    if (!*connection || node.poly_index < 0 || (uint32_t)node.poly_index >= nav_mesh.off_mesh_connection_pieces.length) return nullptr;
+    return &nav_mesh.off_mesh_connection_pieces[(uint32_t)node.poly_index];
+}
+
+void get_off_mesh_piece_edge(OffMeshPieceEdge &out, const NavMesh &nav_mesh, NodeRef off_mesh_node_ref, int side) {
+    out = {};
+    const OffMeshConnection *connection = nullptr;
+    const OffMeshConnectionPiece *piece = piece_of(nav_mesh, off_mesh_node_ref, &connection);
+    if (!piece) return;
+    if (connection->type == OFF_MESH_CONNECTION_TYPE_POINT) {
+        out.left = side == 0 ? connection->point.start : connection->point.end;
+        out.right = out.left;
+    } else {
+        const OffMeshConnectionSegment &segment = connection->segment;
+        Vec3 a = side == 0 ? segment.start_a : segment.end_a;
+        Vec3 b = side == 0 ? segment.start_b : segment.end_b;
+        out.left = vec3::lerp(a, b, piece->t0);
+        out.right = vec3::lerp(a, b, piece->t1);
+    }
+    out.success = true;
+}
+
+void get_off_mesh_crossing(OffMeshCrossing &out, const NavMesh &nav_mesh, NodeRef previous_node_ref, NodeRef off_mesh_node_ref, Vec3 position) {
+    out = {};
+    const OffMeshConnection *connection = nullptr;
+    const OffMeshConnectionPiece *piece = piece_of(nav_mesh, off_mesh_node_ref, &connection);
+    if (!piece) return;
+
+    int link_edge = 0;
+    uint32_t previous_index = node::get_node_ref_index(previous_node_ref);
+    if (previous_node_ref != INVALID_NODE_REF && previous_index < nav_mesh.nodes.length) {
+        const NavMeshNode &previous_node = nav_mesh.nodes[previous_index];
+        for (int32_t link = previous_node.first_link; link != NULL_LINK; link = nav_mesh.links[(uint32_t)link].next) {
+            if (nav_mesh.links[(uint32_t)link].to_node_ref == off_mesh_node_ref) {
+                link_edge = nav_mesh.links[(uint32_t)link].edge;
+                break;
+            }
+        }
+    }
+
+    out.from_start = link_edge == 0;
+    out.start_poly_ref = out.from_start ? piece->start_poly_node : piece->end_poly_node;
+    out.end_poly_ref = out.from_start ? piece->end_poly_node : piece->start_poly_node;
+
+    if (connection->type == OFF_MESH_CONNECTION_TYPE_POINT) {
+        out.start = out.from_start ? connection->point.start : connection->point.end;
+        out.end = out.from_start ? connection->point.end : connection->point.start;
+        out.t = 0;
+    } else {
+        const OffMeshConnectionSegment &segment = connection->segment;
+        Vec3 entry_a = out.from_start ? segment.start_a : segment.end_a;
+        Vec3 entry_b = out.from_start ? segment.start_b : segment.end_b;
+        Vec3 exit_a = out.from_start ? segment.end_a : segment.start_a;
+        Vec3 exit_b = out.from_start ? segment.end_b : segment.start_b;
+        float length = segment_length(segment);
+        float inset = length > 1e-6f ? segment.inset / length : 0;
+        float low = piece->t0 + inset;
+        float high = piece->t1 - inset;
+        float t = closest_t_on_segment_2d(position, entry_a, entry_b);
+        if (low > high) t = (piece->t0 + piece->t1) * 0.5f;
+        else t = fminf(fmaxf(t, low), high);
+        out.start = vec3::lerp(entry_a, entry_b, t);
+        out.end = vec3::lerp(exit_a, exit_b, t);
+        out.t = t;
+    }
+
+    GetClosestPointOnPolyResult landing = {};
+    get_closest_point_on_poly(landing, nav_mesh, out.end_poly_ref, out.end);
+    out.landing = landing.success ? landing.position : out.end;
+    out.success = true;
 }
 
 }

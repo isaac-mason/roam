@@ -415,8 +415,17 @@ static void write_nav_mesh(ByteWriter &writer, const NavMesh &nav_mesh) {
         write_u8(writer, connection.allocated ? 1 : 0);
         if (!connection.allocated) continue;
         write_u32(writer, connection.sequence);
-        write_vec3(writer, connection.start);
-        write_vec3(writer, connection.end);
+        write_u8(writer, connection.type);
+        if (connection.type == OFF_MESH_CONNECTION_TYPE_SEGMENT) {
+            write_vec3(writer, connection.segment.start_a);
+            write_vec3(writer, connection.segment.start_b);
+            write_vec3(writer, connection.segment.end_a);
+            write_vec3(writer, connection.segment.end_b);
+            write_f32(writer, connection.segment.inset);
+        } else {
+            write_vec3(writer, connection.point.start);
+            write_vec3(writer, connection.point.end);
+        }
         write_f32(writer, connection.radius);
         write_u32(writer, connection.direction);
         write_u32(writer, connection.flags);
@@ -427,9 +436,17 @@ static void write_nav_mesh(ByteWriter &writer, const NavMesh &nav_mesh) {
     for (const OffMeshConnectionAttachment &attachment : nav_mesh.off_mesh_connection_attachments) {
         write_u8(writer, attachment.attached ? 1 : 0);
         if (!attachment.attached) continue;
-        write_u64(writer, attachment.off_mesh_node);
-        write_u64(writer, attachment.start_poly_node);
-        write_u64(writer, attachment.end_poly_node);
+        write_i32(writer, attachment.first_piece);
+    }
+
+    write_u32(writer, nav_mesh.off_mesh_connection_pieces.length);
+    for (const OffMeshConnectionPiece &piece : nav_mesh.off_mesh_connection_pieces) {
+        write_u64(writer, piece.off_mesh_node);
+        write_u64(writer, piece.start_poly_node);
+        write_u64(writer, piece.end_poly_node);
+        write_f32(writer, piece.t0);
+        write_f32(writer, piece.t1);
+        write_i32(writer, piece.next);
     }
 
     write_columns(writer, nav_mesh.tile_column_to_tile_ids);
@@ -438,6 +455,7 @@ static void write_nav_mesh(ByteWriter &writer, const NavMesh &nav_mesh) {
     write_index_pool(writer, nav_mesh.node_index_pool);
     write_index_pool(writer, nav_mesh.tile_index_pool);
     write_index_pool(writer, nav_mesh.off_mesh_connection_index_pool);
+    write_index_pool(writer, nav_mesh.off_mesh_connection_piece_index_pool);
     write_index_pool(writer, nav_mesh.link_index_pool);
 }
 
@@ -526,8 +544,19 @@ static LoadStatus read_nav_mesh(ByteReader &reader, NavMesh &nav_mesh) {
         connection.allocated = true;
         connection.id = id;
         connection.sequence = read_u32(reader);
-        connection.start = read_vec3(reader);
-        connection.end = read_vec3(reader);
+        uint8_t type = read_u8(reader);
+        if (type > OFF_MESH_CONNECTION_TYPE_SEGMENT) return LOAD_STATUS_INVALID_DATA;
+        connection.type = (OffMeshConnectionType)type;
+        if (connection.type == OFF_MESH_CONNECTION_TYPE_SEGMENT) {
+            connection.segment.start_a = read_vec3(reader);
+            connection.segment.start_b = read_vec3(reader);
+            connection.segment.end_a = read_vec3(reader);
+            connection.segment.end_b = read_vec3(reader);
+            connection.segment.inset = read_f32(reader);
+        } else {
+            connection.point.start = read_vec3(reader);
+            connection.point.end = read_vec3(reader);
+        }
         connection.radius = read_f32(reader);
         connection.direction = (OffMeshConnectionDirection)read_u32(reader);
         connection.flags = read_u32(reader);
@@ -537,14 +566,24 @@ static LoadStatus read_nav_mesh(ByteReader &reader, NavMesh &nav_mesh) {
 
     uint32_t attachment_count = read_u32(reader);
     if (!can_read(reader, attachment_count, 1)) return LOAD_STATUS_TRUNCATED;
-    nav_mesh.off_mesh_connection_attachments.resize(attachment_count, {});
+    nav_mesh.off_mesh_connection_attachments.resize(attachment_count, {false, -1});
     for (OffMeshConnectionAttachment &attachment : nav_mesh.off_mesh_connection_attachments) {
         if (read_u8(reader) == 0) continue;
         attachment.attached = true;
-        attachment.off_mesh_node = read_u64(reader);
-        attachment.start_poly_node = read_u64(reader);
-        attachment.end_poly_node = read_u64(reader);
+        attachment.first_piece = read_i32(reader);
         if (reader.failed) return LOAD_STATUS_TRUNCATED;
+    }
+
+    uint32_t piece_count = read_u32(reader);
+    if (!can_read(reader, piece_count, 36)) return LOAD_STATUS_TRUNCATED;
+    nav_mesh.off_mesh_connection_pieces.resize(piece_count);
+    for (OffMeshConnectionPiece &piece : nav_mesh.off_mesh_connection_pieces) {
+        piece.off_mesh_node = read_u64(reader);
+        piece.start_poly_node = read_u64(reader);
+        piece.end_poly_node = read_u64(reader);
+        piece.t0 = read_f32(reader);
+        piece.t1 = read_f32(reader);
+        piece.next = read_i32(reader);
     }
 
     uint32_t column_count = read_u32(reader);
@@ -572,6 +611,7 @@ static LoadStatus read_nav_mesh(ByteReader &reader, NavMesh &nav_mesh) {
     read_index_pool(reader, nav_mesh.node_index_pool);
     read_index_pool(reader, nav_mesh.tile_index_pool);
     read_index_pool(reader, nav_mesh.off_mesh_connection_index_pool);
+    read_index_pool(reader, nav_mesh.off_mesh_connection_piece_index_pool);
     read_index_pool(reader, nav_mesh.link_index_pool);
     if (reader.failed) return LOAD_STATUS_TRUNCATED;
     if (reader.offset != reader.size) return LOAD_STATUS_INVALID_DATA;
@@ -629,8 +669,10 @@ static bool valid_nav_mesh(const NavMesh &nav_mesh) {
             if (id < 0 || (uint32_t)id >= connection_count || (uint32_t)id >= nav_mesh.off_mesh_connection_attachments.length) return false;
             const OffMeshConnection &connection = nav_mesh.off_mesh_connections[(uint32_t)id];
             const OffMeshConnectionAttachment &attachment = nav_mesh.off_mesh_connection_attachments[(uint32_t)id];
-            if (!connection.allocated || !attachment.attached || attachment.off_mesh_node != node.ref) return false;
+            if (!connection.allocated || !attachment.attached) return false;
             if (node::get_node_ref_sequence(node.ref) != connection.sequence) return false;
+            if (node.poly_index < 0 || (uint32_t)node.poly_index >= nav_mesh.off_mesh_connection_pieces.length) return false;
+            if (nav_mesh.off_mesh_connection_pieces[(uint32_t)node.poly_index].off_mesh_node != node.ref) return false;
         } else {
             return false;
         }
@@ -654,18 +696,47 @@ static bool valid_nav_mesh(const NavMesh &nav_mesh) {
         if (connection.direction != OFF_MESH_CONNECTION_DIRECTION_START_TO_END && connection.direction != OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL) {
             return false;
         }
+        if (connection.type != OFF_MESH_CONNECTION_TYPE_POINT && connection.type != OFF_MESH_CONNECTION_TYPE_SEGMENT) return false;
         if (connection.sequence > node::MAX_SEQUENCE) return false;
     }
 
-    for (uint32_t id = 0; id < nav_mesh.off_mesh_connection_attachments.length; id++) {
+    uint32_t piece_count = nav_mesh.off_mesh_connection_pieces.length;
+    Array<bool> piece_used = {};
+    piece_used.resize(piece_count, false);
+    bool pieces_valid = true;
+    for (uint32_t id = 0; pieces_valid && id < nav_mesh.off_mesh_connection_attachments.length; id++) {
         const OffMeshConnectionAttachment &attachment = nav_mesh.off_mesh_connection_attachments[id];
         if (!attachment.attached) continue;
-        if (!nav_mesh.off_mesh_connections[id].allocated) return false;
-        if (!node_ref_matches(nav_mesh, attachment.off_mesh_node, NODE_TYPE_OFFMESH)) return false;
-        if (!node_ref_matches(nav_mesh, attachment.start_poly_node, NODE_TYPE_POLY)) return false;
-        if (!node_ref_matches(nav_mesh, attachment.end_poly_node, NODE_TYPE_POLY)) return false;
-        if (nav_mesh.nodes[node::get_node_ref_index(attachment.off_mesh_node)].off_mesh_connection_id != (int32_t)id) return false;
+        const OffMeshConnection &connection = nav_mesh.off_mesh_connections[id];
+        if (!connection.allocated || attachment.first_piece < 0) pieces_valid = false;
+        uint32_t pieces_in_connection = 0;
+        for (int32_t i = attachment.first_piece; pieces_valid && i >= 0; i = nav_mesh.off_mesh_connection_pieces[(uint32_t)i].next) {
+            if ((uint32_t)i >= piece_count || piece_used[(uint32_t)i]) {
+                pieces_valid = false;
+                break;
+            }
+            piece_used[(uint32_t)i] = true;
+            pieces_in_connection++;
+            const OffMeshConnectionPiece &piece = nav_mesh.off_mesh_connection_pieces[(uint32_t)i];
+            if (piece.next < -1) pieces_valid = false;
+            if (!node_ref_matches(nav_mesh, piece.off_mesh_node, NODE_TYPE_OFFMESH)) pieces_valid = false;
+            if (!node_ref_matches(nav_mesh, piece.start_poly_node, NODE_TYPE_POLY)) pieces_valid = false;
+            if (!node_ref_matches(nav_mesh, piece.end_poly_node, NODE_TYPE_POLY)) pieces_valid = false;
+            if (!(piece.t0 >= 0 && piece.t0 < piece.t1 && piece.t1 <= 1)) pieces_valid = false;
+            if (pieces_valid) {
+                const NavMeshNode &node = nav_mesh.nodes[node::get_node_ref_index(piece.off_mesh_node)];
+                if (node.off_mesh_connection_id != (int32_t)id || node.poly_index != i) pieces_valid = false;
+            }
+        }
+        if (connection.type == OFF_MESH_CONNECTION_TYPE_POINT && pieces_in_connection != 1) pieces_valid = false;
     }
+    for (uint32_t i = 0; pieces_valid && i < node_count; i++) {
+        const NavMeshNode &node = nav_mesh.nodes[i];
+        if (node.allocated && node.type == NODE_TYPE_OFFMESH && !piece_used[(uint32_t)node.poly_index]) pieces_valid = false;
+    }
+    if (pieces_valid) pieces_valid = valid_pool(nav_mesh.off_mesh_connection_piece_index_pool, piece_count, piece_used);
+    piece_used.release();
+    if (!pieces_valid) return false;
 
     Array<bool> link_used = {};
     link_used.resize(link_count, false);

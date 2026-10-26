@@ -229,21 +229,12 @@ void find_smooth_path(FindSmoothPathResult &result, QueryWorkspace &workspace, c
                                   nav_mesh.off_mesh_connections[(uint32_t)connection_id].allocated;
 
             if (has_connection && previous_node_ref != INVALID_NODE_REF) {
-                const OffMeshConnection &connection = nav_mesh.off_mesh_connections[(uint32_t)connection_id];
-                const NavMeshNode &previous_node = nav_mesh_api::get_node_by_ref(nav_mesh, previous_node_ref);
-                int link_edge = 0;
-                for (int32_t link = previous_node.first_link; link != NULL_LINK; link = nav_mesh.links[(uint32_t)link].next) {
-                    if (nav_mesh.links[(uint32_t)link].to_node_ref == off_mesh_connection_ref) {
-                        link_edge = nav_mesh.links[(uint32_t)link].edge;
-                        break;
-                    }
-                }
+                OffMeshCrossing crossing;
+                nav_mesh_api::get_off_mesh_crossing(crossing, nav_mesh, previous_node_ref, off_mesh_connection_ref, iteration_position);
 
-                bool entering_from_start = link_edge == 0;
-
-                if (point_count < max_points) {
+                if (point_count < max_points && crossing.success) {
                     points[point_count++] = {iteration_position, NODE_TYPE_OFFMESH, off_mesh_connection_ref, STRAIGHT_PATH_POINT_OFFMESH};
-                    iteration_position = entering_from_start ? connection.end : connection.start;
+                    iteration_position = crossing.end;
                 }
             }
         }

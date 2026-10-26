@@ -84,7 +84,7 @@ TEST_CASE("random tile and off mesh churn keeps the nav mesh consistent") {
 
     for (uint32_t step = 0; step < 300; step++) {
         const SavedTile &tile = saved[test::next_below(random, saved.length)];
-        uint32_t operation = test::next_below(random, 5);
+        uint32_t operation = test::next_below(random, 6);
         INFO("step ", step, " operation ", operation, " tile ", tile.x, ",", tile.y);
         switch (operation) {
             case 0: nav_mesh_api::remove_tile(nav_mesh, tile.x, tile.y, tile.layer); break;
@@ -98,6 +98,26 @@ TEST_CASE("random tile and off mesh churn keeps the nav mesh consistent") {
                 connections.push(nav_mesh_api::add_off_mesh_connection(nav_mesh, {random_point(random), random_point(random), 0.6f, direction, 1, 1}));
                 break;
             }
+            case 5: {
+                Vec3 start = random_point(random);
+                Vec3 end = random_point(random);
+                Vec3 along = {test::next_float(random, -6, 6), 0, test::next_float(random, -6, 6)};
+                OffMeshConnectionDirection direction =
+                    test::one_in(random, 2) ? OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL : OFF_MESH_CONNECTION_DIRECTION_START_TO_END;
+                connections.push(nav_mesh_api::add_off_mesh_segment_connection(nav_mesh, {
+                                                                                             .start_a = start,
+                                                                                             .start_b = vec3::add(start, along),
+                                                                                             .end_a = end,
+                                                                                             .end_b = vec3::add(end, along),
+                                                                                             .radius = 0.6f,
+                                                                                             .inset = 0.1f,
+                                                                                             .direction = direction,
+                                                                                             .flags = 1,
+                                                                                             .area = 1,
+                                                                                             .align = false,
+                                                                                         }));
+                break;
+            }
             default:
                 if (connections.length > 0) {
                     uint32_t index = test::next_below(random, connections.length);
@@ -108,6 +128,7 @@ TEST_CASE("random tile and off mesh churn keeps the nav mesh consistent") {
         }
         REQUIRE(snapshot_is_valid(nav_mesh));
         REQUIRE(clusters_are_consistent(nav_mesh));
+        REQUIRE(segment_pieces_are_consistent(nav_mesh));
         check_paths(random, nav_mesh, workspace);
         check_reachability(random, nav_mesh, workspace, reachable_pairs, unreachable_pairs);
 
@@ -119,7 +140,7 @@ TEST_CASE("random tile and off mesh churn keeps the nav mesh consistent") {
     CHECK(fewest_tiles < saved.length / 2);
     CHECK(attached_connections > 0);
     CHECK(reachable_pairs > 500);
-    CHECK(unreachable_pairs > 500);
+    CHECK(unreachable_pairs > 50);
 
     for (uint32_t id : connections) nav_mesh_api::remove_off_mesh_connection(nav_mesh, id);
     for (const SavedTile &tile : saved) {

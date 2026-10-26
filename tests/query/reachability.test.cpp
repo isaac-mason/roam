@@ -63,7 +63,7 @@ TEST_CASE("one way off mesh connections are reachable in one direction only") {
     NodeRef b = nearest_poly(nav_mesh, {6, 0, 1});
 
     uint32_t id = nav_mesh_api::add_off_mesh_connection(nav_mesh, {{1, 0, 1}, {6, 0, 1}, 0.5f, OFF_MESH_CONNECTION_DIRECTION_START_TO_END, 1, 0});
-    NodeRef link = nav_mesh.off_mesh_connection_attachments[id].off_mesh_node;
+    NodeRef link = first_piece(nav_mesh, id).off_mesh_node;
     CHECK(clusters_are_consistent(nav_mesh));
     CHECK(nav_mesh_search::is_reachable(workspace, nav_mesh, a, b));
     CHECK_FALSE(nav_mesh_search::is_reachable(workspace, nav_mesh, b, a));
@@ -78,7 +78,7 @@ TEST_CASE("one way off mesh connections are reachable in one direction only") {
     CHECK_FALSE(nav_mesh_search::is_reachable(workspace, nav_mesh, a, link));
 
     id = nav_mesh_api::add_off_mesh_connection(nav_mesh, {{1, 0, 1}, {6, 0, 1}, 0.5f, OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL, 1, 0});
-    link = nav_mesh.off_mesh_connection_attachments[id].off_mesh_node;
+    link = first_piece(nav_mesh, id).off_mesh_node;
     CHECK(clusters_are_consistent(nav_mesh));
     CHECK(nav_mesh_search::is_reachable(workspace, nav_mesh, a, b));
     CHECK(nav_mesh_search::is_reachable(workspace, nav_mesh, b, a));

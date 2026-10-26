@@ -350,6 +350,27 @@ TEST_CASE("queries handle stale refs, bad positions and small buffers") {
     REQUIRE(removed != nullptr);
     for (uint32_t node_index : removed->poly_nodes) fuzz.stale_refs.push(fuzz.nav_mesh.nodes[node_index].ref);
     nav_mesh_api::remove_tile(fuzz.nav_mesh, removed->tile_x, removed->tile_y, removed->tile_layer);
+    OffMeshSegmentConnectionParams across_hole = {
+        .start_a = {9.5f, 0, 8},
+        .start_b = {9.5f, 0, 14},
+        .end_a = {13.5f, 0, 8},
+        .end_b = {13.5f, 0, 14},
+        .radius = 0.8f,
+        .inset = 0.1f,
+        .direction = OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL,
+        .flags = 1,
+        .area = 0,
+        .align = false,
+    };
+    uint32_t stale_link = nav_mesh_api::add_off_mesh_segment_connection(fuzz.nav_mesh, across_hole);
+    REQUIRE(nav_mesh_api::is_off_mesh_connection_connected(fuzz.nav_mesh, stale_link));
+    for (int32_t i = fuzz.nav_mesh.off_mesh_connection_attachments[stale_link].first_piece; i >= 0;
+         i = fuzz.nav_mesh.off_mesh_connection_pieces[(uint32_t)i].next) {
+        fuzz.stale_refs.push(fuzz.nav_mesh.off_mesh_connection_pieces[(uint32_t)i].off_mesh_node);
+    }
+    nav_mesh_api::remove_off_mesh_connection(fuzz.nav_mesh, stale_link);
+    across_hole.direction = OFF_MESH_CONNECTION_DIRECTION_START_TO_END;
+    REQUIRE(nav_mesh_api::is_off_mesh_connection_connected(fuzz.nav_mesh, nav_mesh_api::add_off_mesh_segment_connection(fuzz.nav_mesh, across_hole)));
     for (const NavMeshNode &node : fuzz.nav_mesh.nodes) {
         if (node.allocated) fuzz.live_refs.push(node.ref);
     }

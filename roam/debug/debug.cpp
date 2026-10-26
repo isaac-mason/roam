@@ -860,10 +860,43 @@ static void push_circle(DebugPrimitive &lines, Vec3 center, float radius, Vec3 c
     push3(lines.colors, pillar_color);
 }
 
+static void push_off_mesh_arc(DebugPrimitive &arcs, Vec3 start, Vec3 end, Vec3 color, bool one_way) {
+    const int arc_segments = 16;
+    for (int i = 0; i < arc_segments; i++) {
+        push3(arcs.positions, arc_point(start, end, (float)i / arc_segments, 0.25f));
+        push3(arcs.positions, arc_point(start, end, (float)(i + 1) / arc_segments, 0.25f));
+        push3(arcs.colors, color);
+        push3(arcs.colors, color);
+    }
+    if (!one_way) return;
+
+    Vec3 middle = vec3::lerp(start, end, 0.5f);
+    middle.y += 0.25f;
+    float dx = end.x - start.x;
+    float dz = end.z - start.z;
+    float length = sqrtf(dx * dx + dz * dz);
+    if (length == 0) length = 1;
+    float nx = dx / length;
+    float nz = dz / length;
+    const float back = 0.3f;
+    push3(arcs.positions, middle);
+    push3(arcs.positions, middle.x - nx * back + nz * back * 0.5f, middle.y - 0.05f, middle.z - nz * back - nx * back * 0.5f);
+    push3(arcs.positions, middle);
+    push3(arcs.positions, middle.x - nx * back - nz * back * 0.5f, middle.y - 0.05f, middle.z - nz * back + nx * back * 0.5f);
+    for (int k = 0; k < 4; k++) push3(arcs.colors, color);
+}
+
+static void push_line(DebugPrimitive &lines, Vec3 a, Vec3 b, Vec3 color) {
+    push3(lines.positions, a);
+    push3(lines.positions, b);
+    push3(lines.colors, color);
+    push3(lines.colors, color);
+}
+
 DebugPrimitives create_nav_mesh_off_mesh_connections_helper(const NavMesh &nav_mesh) {
     DebugPrimitives primitives = {};
-    const int arc_segments = 16;
     const Vec3 arc_color = {1, 196.0f / 255.0f, 0};
+    const Vec3 piece_color = {1, 140.0f / 255.0f, 0};
     const Vec3 one_way_end_color = {220.0f / 255.0f, 32.0f / 255.0f, 16.0f / 255.0f};
 
     DebugPrimitive arcs = create_primitive(DEBUG_PRIMITIVE_LINES);
@@ -877,36 +910,35 @@ DebugPrimitives create_nav_mesh_off_mesh_connections_helper(const NavMesh &nav_m
 
     for (const OffMeshConnection &connection : nav_mesh.off_mesh_connections) {
         if (!connection.allocated) continue;
-        Vec3 start = connection.start;
-        Vec3 end = connection.end;
+        bool one_way = connection.direction == OFF_MESH_CONNECTION_DIRECTION_START_TO_END;
+        Vec3 end_color = one_way ? one_way_end_color : arc_color;
 
-        for (int i = 0; i < arc_segments; i++) {
-            push3(arcs.positions, arc_point(start, end, (float)i / arc_segments, 0.25f));
-            push3(arcs.positions, arc_point(start, end, (float)(i + 1) / arc_segments, 0.25f));
-            push3(arcs.colors, arc_color);
-            push3(arcs.colors, arc_color);
+        if (connection.type == OFF_MESH_CONNECTION_TYPE_POINT) {
+            push_off_mesh_arc(arcs, connection.point.start, connection.point.end, arc_color, one_way);
+            push_circle(circles, connection.point.start, connection.radius, arc_color);
+            push_circle(circles, connection.point.end, connection.radius, end_color);
+            continue;
         }
 
-        if (connection.direction == OFF_MESH_CONNECTION_DIRECTION_START_TO_END) {
-            Vec3 middle = vec3::lerp(start, end, 0.5f);
-            middle.y += 0.25f;
-            float dx = end.x - start.x;
-            float dz = end.z - start.z;
-            float length = sqrtf(dx * dx + dz * dz);
-            if (length == 0) length = 1;
-            float nx = dx / length;
-            float nz = dz / length;
-            const float back = 0.3f;
-            push3(arcs.positions, middle);
-            push3(arcs.positions, middle.x - nx * back + nz * back * 0.5f, middle.y - 0.05f, middle.z - nz * back - nx * back * 0.5f);
-            push3(arcs.positions, middle);
-            push3(arcs.positions, middle.x - nx * back - nz * back * 0.5f, middle.y - 0.05f, middle.z - nz * back + nx * back * 0.5f);
-            for (int k = 0; k < 4; k++) push3(arcs.colors, arc_color);
-        }
+        const OffMeshConnectionSegment &segment = connection.segment;
+        push_line(circles, segment.start_a, segment.start_b, arc_color);
+        push_line(circles, segment.end_a, segment.end_b, end_color);
 
-        push_circle(circles, start, connection.radius, arc_color);
-        push_circle(circles, end, connection.radius,
-                    connection.direction == OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL ? arc_color : one_way_end_color);
+        if (connection.id >= nav_mesh.off_mesh_connection_attachments.length) continue;
+        const OffMeshConnectionAttachment &attachment = nav_mesh.off_mesh_connection_attachments[connection.id];
+        if (!attachment.attached) continue;
+        bool alternate = false;
+        for (int32_t i = attachment.first_piece; i >= 0; i = nav_mesh.off_mesh_connection_pieces[(uint32_t)i].next) {
+            const OffMeshConnectionPiece &piece = nav_mesh.off_mesh_connection_pieces[(uint32_t)i];
+            Vec3 color = alternate ? piece_color : arc_color;
+            alternate = !alternate;
+            const float ts[3] = {piece.t0, piece.t1, (piece.t0 + piece.t1) * 0.5f};
+            for (int k = 0; k < 3; k++) {
+                Vec3 start = vec3::lerp(segment.start_a, segment.start_b, ts[k]);
+                Vec3 end = vec3::lerp(segment.end_a, segment.end_b, ts[k]);
+                push_off_mesh_arc(arcs, start, end, color, one_way && k == 2);
+            }
+        }
     }
 
     finish(primitives, arcs);

@@ -187,22 +187,17 @@ void move_over_off_mesh_connection(MoveOverOffMeshConnectionResult &result, Path
 
     if (!has_previous) return;
 
-    int32_t connection_id = nav_mesh_api::get_node_by_ref(nav_mesh, off_mesh_node_ref).off_mesh_connection_id;
-    if (connection_id < 0 || (uint32_t)connection_id >= nav_mesh.off_mesh_connections.length) return;
+    OffMeshCrossing crossing;
+    nav_mesh_api::get_off_mesh_crossing(crossing, nav_mesh, previous, off_mesh_node_ref, corridor.position);
+    if (!crossing.success) return;
 
-    const OffMeshConnection &connection = nav_mesh.off_mesh_connections[(uint32_t)connection_id];
-    const OffMeshConnectionAttachment &attachment = nav_mesh.off_mesh_connection_attachments[(uint32_t)connection_id];
-    if (!connection.allocated || !attachment.attached) return;
-
-    bool on_start = attachment.start_poly_node == previous;
-    Vec3 end_position = on_start ? connection.end : connection.start;
-
-    corridor.position = end_position;
+    corridor.position = crossing.end;
 
     result.success = true;
-    result.start_position = on_start ? connection.start : connection.end;
-    result.end_position = end_position;
-    result.end_node_ref = on_start ? attachment.end_poly_node : attachment.start_poly_node;
+    result.start_position = crossing.start;
+    result.end_position = crossing.end;
+    result.end_node_ref = crossing.end_poly_ref;
+    result.t = crossing.t;
     result.prev_node_ref = previous;
     result.off_mesh_node_ref = off_mesh_node_ref;
 }

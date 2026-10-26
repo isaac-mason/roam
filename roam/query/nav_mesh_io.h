@@ -8,7 +8,7 @@
 namespace roam {
 
 constexpr uint32_t NAV_MESH_TILE_FORMAT_VERSION = 1;
-constexpr uint32_t NAV_MESH_FORMAT_VERSION = 1;
+constexpr uint32_t NAV_MESH_FORMAT_VERSION = 2;
 
 struct SaveResult {
     bool success;

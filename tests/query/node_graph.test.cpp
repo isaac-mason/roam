@@ -94,7 +94,7 @@ TEST_CASE("node graph bidirectional off mesh connection") {
 
     REQUIRE(nav_mesh.off_mesh_connections[id].allocated);
     REQUIRE(nav_mesh.off_mesh_connection_attachments[id].attached);
-    OffMeshConnectionAttachment attachment = nav_mesh.off_mesh_connection_attachments[id];
+    OffMeshConnectionPiece attachment = first_piece(nav_mesh, id);
 
     CHECK(allocated_node_count(nav_mesh, -1) == 5);
     REQUIRE(allocated_node_count(nav_mesh, NODE_TYPE_OFFMESH) == 1);
@@ -135,7 +135,7 @@ TEST_CASE("node graph one way off mesh connection") {
 
     REQUIRE(nav_mesh.off_mesh_connections[id].allocated);
     REQUIRE(nav_mesh.off_mesh_connection_attachments[id].attached);
-    OffMeshConnectionAttachment attachment = nav_mesh.off_mesh_connection_attachments[id];
+    OffMeshConnectionPiece attachment = first_piece(nav_mesh, id);
 
     CHECK(allocated_node_count(nav_mesh, -1) == 5);
     REQUIRE(allocated_node_count(nav_mesh, NODE_TYPE_OFFMESH) == 1);

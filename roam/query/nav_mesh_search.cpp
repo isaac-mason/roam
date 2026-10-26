@@ -170,12 +170,6 @@ static const NavMeshLink *find_link_to(const NavMesh &nav_mesh, const NavMeshNod
     return nullptr;
 }
 
-static const OffMeshConnection *off_mesh_connection_of(const NavMesh &nav_mesh, const NavMeshNode &node) {
-    if (node.off_mesh_connection_id < 0 || (uint32_t)node.off_mesh_connection_id >= nav_mesh.off_mesh_connections.length) return nullptr;
-    const OffMeshConnection &connection = nav_mesh.off_mesh_connections[(uint32_t)node.off_mesh_connection_id];
-    return connection.allocated ? &connection : nullptr;
-}
-
 static Vec3 tile_vertex(const NavMeshTile &tile, const NavMeshPoly &poly, uint32_t i) {
     return vec3::load(tile.vertices.data, tile.poly_vertices[poly.vertex_base + i] * 3);
 }
@@ -211,22 +205,16 @@ void get_portal_points_unchecked(GetPortalPointsResult &out, const NavMesh &nav_
     }
 
     if (from_type == NODE_TYPE_POLY && to_type == NODE_TYPE_OFFMESH) {
-        const OffMeshConnection *connection = off_mesh_connection_of(nav_mesh, nav_mesh_api::get_node_by_ref(nav_mesh, to_node_ref));
-        if (!connection) return;
-        Vec3 position = to_link->edge == 0 ? connection->start : connection->end;
-        out.left = position;
-        out.right = position;
-        out.success = true;
+        OffMeshPieceEdge edge;
+        nav_mesh_api::get_off_mesh_piece_edge(edge, nav_mesh, to_node_ref, to_link->edge);
+        out = {edge.success, edge.left, edge.right};
         return;
     }
 
     if (from_type == NODE_TYPE_OFFMESH && to_type == NODE_TYPE_POLY) {
-        const OffMeshConnection *connection = off_mesh_connection_of(nav_mesh, from_node);
-        if (!connection) return;
-        Vec3 position = to_link->edge == 0 ? connection->start : connection->end;
-        out.left = position;
-        out.right = position;
-        out.success = true;
+        OffMeshPieceEdge edge;
+        nav_mesh_api::get_off_mesh_piece_edge(edge, nav_mesh, from_node_ref, to_link->edge);
+        out = {edge.success, edge.left, edge.right};
     }
 }
 
@@ -1227,16 +1215,15 @@ static uint32_t gather_reachability_clusters(const NavMesh &nav_mesh, NodeRef no
         return 1;
     }
 
-    uint32_t id = (uint32_t)node.off_mesh_connection_id;
-    const OffMeshConnectionAttachment &attachment = nav_mesh.off_mesh_connection_attachments[id];
-    bool bidirectional = nav_mesh.off_mesh_connections[id].direction == OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL;
+    const OffMeshConnectionPiece &piece = nav_mesh.off_mesh_connection_pieces[(uint32_t)node.poly_index];
+    bool bidirectional = nav_mesh.off_mesh_connections[(uint32_t)node.off_mesh_connection_id].direction == OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL;
     uint32_t count = 0;
     if (as_target || bidirectional) {
-        const NavMeshNode &start = nav_mesh_api::get_node_by_ref(nav_mesh, attachment.start_poly_node);
+        const NavMeshNode &start = nav_mesh_api::get_node_by_ref(nav_mesh, piece.start_poly_node);
         clusters[count++] = nav_mesh.tiles[(uint32_t)start.tile_id].poly_clusters[(uint32_t)start.poly_index];
     }
     if (!as_target || bidirectional) {
-        const NavMeshNode &end = nav_mesh_api::get_node_by_ref(nav_mesh, attachment.end_poly_node);
+        const NavMeshNode &end = nav_mesh_api::get_node_by_ref(nav_mesh, piece.end_poly_node);
         clusters[count++] = nav_mesh.tiles[(uint32_t)end.tile_id].poly_clusters[(uint32_t)end.poly_index];
     }
     return count;

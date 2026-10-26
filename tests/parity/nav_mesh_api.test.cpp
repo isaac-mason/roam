@@ -118,7 +118,7 @@ TEST_CASE("nav mesh matches navcat on nav test") {
                                                                    1,
                                                                    0});
     CHECK(nav_mesh_api::is_off_mesh_connection_connected(nav_mesh, id) == (fixture::i32(expected, "off_mesh.connected").data[0] != 0));
-    const OffMeshConnectionAttachment &actual_attachment = nav_mesh.off_mesh_connection_attachments[id];
+    const OffMeshConnectionPiece &actual_attachment = first_piece(nav_mesh, id);
     CHECK(actual_attachment.off_mesh_node == ref_from_f64(attachment.data[0]));
     CHECK(actual_attachment.start_poly_node == ref_from_f64(attachment.data[1]));
     CHECK(actual_attachment.end_poly_node == ref_from_f64(attachment.data[2]));
