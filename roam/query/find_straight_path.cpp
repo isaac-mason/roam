@@ -83,7 +83,35 @@ static FindStraightPathResult stopped(uint32_t status, uint32_t base_flags, cons
     return make_result(flags, path);
 }
 
-static const uint32_t ANY_CROSSINGS = FIND_STRAIGHT_PATH_AREA_CROSSINGS | FIND_STRAIGHT_PATH_ALL_CROSSINGS;
+static bool stretch_reversed(Vec3 apex, Vec3 funnel_left, Vec3 funnel_right, Vec3 left, Vec3 right) {
+    float area = geometry::tri_area_2d(apex, left, right);
+    if (fabsf(area) > 1e-6f) return area < 0;
+    Vec3 funnel_mid = vec3::scale(vec3::add(funnel_left, funnel_right), 0.5f);
+    Vec3 stretch_mid = vec3::scale(vec3::add(left, right), 0.5f);
+    float funnel_side = geometry::tri_area_2d(funnel_mid, stretch_mid, funnel_left);
+    float stretch_side = geometry::tri_area_2d(funnel_mid, stretch_mid, left);
+    return (funnel_side > 0 && stretch_side < 0) || (funnel_side < 0 && stretch_side > 0);
+}
+
+static float ray_hit_on_stretch(Vec3 apex, Vec3 through, Vec3 left, Vec3 right, float fallback) {
+    float at_left = geometry::tri_area_2d(apex, through, left);
+    float at_right = geometry::tri_area_2d(apex, through, right);
+    if (fabsf(at_left - at_right) < 1e-12f) return fallback;
+    return fminf(fmaxf(at_left / (at_left - at_right), 0.0f), 1.0f);
+}
+
+static float visible_crossing(Vec3 apex, Vec3 funnel_left, Vec3 funnel_right, Vec3 left, Vec3 right) {
+    float lo = vec3::equals(funnel_left, left) || vec3::equals(funnel_left, apex) ? 0.0f : ray_hit_on_stretch(apex, funnel_left, left, right, 0.0f);
+    float hi = vec3::equals(funnel_right, right) || vec3::equals(funnel_right, apex) ? 1.0f : ray_hit_on_stretch(apex, funnel_right, left, right, 1.0f);
+    if (lo > hi) lo = hi = (lo + hi) * 0.5f;
+    float dx = right.x - left.x;
+    float dz = right.z - left.z;
+    float length_sqr = dx * dx + dz * dz;
+    float projected = length_sqr > 1e-12f ? ((apex.x - left.x) * dx + (apex.z - left.z) * dz) / length_sqr : 0.0f;
+    return fminf(fmaxf(projected, lo), hi);
+}
+
+static const uint32_t ANY_CROSSINGS =FIND_STRAIGHT_PATH_AREA_CROSSINGS | FIND_STRAIGHT_PATH_ALL_CROSSINGS;
 static const uint32_t PARTIAL = FIND_STRAIGHT_PATH_RESULT_SUCCESS | FIND_STRAIGHT_PATH_RESULT_PARTIAL_PATH;
 static const uint32_t INVALID = FIND_STRAIGHT_PATH_RESULT_NONE | FIND_STRAIGHT_PATH_RESULT_INVALID_INPUT;
 
@@ -158,7 +186,13 @@ static FindStraightPathResult find_straight_path_in(const NavMesh &nav_mesh, Vec
                     if (geometry::distance_pt_seg_sqr_2d(portal_apex, left, right).dist_sqr < 1e-6f) continue;
                 }
 
-                if (to_type == NODE_TYPE_OFFMESH) {
+                if (to_type == NODE_TYPE_OFFMESH && !vec3::exactly_equals(left, right)) {
+                    if (stretch_reversed(portal_apex, portal_left, portal_right, left, right)) {
+                        Vec3 swap = left;
+                        left = right;
+                        right = swap;
+                    }
+                } else if (to_type == NODE_TYPE_OFFMESH) {
                     OffMeshCrossing crossing;
                     nav_mesh_api::get_off_mesh_crossing(crossing, nav_mesh, path_node_refs[i], to_ref, portal_apex);
                     Vec3 off_mesh_start = crossing.start;
@@ -274,6 +308,37 @@ static FindStraightPathResult find_straight_path_in(const NavMesh &nav_mesh, Vec
                     i = apex_index;
                     continue;
                 }
+            }
+
+            if (to_type == NODE_TYPE_OFFMESH) {
+                NodeRef to_ref = path_node_refs[i + 1];
+                float u = visible_crossing(portal_apex, portal_left, portal_right, left, right);
+                OffMeshCrossing crossing;
+                nav_mesh_api::get_off_mesh_crossing(crossing, nav_mesh, path_node_refs[i], to_ref, vec3::lerp(left, right, u));
+
+                if (straight_path_options & ANY_CROSSINGS) {
+                    uint32_t status = append_portals(nav_mesh, apex_index, i, crossing.start, path_node_refs, path, straight_path_options, max_points);
+                    if (status != APPEND_VERTEX_IN_PROGRESS) return stopped(status, PARTIAL, path);
+                }
+
+                uint32_t start_append = append_vertex(crossing.start, to_ref, STRAIGHT_PATH_POINT_OFFMESH, path, NODE_TYPE_OFFMESH, max_points);
+                if (start_append != APPEND_VERTEX_IN_PROGRESS) return stopped(start_append, FIND_STRAIGHT_PATH_RESULT_SUCCESS, path);
+
+                uint32_t end_append = append_vertex(crossing.end, crossing.end_poly_ref, 0, path, NODE_TYPE_POLY, max_points);
+                if (end_append != APPEND_VERTEX_IN_PROGRESS) return stopped(end_append, FIND_STRAIGHT_PATH_RESULT_SUCCESS, path);
+
+                portal_apex = crossing.end;
+                portal_left = crossing.end;
+                portal_right = crossing.end;
+                apex_index = i + 2;
+                left_index = i + 2;
+                right_index = i + 2;
+                left_node_ref = crossing.end_poly_ref;
+                right_node_ref = crossing.end_poly_ref;
+                left_node_type = NODE_TYPE_POLY;
+                right_node_type = NODE_TYPE_POLY;
+
+                i++;
             }
         }
 

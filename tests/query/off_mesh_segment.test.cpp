@@ -440,3 +440,246 @@ TEST_CASE("paths cross a segment connection on the link with the exit at the sam
     nav_mesh_search::release(workspace);
     nav_mesh_api::release(nav_mesh);
 }
+
+static NavMesh create_bend() {
+    const float xs[] = {0, 2, 4, 6, 8, 10};
+    const float zs[] = {-6, -4, 2, 4};
+    const bool cells[3][5] = {{true, true, true, true, true}, {false, false, false, false, true}, {true, true, true, true, true}};
+    Array<float> positions = {};
+    Array<uint32_t> indices = {};
+    for (float z : zs) {
+        for (float x : xs) {
+            const float vertex[] = {x, 2, z};
+            for (float value : vertex) positions.push(value);
+        }
+    }
+    for (uint32_t row = 0; row < 3; row++) {
+        for (uint32_t column = 0; column < 5; column++) {
+            if (!cells[row][column]) continue;
+            uint32_t a = row * 6 + column;
+            const uint32_t triangles[] = {a, a + 6, a + 7, a, a + 7, a + 1};
+            for (uint32_t index : triangles) indices.push(index);
+        }
+    }
+    push_strip(positions, indices, 0, 10, 5, 10, 0, 5);
+    NavMesh nav_mesh = create_nav_mesh_from_triangles(positions.data, positions.length / 3, indices.data, indices.length);
+    positions.release();
+    indices.release();
+    return nav_mesh;
+}
+
+static bool stays_on_mesh(const NavMesh &nav_mesh, const StraightPathPoint *points, uint32_t count) {
+    for (uint32_t i = 1; i < count; i++) {
+        if (points[i - 1].type == NODE_TYPE_OFFMESH) continue;
+        for (int k = 0; k <= 50; k++) {
+            Vec3 sample = vec3::lerp(points[i - 1].position, points[i].position, (float)k / 50);
+            FindNearestPolyResult nearest_poly = {};
+            nav_mesh_api::find_nearest_poly(nearest_poly, nav_mesh, sample, {0.05f, 0.5f, 0.05f}, nav_mesh_api::DEFAULT_QUERY_FILTER);
+            float dx = nearest_poly.position.x - sample.x;
+            float dz = nearest_poly.position.z - sample.z;
+            if (!nearest_poly.success || dx * dx + dz * dz > 1e-6f) return false;
+        }
+    }
+    return true;
+}
+
+static OffMeshSegmentConnectionParams bend_link(OffMeshConnectionDirection direction, bool reversed) {
+    OffMeshSegmentConnectionParams params = ledge_link(direction);
+    if (reversed) {
+        params.start_a = {9, 2, 4};
+        params.start_b = {1, 2, 4};
+        params.end_a = {9, 0, 5};
+        params.end_b = {1, 0, 5};
+    }
+    return params;
+}
+
+TEST_CASE("segment crossings are aimed from the last corner and paths stay on the mesh up to the link") {
+    QueryWorkspace workspace = nav_mesh_search::create_query_workspace();
+    const bool reversed_cases[] = {false, true};
+    for (bool reversed : reversed_cases) {
+        INFO("reversed ", reversed);
+        NavMesh nav_mesh = create_bend();
+        uint32_t id = nav_mesh_api::add_off_mesh_segment_connection(nav_mesh, bend_link(OFF_MESH_CONNECTION_DIRECTION_START_TO_END, reversed));
+        const OffMeshConnectionSegment &segment = nav_mesh.off_mesh_connections[id].segment;
+
+        StraightPathPoint points[32];
+        FindPathResult path = {};
+        find_path::find_path(path, workspace, nav_mesh, {1, 2, -5}, {9, 0, 9}, {0.5f, 0.5f, 0.5f}, nav_mesh_api::DEFAULT_QUERY_FILTER, points);
+        REQUIRE(path.success);
+        OffMeshCorner corner = find_off_mesh_corner(points, path.point_count);
+        REQUIRE(corner.found);
+
+        CHECK(stays_on_mesh(nav_mesh, points, path.point_count));
+        CHECK(path.point_count == 5);
+        CHECK(vec3::distance(points[1].position, {8, 2, -4}) < 1e-3f);
+        CHECK(vec3::distance(corner.entry.position, {8, 2, 4}) < 1e-3f);
+        float t = closest_t(corner.entry.position, segment.start_a, segment.start_b);
+        CHECK(vec3::distance(corner.exit.position, vec3::lerp(segment.end_a, segment.end_b, t)) < 1e-3f);
+
+        nav_mesh_api::release(nav_mesh);
+    }
+    nav_mesh_search::release(workspace);
+}
+
+TEST_CASE("two way segment connections crossed from the end side stay on the mesh and land at the matching t") {
+    NavMesh nav_mesh = create_bend();
+    uint32_t id = nav_mesh_api::add_off_mesh_segment_connection(nav_mesh, bend_link(OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL, false));
+    const OffMeshConnectionSegment &segment = nav_mesh.off_mesh_connections[id].segment;
+    QueryWorkspace workspace = nav_mesh_search::create_query_workspace();
+
+    const Vec3 starts[] = {{1, 0, 9}, {9, 0, 9}, {5, 0, 6}};
+    for (Vec3 start : starts) {
+        INFO("start x ", start.x, " z ", start.z);
+        StraightPathPoint points[32];
+        FindPathResult path = {};
+        find_path::find_path(path, workspace, nav_mesh, start, {1, 2, -5}, {0.5f, 0.5f, 0.5f}, nav_mesh_api::DEFAULT_QUERY_FILTER, points);
+        REQUIRE(path.success);
+        OffMeshCorner corner = find_off_mesh_corner(points, path.point_count);
+        REQUIRE(corner.found);
+        CHECK(stays_on_mesh(nav_mesh, points, path.point_count));
+        float t = closest_t(corner.entry.position, segment.end_a, segment.end_b);
+        CHECK(vec3::distance(corner.entry.position, vec3::lerp(segment.end_a, segment.end_b, t)) < 1e-3f);
+        CHECK(vec3::distance(corner.exit.position, vec3::lerp(segment.start_a, segment.start_b, t)) < 1e-3f);
+    }
+
+    nav_mesh_search::release(workspace);
+    nav_mesh_api::release(nav_mesh);
+}
+
+TEST_CASE("segment crossings come out in order with all crossings and truncate at the jump") {
+    NavMesh nav_mesh = create_bend();
+    nav_mesh_api::add_off_mesh_segment_connection(nav_mesh, bend_link(OFF_MESH_CONNECTION_DIRECTION_START_TO_END, false));
+    QueryWorkspace workspace = nav_mesh_search::create_query_workspace();
+
+    NodeRef node_path[64];
+    StraightPathPoint points[64];
+    FindPathResult path = {};
+    find_path::find_path(path, workspace, nav_mesh, {1, 2, -5}, {9, 0, 9}, {0.5f, 0.5f, 0.5f}, nav_mesh_api::DEFAULT_QUERY_FILTER, points,
+                         {.node_path = node_path});
+    REQUIRE(path.success);
+
+    FindStraightPathResult crossings = {};
+    find_straight_path::find_straight_path(crossings, nav_mesh, path.start_position, path.end_position, {node_path, path.node_path_count}, points,
+                                           FIND_STRAIGHT_PATH_ALL_CROSSINGS);
+    REQUIRE(crossings.success);
+    CHECK(crossings.point_count > (uint32_t)path.point_count);
+    CHECK(stays_on_mesh(nav_mesh, points, crossings.point_count));
+    OffMeshCorner corner = find_off_mesh_corner(points, crossings.point_count);
+    REQUIRE(corner.found);
+    CHECK(vec3::distance(corner.entry.position, {8, 2, 4}) < 1e-3f);
+
+    uint32_t jump = 0;
+    while (points[jump].type != NODE_TYPE_OFFMESH) jump++;
+    FindStraightPathResult cut = {};
+    find_straight_path::find_straight_path(cut, nav_mesh, path.start_position, path.end_position, {node_path, path.node_path_count},
+                                           {points, jump + 1}, FIND_STRAIGHT_PATH_ALL_CROSSINGS);
+    CHECK(cut.truncated);
+    CHECK(cut.point_count == jump + 1);
+    CHECK(points[jump].type == NODE_TYPE_OFFMESH);
+
+    nav_mesh_search::release(workspace);
+    nav_mesh_api::release(nav_mesh);
+}
+
+struct RandomLedgeLevel {
+    NavMesh nav_mesh;
+    OffMeshSegmentConnectionParams link;
+    float width;
+    float depth;
+};
+
+static RandomLedgeLevel create_random_ledge_level(test::Random &random) {
+    const uint32_t columns = 6;
+    const uint32_t rows = 8;
+    float cell_size = test::next_float(random, 1, 3);
+    Array<float> positions = {};
+    Array<uint32_t> indices = {};
+    for (uint32_t z = 0; z <= rows; z++) {
+        for (uint32_t x = 0; x <= columns; x++) {
+            const float vertex[] = {(float)x * cell_size, 2, (float)z * cell_size - (float)rows * cell_size};
+            for (float value : vertex) positions.push(value);
+        }
+    }
+    for (uint32_t z = 0; z < rows; z++) {
+        for (uint32_t x = 0; x < columns; x++) {
+            bool filled = z == rows - 1 ? test::next_below(random, 5) != 0 : test::next_below(random, 20) < 9;
+            if (!filled) continue;
+            uint32_t a = z * (columns + 1) + x;
+            uint32_t b = a + columns + 1;
+            const uint32_t one_way[] = {a, b, b + 1, a, b + 1, a + 1};
+            const uint32_t other_way[] = {a, b, a + 1, a + 1, b, b + 1};
+            const uint32_t *triangles = test::one_in(random, 2) ? other_way : one_way;
+            for (uint32_t i = 0; i < 6; i++) indices.push(triangles[i]);
+        }
+    }
+    float width = (float)columns * cell_size;
+    push_strip(positions, indices, 0, width, 1, 6, 0, 1);
+
+    float a = test::next_float(random, 0, width * 0.5f);
+    float b = test::next_float(random, a + 1, width);
+    float skew = test::next_float(random, -1, 1);
+    OffMeshSegmentConnectionParams link = ledge_link(OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL);
+    link.start_a = {a, 2, -0.3f};
+    link.start_b = {b, 2, -0.3f - skew * 0.1f};
+    link.end_a = {a + skew, 0, 1.5f};
+    link.end_b = {b, 0, 1.5f};
+    link.inset = 0.1f;
+    if (test::one_in(random, 2)) {
+        Vec3 start_a = link.start_a;
+        Vec3 end_a = link.end_a;
+        link.start_a = link.start_b;
+        link.end_a = link.end_b;
+        link.start_b = start_a;
+        link.end_b = end_a;
+    }
+
+    RandomLedgeLevel level = {create_nav_mesh_from_triangles(positions.data, positions.length / 3, indices.data, indices.length), link, width,
+                              (float)rows * cell_size};
+    positions.release();
+    indices.release();
+    return level;
+}
+
+static const uint64_t RANDOM_LEDGE_SEED = 7;
+
+TEST_CASE("segment crossings never leave the mesh on random levels and exit at the same t") {
+    test::Random random = {RANDOM_LEDGE_SEED};
+    QueryWorkspace workspace = nav_mesh_search::create_query_workspace();
+    uint32_t crossed = 0;
+
+    for (uint32_t index = 0; index < 300; index++) {
+        RandomLedgeLevel level = create_random_ledge_level(random);
+        NavMesh &nav_mesh = level.nav_mesh;
+        uint32_t id = nav_mesh_api::add_off_mesh_segment_connection(nav_mesh, level.link);
+        const OffMeshConnectionSegment &segment = nav_mesh.off_mesh_connections[id].segment;
+
+        for (uint32_t route = 0; route < 6; route++) {
+            Vec3 upper = {test::next_float(random, 0, level.width), 2, test::next_float(random, -level.depth, 0)};
+            Vec3 lower = {test::next_float(random, 0, level.width), 0, test::next_float(random, 1, 6)};
+            bool upwards = test::one_in(random, 3);
+            StraightPathPoint points[128];
+            FindPathResult path = {};
+            find_path::find_path(path, workspace, nav_mesh, upwards ? lower : upper, upwards ? upper : lower, {0.2f, 0.5f, 0.2f},
+                                 nav_mesh_api::DEFAULT_QUERY_FILTER, points);
+            if (!path.success || (path.flags & FIND_PATH_RESULT_PARTIAL_PATH)) continue;
+            OffMeshCorner corner = find_off_mesh_corner(points, path.point_count);
+            if (!corner.found) continue;
+            crossed++;
+
+            INFO("level ", index, " route ", route);
+            CHECK(stays_on_mesh(nav_mesh, points, path.point_count));
+            Vec3 entry_a = upwards ? segment.end_a : segment.start_a;
+            Vec3 entry_b = upwards ? segment.end_b : segment.start_b;
+            Vec3 exit_a = upwards ? segment.start_a : segment.end_a;
+            Vec3 exit_b = upwards ? segment.start_b : segment.end_b;
+            float t = closest_t(corner.entry.position, entry_a, entry_b);
+            CHECK(vec3::distance(corner.entry.position, vec3::lerp(entry_a, entry_b, t)) < 1e-3f);
+            CHECK(vec3::distance(corner.exit.position, vec3::lerp(exit_a, exit_b, t)) < 1e-3f);
+        }
+        nav_mesh_api::release(nav_mesh);
+    }
+
+    CHECK(crossed > 300);
+    nav_mesh_search::release(workspace);
+}
