@@ -17,11 +17,21 @@ struct ModelNode {
     bool hidden;
 };
 
+struct ModelTexture {
+    int width;
+    int height;
+    roam::Array<uint8_t> pixels;
+};
+
 struct Model {
     bool loaded;
+    uint32_t id;
     roam::Array<ModelNode> nodes;
     roam::Array<float> positions;
     roam::Array<float> colors;
+    roam::Array<float> uvs;
+    roam::Array<int32_t> vertex_textures;
+    roam::Array<ModelTexture> textures;
     roam::Array<uint32_t> indices;
     roam::Array<float> walkable_positions;
     roam::Array<uint32_t> walkable_indices;

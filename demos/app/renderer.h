@@ -17,6 +17,7 @@ struct ColorVertex {
 struct LitVertex {
     float x, y, z;
     float nx, ny, nz;
+    float u, v;
     uint32_t color;
 };
 
@@ -41,6 +42,17 @@ struct StaticDrawing {
     GpuBatch lines;
 };
 
+struct LevelRange {
+    int first;
+    int count;
+    int32_t texture;
+};
+
+struct LevelTexture {
+    sg_image image;
+    sg_view view;
+};
+
 struct TransientBuffer {
     sg_buffer buffer;
     uint32_t capacity;
@@ -53,8 +65,13 @@ struct Renderer {
     sg_pipeline transparent_pipeline;
     sg_pipeline line_pipeline;
     sg_pipeline lit_pipeline;
+    sg_sampler level_sampler;
+    LevelTexture white_texture;
     TransientBuffer transient[3];
     GpuBatch level;
+    roam::Array<LevelRange> level_ranges;
+    roam::Array<LevelTexture> level_textures;
+    uint32_t level_textures_model;
     DrawList frame;
 };
 

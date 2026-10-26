@@ -9,7 +9,10 @@ FetchContent_Declare(imgui
 FetchContent_Declare(cgltf
     GIT_REPOSITORY https://github.com/jkuhlmann/cgltf.git
     GIT_TAG v1.15)
-FetchContent_MakeAvailable(sokol imgui cgltf)
+FetchContent_Declare(stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG 013ac3beddff3dbffafd5177e7972067cd2b5083)
+FetchContent_MakeAvailable(sokol imgui cgltf stb)
 
 add_library(roam_demos_imgui STATIC
     ${imgui_SOURCE_DIR}/imgui.cpp
@@ -22,7 +25,7 @@ file(GLOB ROAM_DEMO_SOURCES CONFIGURE_DEPENDS app/*.cpp examples/*.cpp)
 file(GLOB ROAM_DEMO_SHARED_SOURCES CONFIGURE_DEPENDS app/*.cpp examples/*.cpp)
 list(REMOVE_ITEM ROAM_DEMO_SHARED_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/app/main.cpp ${CMAKE_CURRENT_SOURCE_DIR}/app/sokol.cpp)
 add_executable(roam_demos ${ROAM_DEMO_SOURCES})
-target_include_directories(roam_demos PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${sokol_SOURCE_DIR} ${sokol_SOURCE_DIR}/util ${cgltf_SOURCE_DIR})
+target_include_directories(roam_demos PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${sokol_SOURCE_DIR} ${sokol_SOURCE_DIR}/util ${cgltf_SOURCE_DIR} ${stb_SOURCE_DIR})
 target_link_libraries(roam_demos PRIVATE roam_blocks roam_demos_imgui)
 roam_compile_options(roam_demos)
 
@@ -50,7 +53,7 @@ endif()
 
 if(NOT EMSCRIPTEN)
     add_executable(roam_demos_smoke ${ROAM_DEMO_SHARED_SOURCES} smoke/main.cpp smoke/sokol.cpp)
-    target_include_directories(roam_demos_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${sokol_SOURCE_DIR} ${sokol_SOURCE_DIR}/util ${cgltf_SOURCE_DIR})
+    target_include_directories(roam_demos_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${sokol_SOURCE_DIR} ${sokol_SOURCE_DIR}/util ${cgltf_SOURCE_DIR} ${stb_SOURCE_DIR})
     target_link_libraries(roam_demos_smoke PRIVATE roam_blocks roam_demos_imgui)
     target_compile_definitions(roam_demos_smoke PRIVATE SOKOL_DUMMY_BACKEND ROAM_DEMOS_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets")
     roam_compile_options(roam_demos_smoke)

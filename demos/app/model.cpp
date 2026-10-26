@@ -10,24 +10,74 @@
 #include "cgltf.h"
 #include "roam/blocks/geometry/merge_positions_and_indices.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_ONLY_PNG
+#define STBI_ONLY_JPEG
+#define STBI_NO_STDIO
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Weverything"
+#include "stb_image.h"
+#pragma clang diagnostic pop
+
 using namespace roam;
 
 namespace model {
 
-static void append_primitive(Model &model, Array<InputTriangleMesh> &views, Array<Array<float>> &owned_positions, Array<Array<uint32_t>> &owned_indices,
-                             const cgltf_primitive &primitive, const float *world, bool walkable) {
+struct Builder {
+    Model model;
+    const cgltf_data *data;
+    ModelLoadOptions options;
+    Array<int32_t> image_textures;
+    Array<InputTriangleMesh> views;
+    Array<Array<float>> owned_positions;
+    Array<Array<uint32_t>> owned_indices;
+};
+
+static int32_t decode_texture(Builder &builder, const cgltf_texture *texture) {
+    if (!texture || !texture->image || !texture->image->buffer_view) return -1;
+    uint32_t image_index = (uint32_t)cgltf_image_index(builder.data, texture->image);
+    if (builder.image_textures[image_index] != -2) return builder.image_textures[image_index];
+
+    builder.image_textures[image_index] = -1;
+    const cgltf_buffer_view *view = texture->image->buffer_view;
+    const uint8_t *bytes = (const uint8_t *)cgltf_buffer_view_data(view);
+    if (!bytes) return -1;
+
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    uint8_t *pixels = stbi_load_from_memory(bytes, (int)view->size, &width, &height, &channels, 4);
+    if (!pixels) return -1;
+
+    ModelTexture decoded = {width, height, {}};
+    decoded.pixels.resize((uint32_t)(width * height * 4));
+    memcpy(decoded.pixels.data, pixels, decoded.pixels.length);
+    stbi_image_free(pixels);
+
+    builder.image_textures[image_index] = (int32_t)builder.model.textures.length;
+    builder.model.textures.push(decoded);
+    return builder.image_textures[image_index];
+}
+
+static void append_primitive(Builder &builder, const cgltf_primitive &primitive, const float *world, bool walkable) {
     if (primitive.type != cgltf_primitive_type_triangles) return;
+    Model &model = builder.model;
 
     const cgltf_accessor *positions = nullptr;
+    const cgltf_accessor *uvs = nullptr;
     for (cgltf_size i = 0; i < primitive.attributes_count; i++) {
-        if (primitive.attributes[i].type == cgltf_attribute_type_position) positions = primitive.attributes[i].data;
+        const cgltf_attribute &attribute = primitive.attributes[i];
+        if (attribute.type == cgltf_attribute_type_position) positions = attribute.data;
+        if (attribute.type == cgltf_attribute_type_texcoord && attribute.index == 0) uvs = attribute.data;
     }
     if (!positions) return;
 
     Vec3 color = {0.8f, 0.8f, 0.8f};
+    int32_t texture = -1;
     if (primitive.material && primitive.material->has_pbr_metallic_roughness) {
-        const cgltf_float *factor = primitive.material->pbr_metallic_roughness.base_color_factor;
-        color = {factor[0], factor[1], factor[2]};
+        const cgltf_pbr_metallic_roughness &pbr = primitive.material->pbr_metallic_roughness;
+        color = {pbr.base_color_factor[0], pbr.base_color_factor[1], pbr.base_color_factor[2]};
+        if (uvs) texture = decode_texture(builder, pbr.base_color_texture.texture);
     }
 
     uint32_t vertex_count = (uint32_t)positions->count;
@@ -44,6 +94,8 @@ static void append_primitive(Model &model, Array<InputTriangleMesh> &views, Arra
             world[1] * local[0] + world[5] * local[1] + world[9] * local[2] + world[13],
             world[2] * local[0] + world[6] * local[1] + world[10] * local[2] + world[14],
         };
+        float uv[2] = {0, 0};
+        if (uvs) cgltf_accessor_read_float(uvs, i, uv, 2);
         vec3::store(world_positions.data, i * 3, p);
         model.positions.push(p.x);
         model.positions.push(p.y);
@@ -51,6 +103,9 @@ static void append_primitive(Model &model, Array<InputTriangleMesh> &views, Arra
         model.colors.push(color.x);
         model.colors.push(color.y);
         model.colors.push(color.z);
+        model.uvs.push(uv[0]);
+        model.uvs.push(uv[1]);
+        model.vertex_textures.push(texture);
         model.bounds = box3::expand_by_point(model.bounds, p);
         model_node.bounds = box3::expand_by_point(model_node.bounds, p);
     }
@@ -64,9 +119,9 @@ static void append_primitive(Model &model, Array<InputTriangleMesh> &views, Arra
     }
     model_node.index_count += index_count;
 
-    owned_positions.push(world_positions);
-    owned_indices.push(indices);
-    if (walkable) views.push({world_positions, {indices.data, index_count}});
+    builder.owned_positions.push(world_positions);
+    builder.owned_indices.push(indices);
+    if (walkable) builder.views.push({world_positions, {indices.data, index_count}});
 }
 
 static bool is_unwalkable(const cgltf_extras &extras) {
@@ -78,8 +133,9 @@ static bool is_unwalkable(const cgltf_extras &extras) {
     return strncmp(value, "false", 5) == 0;
 }
 
-static void append_node(Model &model, Array<InputTriangleMesh> &views, Array<Array<float>> &owned_positions, Array<Array<uint32_t>> &owned_indices,
-                        const cgltf_node &node, const ModelLoadOptions &options, bool included, int32_t parent) {
+static void append_node(Builder &builder, const cgltf_node &node, bool included, int32_t parent) {
+    Model &model = builder.model;
+    const ModelLoadOptions &options = builder.options;
     included = included || !options.node_name || (node.name && strcmp(node.name, options.node_name) == 0);
 
     ModelNode model_node = {};
@@ -95,38 +151,38 @@ static void append_node(Model &model, Array<InputTriangleMesh> &views, Array<Arr
         float world[16];
         cgltf_node_transform_world(&node, world);
         bool walkable = !options.skip_unwalkable_nodes || !is_unwalkable(node.extras);
-        for (cgltf_size i = 0; i < node.mesh->primitives_count; i++) {
-            append_primitive(model, views, owned_positions, owned_indices, node.mesh->primitives[i], world, walkable);
-        }
+        for (cgltf_size i = 0; i < node.mesh->primitives_count; i++) append_primitive(builder, node.mesh->primitives[i], world, walkable);
     }
-    for (cgltf_size i = 0; i < node.children_count; i++) {
-        append_node(model, views, owned_positions, owned_indices, *node.children[i], options, included, node_index);
-    }
+    for (cgltf_size i = 0; i < node.children_count; i++) append_node(builder, *node.children[i], included, node_index);
 }
 
-static Model build(cgltf_data *data, const ModelLoadOptions &options) {
-    Model model = {};
-    model.bounds = box3::empty();
+static uint32_t next_model_id = 1;
 
-    Array<InputTriangleMesh> views = {};
-    Array<Array<float>> owned_positions = {};
-    Array<Array<uint32_t>> owned_indices = {};
+static Model build(cgltf_data *data, const ModelLoadOptions &options) {
+    Builder builder = {};
+    builder.model.id = next_model_id++;
+    builder.model.bounds = box3::empty();
+    builder.data = data;
+    builder.options = options;
+    builder.image_textures.resize((uint32_t)data->images_count, -2);
 
     const cgltf_scene *scene = data->scene ? data->scene : (data->scenes_count > 0 ? &data->scenes[0] : nullptr);
     if (scene) {
-        for (cgltf_size i = 0; i < scene->nodes_count; i++) append_node(model, views, owned_positions, owned_indices, *scene->nodes[i], options, false, -1);
+        for (cgltf_size i = 0; i < scene->nodes_count; i++) append_node(builder, *scene->nodes[i], false, -1);
     }
 
-    MergedMesh merged = merge_positions_and_indices::merge_positions_and_indices(views);
+    Model &model = builder.model;
+    MergedMesh merged = merge_positions_and_indices::merge_positions_and_indices(builder.views);
     model.walkable_positions = merged.positions;
     model.walkable_indices = merged.indices;
     model.loaded = model.indices.length > 0;
 
-    for (Array<float> &positions : owned_positions) positions.release();
-    for (Array<uint32_t> &indices : owned_indices) indices.release();
-    views.release();
-    owned_positions.release();
-    owned_indices.release();
+    for (Array<float> &positions : builder.owned_positions) positions.release();
+    for (Array<uint32_t> &indices : builder.owned_indices) indices.release();
+    builder.views.release();
+    builder.owned_positions.release();
+    builder.owned_indices.release();
+    builder.image_textures.release();
     return model;
 }
 
@@ -178,6 +234,10 @@ void release(Model &model) {
     model.nodes.release();
     model.positions.release();
     model.colors.release();
+    model.uvs.release();
+    model.vertex_textures.release();
+    for (ModelTexture &texture : model.textures) texture.pixels.release();
+    model.textures.release();
     model.indices.release();
     model.walkable_positions.release();
     model.walkable_indices.release();

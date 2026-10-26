@@ -36,12 +36,25 @@ static const char *LIT_VERTEX_SHADER = SHADER_HEADER
     "uniform vec4 light;\n"
     "layout(location = 0) in vec3 position;\n"
     "layout(location = 1) in vec3 normal;\n"
-    "layout(location = 2) in vec4 color0;\n"
+    "layout(location = 2) in vec2 texcoord0;\n"
+    "layout(location = 3) in vec4 color0;\n"
     "out vec4 color;\n"
+    "out vec2 uv;\n"
     "void main() {\n"
     "    gl_Position = mvp * vec4(position, 1.0);\n"
     "    float shade = 0.45 + 0.55 * abs(dot(normalize(normal), light.xyz));\n"
-    "    color = vec4(pow(color0.rgb * shade, vec3(1.0 / 2.2)), 1.0);\n"
+    "    color = vec4(color0.rgb * shade, 1.0);\n"
+    "    uv = texcoord0;\n"
+    "}\n";
+
+static const char *LIT_FRAGMENT_SHADER = SHADER_HEADER
+    "uniform sampler2D tex;\n"
+    "in vec4 color;\n"
+    "in vec2 uv;\n"
+    "layout(location = 0) out vec4 frag_color;\n"
+    "void main() {\n"
+    "    vec3 albedo = pow(texture(tex, uv).rgb, vec3(2.2));\n"
+    "    frag_color = vec4(pow(albedo * color.rgb, vec3(1.0 / 2.2)), 1.0);\n"
     "}\n";
 
 struct ColorUniforms {
@@ -78,16 +91,26 @@ static sg_shader make_color_shader() {
 static sg_shader make_lit_shader() {
     sg_shader_desc desc = {};
     desc.vertex_func.source = LIT_VERTEX_SHADER;
-    desc.fragment_func.source = COLOR_FRAGMENT_SHADER;
+    desc.fragment_func.source = LIT_FRAGMENT_SHADER;
     desc.attrs[0].glsl_name = "position";
     desc.attrs[1].glsl_name = "normal";
-    desc.attrs[2].glsl_name = "color0";
+    desc.attrs[2].glsl_name = "texcoord0";
+    desc.attrs[3].glsl_name = "color0";
     desc.uniform_blocks[0].stage = SG_SHADERSTAGE_VERTEX;
     desc.uniform_blocks[0].size = sizeof(LitUniforms);
     desc.uniform_blocks[0].glsl_uniforms[0].type = SG_UNIFORMTYPE_MAT4;
     desc.uniform_blocks[0].glsl_uniforms[0].glsl_name = "mvp";
     desc.uniform_blocks[0].glsl_uniforms[1].type = SG_UNIFORMTYPE_FLOAT4;
     desc.uniform_blocks[0].glsl_uniforms[1].glsl_name = "light";
+    desc.views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT;
+    desc.views[0].texture.image_type = SG_IMAGETYPE_2D;
+    desc.views[0].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
+    desc.samplers[0].stage = SG_SHADERSTAGE_FRAGMENT;
+    desc.samplers[0].sampler_type = SG_SAMPLERTYPE_FILTERING;
+    desc.texture_sampler_pairs[0].stage = SG_SHADERSTAGE_FRAGMENT;
+    desc.texture_sampler_pairs[0].view_slot = 0;
+    desc.texture_sampler_pairs[0].sampler_slot = 0;
+    desc.texture_sampler_pairs[0].glsl_name = "tex";
     desc.label = "roam lit shader";
     return sg_make_shader(&desc);
 }
@@ -117,7 +140,8 @@ static sg_pipeline make_lit_pipeline(sg_shader shader) {
     desc.shader = shader;
     desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3;
     desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT3;
-    desc.layout.attrs[2].format = SG_VERTEXFORMAT_UBYTE4N;
+    desc.layout.attrs[2].format = SG_VERTEXFORMAT_FLOAT2;
+    desc.layout.attrs[3].format = SG_VERTEXFORMAT_UBYTE4N;
     desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
     desc.depth.compare = SG_COMPAREFUNC_LESS_EQUAL;
     desc.depth.write_enabled = true;
@@ -128,6 +152,28 @@ static sg_pipeline make_lit_pipeline(sg_shader shader) {
     return sg_make_pipeline(&desc);
 }
 
+static LevelTexture make_texture(int width, int height, const uint8_t *pixels, const char *label) {
+    sg_image_desc desc = {};
+    desc.width = width;
+    desc.height = height;
+    desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+    desc.data.mip_levels[0] = {pixels, (size_t)width * height * 4};
+    desc.label = label;
+
+    LevelTexture texture = {};
+    texture.image = sg_make_image(&desc);
+    sg_view_desc view = {};
+    view.texture.image = texture.image;
+    texture.view = sg_make_view(&view);
+    return texture;
+}
+
+static void release(LevelTexture &texture) {
+    if (texture.view.id != SG_INVALID_ID) sg_destroy_view(texture.view);
+    if (texture.image.id != SG_INVALID_ID) sg_destroy_image(texture.image);
+    texture = {};
+}
+
 Renderer create() {
     Renderer renderer = {};
     renderer.color_shader = make_color_shader();
@@ -136,6 +182,16 @@ Renderer create() {
     renderer.transparent_pipeline = make_color_pipeline(renderer.color_shader, SG_PRIMITIVETYPE_TRIANGLES, true, false, "roam transparent pipeline");
     renderer.line_pipeline = make_color_pipeline(renderer.color_shader, SG_PRIMITIVETYPE_LINES, true, false, "roam line pipeline");
     renderer.lit_pipeline = make_lit_pipeline(renderer.lit_shader);
+
+    sg_sampler_desc sampler = {};
+    sampler.min_filter = SG_FILTER_LINEAR;
+    sampler.mag_filter = SG_FILTER_LINEAR;
+    sampler.wrap_u = SG_WRAP_REPEAT;
+    sampler.wrap_v = SG_WRAP_REPEAT;
+    sampler.label = "roam level sampler";
+    renderer.level_sampler = sg_make_sampler(&sampler);
+    const uint8_t white[4] = {255, 255, 255, 255};
+    renderer.white_texture = make_texture(1, 1, white, "roam white texture");
     return renderer;
 }
 
@@ -144,8 +200,18 @@ static void release(GpuBatch &batch) {
     batch = {};
 }
 
+static void release_level_textures(Renderer &renderer) {
+    for (LevelTexture &texture : renderer.level_textures) release(texture);
+    renderer.level_textures.release();
+    renderer.level_textures_model = 0;
+}
+
 void destroy(Renderer &renderer) {
     release(renderer.level);
+    renderer.level_ranges.release();
+    release_level_textures(renderer);
+    release(renderer.white_texture);
+    sg_destroy_sampler(renderer.level_sampler);
     for (TransientBuffer &transient : renderer.transient) {
         if (transient.buffer.id != SG_INVALID_ID) sg_destroy_buffer(transient.buffer);
     }
@@ -169,28 +235,55 @@ static GpuBatch make_batch(const void *data, uint32_t vertex_size, uint32_t vert
     return batch;
 }
 
+static int32_t triangle_texture(const Model &model, uint32_t first_index) {
+    uint32_t index = model.indices[first_index];
+    return index < model.vertex_textures.length ? model.vertex_textures[index] : -1;
+}
+
 static void push_level_triangle(Array<LitVertex> &vertices, const Model &model, uint32_t first_index) {
     Vec3 corners[3];
     uint32_t colors[3];
+    float uvs[3][2];
     for (int k = 0; k < 3; k++) {
         uint32_t index = model.indices[first_index + (uint32_t)k];
         corners[k] = vec3::load(model.positions.data, index * 3);
         Vec3 color = vec3::load(model.colors.data, index * 3);
         colors[k] = pack({color.x, color.y, color.z, 1});
+        bool has_uv = index * 2 + 1 < model.uvs.length;
+        uvs[k][0] = has_uv ? model.uvs[index * 2] : 0;
+        uvs[k][1] = has_uv ? model.uvs[index * 2 + 1] : 0;
     }
     Vec3 normal = vec3::normalize(vec3::cross(vec3::subtract(corners[1], corners[0]), vec3::subtract(corners[2], corners[0])));
-    for (int k = 0; k < 3; k++) vertices.push({corners[k].x, corners[k].y, corners[k].z, normal.x, normal.y, normal.z, colors[k]});
+    for (int k = 0; k < 3; k++) {
+        vertices.push({corners[k].x, corners[k].y, corners[k].z, normal.x, normal.y, normal.z, uvs[k][0], uvs[k][1], colors[k]});
+    }
 }
 
 void set_level(Renderer &renderer, const Model &model) {
     release(renderer.level);
+    renderer.level_ranges.clear();
+
+    if (model.id == 0 || renderer.level_textures_model != model.id) {
+        release_level_textures(renderer);
+        for (const ModelTexture &texture : model.textures) {
+            renderer.level_textures.push(make_texture(texture.width, texture.height, texture.pixels.data, "roam level texture"));
+        }
+        renderer.level_textures_model = model.id;
+    }
 
     Array<LitVertex> vertices = {};
     vertices.reserve(model.indices.length);
-    for (const ModelNode &node : model.nodes) {
-        if (node.hidden) continue;
-        uint32_t end = node.index_start + node.index_count;
-        for (uint32_t i = node.index_start; i + 2 < end; i += 3) push_level_triangle(vertices, model, i);
+    for (int32_t texture = -1; texture < (int32_t)model.textures.length; texture++) {
+        int first = (int)vertices.length;
+        for (const ModelNode &node : model.nodes) {
+            if (node.hidden) continue;
+            uint32_t end = node.index_start + node.index_count;
+            for (uint32_t i = node.index_start; i + 2 < end; i += 3) {
+                if (triangle_texture(model, i) == texture) push_level_triangle(vertices, model, i);
+            }
+        }
+        int count = (int)vertices.length - first;
+        if (count > 0) renderer.level_ranges.push({first, count, texture});
     }
 
     renderer.level = make_batch(vertices.data, sizeof(LitVertex), vertices.length, "roam level");
@@ -445,12 +538,16 @@ void render(Renderer &renderer, const Camera &camera, const StaticDrawing *stati
         lit.light[2] = light.z;
 
         sg_apply_pipeline(renderer.lit_pipeline);
-        sg_bindings bindings = {};
-        bindings.vertex_buffers[0] = renderer.level.buffer;
-        sg_apply_bindings(&bindings);
         sg_range range = {&lit, sizeof(lit)};
-        sg_apply_uniforms(0, &range);
-        sg_draw(0, renderer.level.vertex_count, 1);
+        for (const LevelRange &level_range : renderer.level_ranges) {
+            sg_bindings bindings = {};
+            bindings.vertex_buffers[0] = renderer.level.buffer;
+            bindings.views[0] = level_range.texture >= 0 ? renderer.level_textures[(uint32_t)level_range.texture].view : renderer.white_texture.view;
+            bindings.samplers[0] = renderer.level_sampler;
+            sg_apply_bindings(&bindings);
+            sg_apply_uniforms(0, &range);
+            sg_draw(level_range.first, level_range.count, 1);
+        }
     }
 
     for (uint32_t i = 0; i < static_count; i++) draw_batch(renderer.opaque_pipeline, statics[i].opaque_triangles, uniforms);
