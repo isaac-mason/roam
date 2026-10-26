@@ -369,6 +369,9 @@ static NavMeshTile copy_tile(const NavMeshTile &tile) {
     copy.detail_vertices = copy_of(tile.detail_vertices);
     copy.detail_triangles = copy_of(tile.detail_triangles);
     copy.poly_nodes = {};
+    copy.poly_clusters = {};
+    copy.clusters = {};
+    copy.portals = {};
     copy.bv_tree.nodes = copy_of(tile.bv_tree.nodes);
     return copy;
 }

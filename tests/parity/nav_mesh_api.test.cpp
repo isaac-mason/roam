@@ -7,6 +7,7 @@
 #include "tests/harness/test.h"
 #include "tests/parity/nav_test_pipeline.h"
 #include "tests/parity/nav_test_nav_mesh.h"
+#include "tests/query/test_nav_meshes.h"
 
 using namespace roam;
 
