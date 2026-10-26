@@ -11,14 +11,16 @@
 #include "tests/query/test_nav_meshes.h"
 
 static void push_strip(Array<float> &positions, Array<uint32_t> &indices, float x0, float x1, float z0, float z1, float y, int pieces) {
-    for (int i = 0; i < pieces; i++) {
-        float a = x0 + (x1 - x0) * (float)i / (float)pieces;
-        float b = x0 + (x1 - x0) * (float)(i + 1) / (float)pieces;
-        uint32_t base = positions.length / 3;
-        const float quad[] = {a, y, z0, b, y, z0, b, y, z1, a, y, z1};
-        for (float value : quad) positions.push(value);
-        const uint32_t triangles[] = {0, 2, 1, 0, 3, 2};
-        for (uint32_t index : triangles) indices.push(base + index);
+    uint32_t base = positions.length / 3;
+    for (int i = 0; i <= pieces; i++) {
+        float x = x0 + (x1 - x0) * (float)i / (float)pieces;
+        const float column[] = {x, y, z0, x, y, z1};
+        for (float value : column) positions.push(value);
+    }
+    for (uint32_t i = 0; i < (uint32_t)pieces; i++) {
+        uint32_t a = base + i * 2;
+        const uint32_t triangles[] = {a, a + 1, a + 3, a, a + 3, a + 2};
+        for (uint32_t index : triangles) indices.push(index);
     }
 }
 
@@ -344,5 +346,49 @@ TEST_CASE("saving and loading keeps segment connections and their pieces") {
 
     bytes.release();
     nav_mesh_api::release(loaded);
+    nav_mesh_api::release(nav_mesh);
+}
+
+static float path_length(const StraightPathPoint *points, uint32_t count) {
+    float length = 0;
+    for (uint32_t i = 1; i < count; i++) length += vec3::distance(points[i - 1].position, points[i].position);
+    return length;
+}
+
+TEST_CASE("paths cross a segment connection where the whole route is shortest, not just nearest") {
+    NavMesh nav_mesh = create_ledge();
+    uint32_t id = nav_mesh_api::add_off_mesh_segment_connection(nav_mesh, ledge_link(OFF_MESH_CONNECTION_DIRECTION_START_TO_END));
+    QueryWorkspace workspace = nav_mesh_search::create_query_workspace();
+    const OffMeshConnectionSegment &segment = nav_mesh.off_mesh_connections[id].segment;
+
+    struct Case {
+        Vec3 start;
+        Vec3 end;
+    };
+    const Case cases[] = {{{2, 2, 2}, {8, 0, 9}}, {{8, 2, 3}, {2, 0, 6}}, {{5, 2, 0.5f}, {9, 0, 9.5f}}, {{1.5f, 2, 3.5f}, {8.5f, 0, 5.5f}}};
+    for (const Case &route : cases) {
+        INFO("start ", route.start.x, " end ", route.end.x);
+        StraightPathPoint points[32];
+        FindPathResult path = {};
+        find_path::find_path(path, workspace, nav_mesh, route.start, route.end, {0.5f, 0.5f, 0.5f}, nav_mesh_api::DEFAULT_QUERY_FILTER, points);
+        REQUIRE(path.success);
+        OffMeshCorner corner = find_off_mesh_corner(points, path.point_count);
+        REQUIRE(corner.found);
+
+        float best = 1e30f;
+        for (int k = 0; k <= 4000; k++) {
+            float t = (float)k / 4000;
+            if (t < 0.2f / 8 || t > 1 - 0.2f / 8) continue;
+            Vec3 a = vec3::lerp(segment.start_a, segment.start_b, t);
+            Vec3 b = vec3::lerp(segment.end_a, segment.end_b, t);
+            float length = vec3::distance(points[0].position, a) + vec3::distance(a, b) + vec3::distance(b, points[path.point_count - 1].position);
+            if (length < best) best = length;
+        }
+        float actual = path_length(points, path.point_count);
+        CHECK(actual <= best * 1.02f + 1e-3f);
+        CHECK(actual >= best - 1e-3f);
+    }
+
+    nav_mesh_search::release(workspace);
     nav_mesh_api::release(nav_mesh);
 }

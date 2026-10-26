@@ -288,15 +288,25 @@ static void raycast_base(RaycastResult &out, const NavMesh &nav_mesh, NodeRef st
 
 static int link_state(const NavMeshLink &link) { return link.side != 0xff ? link.side >> 1 : 0; }
 
-static uint32_t get_or_add_neighbour(const NavMesh &nav_mesh, SearchNodePool &pool, NodeRef best_node_ref, NodeRef neighbour_node_ref, int state) {
+static Vec3 neighbour_position(const NavMesh &nav_mesh, const SearchNode &best, NodeRef neighbour_node_ref) {
+    if (node::get_node_ref_type(neighbour_node_ref) == NODE_TYPE_OFFMESH) {
+        OffMeshCrossing crossing;
+        nav_mesh_api::get_off_mesh_crossing(crossing, nav_mesh, best.node_ref, neighbour_node_ref, best.position);
+        if (crossing.success) return crossing.start;
+    } else if (node::get_node_ref_type(best.node_ref) == NODE_TYPE_OFFMESH && best.parent_node_ref != INVALID_NODE_REF) {
+        OffMeshCrossing crossing;
+        nav_mesh_api::get_off_mesh_crossing(crossing, nav_mesh, best.parent_node_ref, best.node_ref, best.position);
+        if (crossing.success) return crossing.end;
+    }
+    GetEdgeMidPointResult mid;
+    edge_mid_point(mid, nav_mesh, best.node_ref, neighbour_node_ref);
+    return mid.position;
+}
+
+static uint32_t get_or_add_neighbour(const NavMesh &nav_mesh, SearchNodePool &pool, const SearchNode &best, NodeRef neighbour_node_ref, int state) {
     int32_t existing = get_search_node(pool, neighbour_node_ref, state);
     if (existing != NULL_SEARCH_NODE) return (uint32_t)existing;
-
-    SearchNode node = make_search_node(neighbour_node_ref, state, 0, {0, 0, 0});
-    GetEdgeMidPointResult mid;
-    edge_mid_point(mid, nav_mesh, best_node_ref, neighbour_node_ref);
-    node.position = mid.position;
-    return add_search_node(pool, node);
+    return add_search_node(pool, make_search_node(neighbour_node_ref, state, 0, neighbour_position(nav_mesh, best, neighbour_node_ref)));
 }
 
 static int32_t search_node_path(FindNodePathResult &out, QueryWorkspace &workspace, const NavMesh &nav_mesh, NodeRef start_node_ref,
@@ -356,7 +366,7 @@ static int32_t search_node_path(FindNodePathResult &out, QueryWorkspace &workspa
             if (!nav_mesh_api::passes_filter(filter, neighbour_node_ref, nav_mesh)) continue;
 
             int state = link_state(link);
-            uint32_t neighbour_index = get_or_add_neighbour(nav_mesh, nodes, best_node_ref, neighbour_node_ref, state);
+            uint32_t neighbour_index = get_or_add_neighbour(nav_mesh, nodes, best, neighbour_node_ref, state);
             Vec3 neighbour_position = nodes.nodes[neighbour_index].position;
 
             float cost = 0;
@@ -545,7 +555,7 @@ int update_sliced_find_node_path(SlicedNodePathQuery &query, const NavMesh &nav_
             if (!nav_mesh_api::passes_filter(filter, neighbour_node_ref, nav_mesh)) continue;
 
             int state = link_state(link);
-            uint32_t neighbour_index = get_or_add_neighbour(nav_mesh, nodes, best_node_ref, neighbour_node_ref, state);
+            uint32_t neighbour_index = get_or_add_neighbour(nav_mesh, nodes, best, neighbour_node_ref, state);
             Vec3 neighbour_position = nodes.nodes[neighbour_index].position;
 
             float cost = 0;

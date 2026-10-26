@@ -83,6 +83,59 @@ static FindStraightPathResult stopped(uint32_t status, uint32_t base_flags, cons
     return make_result(flags, path);
 }
 
+static const int CROSSING_SEARCH_STEPS = 40;
+static const int CROSSING_REFINEMENTS = 2;
+
+static Vec3 corner_after(const NavMesh &nav_mesh, const NodeRef *path, int path_size, int valid_count, int first, Vec3 from, Vec3 end) {
+    Vec3 apex = from;
+    Vec3 funnel_left = from;
+    Vec3 funnel_right = from;
+    for (int k = first; k < path_size; k++) {
+        Vec3 left = end;
+        Vec3 right = end;
+        bool last = k + 1 >= path_size || k + 1 >= valid_count;
+        if (!last) {
+            GetPortalPointsResult portal;
+            nav_mesh_search::get_portal_points_unchecked(portal, nav_mesh, path[k], path[k + 1]);
+            if (!portal.success) return end;
+            left = portal.left;
+            right = portal.right;
+            if (node::get_node_ref_type(path[k + 1]) == NODE_TYPE_OFFMESH) {
+                left = vec3::lerp(portal.left, portal.right, 0.5f);
+                right = left;
+                last = true;
+            }
+        }
+
+        if (geometry::tri_area_2d(apex, funnel_right, right) <= 0.0f) {
+            if (!vec3::equals(apex, funnel_right) && geometry::tri_area_2d(apex, funnel_left, right) <= 0.0f) return funnel_left;
+            funnel_right = right;
+        }
+        if (geometry::tri_area_2d(apex, funnel_left, left) >= 0.0f) {
+            if (!vec3::equals(apex, funnel_left) && geometry::tri_area_2d(apex, funnel_right, left) >= 0.0f) return funnel_right;
+            funnel_left = left;
+        }
+        if (last) return left;
+    }
+    return end;
+}
+
+static float crossing_length(Vec3 apex, Vec3 next, const OffMeshPieceEdge &entry, const OffMeshPieceEdge &exit, float u) {
+    return vec3::distance(apex, vec3::lerp(entry.left, entry.right, u)) + vec3::distance(vec3::lerp(exit.left, exit.right, u), next);
+}
+
+static float best_crossing(Vec3 apex, Vec3 next, const OffMeshPieceEdge &entry, const OffMeshPieceEdge &exit) {
+    float low = 0;
+    float high = 1;
+    for (int step = 0; step < CROSSING_SEARCH_STEPS; step++) {
+        float a = low + (high - low) / 3;
+        float b = high - (high - low) / 3;
+        if (crossing_length(apex, next, entry, exit, a) <= crossing_length(apex, next, entry, exit, b)) high = b;
+        else low = a;
+    }
+    return (low + high) * 0.5f;
+}
+
 static const uint32_t ANY_CROSSINGS = FIND_STRAIGHT_PATH_AREA_CROSSINGS | FIND_STRAIGHT_PATH_ALL_CROSSINGS;
 static const uint32_t PARTIAL = FIND_STRAIGHT_PATH_RESULT_SUCCESS | FIND_STRAIGHT_PATH_RESULT_PARTIAL_PATH;
 static const uint32_t INVALID = FIND_STRAIGHT_PATH_RESULT_NONE | FIND_STRAIGHT_PATH_RESULT_INVALID_INPUT;
@@ -165,6 +218,19 @@ static FindStraightPathResult find_straight_path_in(const NavMesh &nav_mesh, Vec
                     Vec3 off_mesh_end = crossing.end;
                     NodeRef to_poly_ref = crossing.end_poly_ref;
 
+                    OffMeshPieceEdge entry;
+                    OffMeshPieceEdge exit;
+                    nav_mesh_api::get_off_mesh_piece_edge(entry, nav_mesh, to_ref, crossing.from_start ? 0 : 1);
+                    nav_mesh_api::get_off_mesh_piece_edge(exit, nav_mesh, to_ref, crossing.from_start ? 1 : 0);
+                    if (crossing.success && entry.success && exit.success && !vec3::equals(entry.left, entry.right)) {
+                        for (int refinement = 0; refinement < CROSSING_REFINEMENTS; refinement++) {
+                            Vec3 next = corner_after(nav_mesh, path_node_refs, path_size, valid_count, i + 2, off_mesh_end, closest_end_position);
+                            float u = best_crossing(portal_apex, next, entry, exit);
+                            off_mesh_start = vec3::lerp(entry.left, entry.right, u);
+                            off_mesh_end = vec3::lerp(exit.left, exit.right, u);
+                        }
+                    }
+
                     if (straight_path_options & ANY_CROSSINGS) {
                         uint32_t status =
                             append_portals(nav_mesh, apex_index, i, off_mesh_start, path_node_refs, path, straight_path_options, max_points);
@@ -197,14 +263,15 @@ static FindStraightPathResult find_straight_path_in(const NavMesh &nav_mesh, Vec
                     portal_apex = off_mesh_end;
                     portal_left = off_mesh_end;
                     portal_right = off_mesh_end;
-                    apex_index = i + 1;
-                    left_index = i + 1;
-                    right_index = i + 1;
+                    apex_index = i + 2;
+                    left_index = i + 2;
+                    right_index = i + 2;
                     left_node_ref = to_poly_ref;
                     right_node_ref = to_poly_ref;
                     left_node_type = NODE_TYPE_POLY;
                     right_node_type = NODE_TYPE_POLY;
 
+                    i++;
                     continue;
                 }
             } else {
