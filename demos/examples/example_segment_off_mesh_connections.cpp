@@ -112,8 +112,8 @@ static void add_links() {
     NavMesh &nav_mesh = state.result.nav_mesh;
     state.ledge_link = nav_mesh_api::add_off_mesh_segment_connection(
         nav_mesh, {
-                      .start_a = {-10, PLATFORM_HEIGHT, -1},
-                      .start_b = {8, PLATFORM_HEIGHT, -1},
+                      .start_a = {-10, PLATFORM_HEIGHT, -1.8f},
+                      .start_b = {8, PLATFORM_HEIGHT, -1.8f},
                       .end_a = {-10, 0, 0},
                       .end_b = {8, 0, 0},
                       .radius = 0.6f,
@@ -124,10 +124,10 @@ static void add_links() {
                       .align = false,
                   });
     state.gap_link = nav_mesh_api::add_off_mesh_segment_connection(nav_mesh, {
-                                                                                 .start_a = {-10, PLATFORM_HEIGHT, -8},
-                                                                                 .start_b = {10, PLATFORM_HEIGHT, -8},
-                                                                                 .end_a = {-10, PLATFORM_HEIGHT, -11},
-                                                                                 .end_b = {10, PLATFORM_HEIGHT, -11},
+                                                                                 .start_a = {-10, PLATFORM_HEIGHT, -7.2f},
+                                                                                 .start_b = {10, PLATFORM_HEIGHT, -7.2f},
+                                                                                 .end_a = {-10, PLATFORM_HEIGHT, -11.8f},
+                                                                                 .end_b = {10, PLATFORM_HEIGHT, -11.8f},
                                                                                  .radius = 0.6f,
                                                                                  .inset = 0.3f,
                                                                                  .direction = OFF_MESH_CONNECTION_DIRECTION_BIDIRECTIONAL,

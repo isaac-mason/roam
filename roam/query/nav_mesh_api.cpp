@@ -903,15 +903,20 @@ struct PlannedPiece {
     float t1;
 };
 
-struct SegmentSample {
-    NodeRef start_poly_node;
-    NodeRef end_poly_node;
+struct SegmentClip {
+    NodeRef poly_node;
+    float t0;
+    float t1;
 };
 
-static const uint32_t MAX_SEGMENT_SAMPLES = 1024;
-static const int SEGMENT_REFINE_STEPS = 12;
-static const int MAX_SEGMENT_CHANGES_PER_SAMPLE = 32;
+struct SegmentClipper {
+    Vec3 a;
+    Vec3 b;
+    Array<SegmentClip> *clips;
+};
+
 static const float MIN_PIECE_LENGTH = 0.01f;
+static const float SAME_T = 1e-6f;
 
 static NodeRef nearest_poly_within(const NavMesh &nav_mesh, Vec3 position, float radius) {
     FindNearestPolyResult nearest = {};
@@ -919,21 +924,87 @@ static NodeRef nearest_poly_within(const NavMesh &nav_mesh, Vec3 position, float
     return nearest.success ? nearest.node_ref : INVALID_NODE_REF;
 }
 
-static SegmentSample sample_segment(const NavMesh &nav_mesh, const OffMeshConnection &connection, float t) {
-    const OffMeshConnectionSegment &segment = connection.segment;
-    return {nearest_poly_within(nav_mesh, vec3::lerp(segment.start_a, segment.start_b, t), connection.radius),
-            nearest_poly_within(nav_mesh, vec3::lerp(segment.end_a, segment.end_b, t), connection.radius)};
-}
-
-static bool same_sample(SegmentSample a, SegmentSample b) { return a.start_poly_node == b.start_poly_node && a.end_poly_node == b.end_poly_node; }
-
 static float segment_length(const OffMeshConnectionSegment &segment) {
     return fmaxf(vec3::distance(segment.start_a, segment.start_b), vec3::distance(segment.end_a, segment.end_b));
 }
 
-static void plan_piece(Array<PlannedPiece> &pieces, SegmentSample sample, float t0, float t1) {
-    if (sample.start_poly_node == INVALID_NODE_REF || sample.end_poly_node == INVALID_NODE_REF || t1 <= t0) return;
-    pieces.push({sample.start_poly_node, sample.end_poly_node, t0, t1});
+static void clip_segment_to_poly(const NavMeshTile &tile, int poly_index, NodeRef ref, void *user_data) {
+    SegmentClipper &clipper = *(SegmentClipper *)user_data;
+    const NavMeshPoly &poly = tile.polys[(uint32_t)poly_index];
+    PolyVertices vertices;
+    gather_poly_vertices(tile, poly, vertices);
+    geometry::IntersectSegmentPoly2dResult hit = geometry::intersect_segment_poly_2d(clipper.a, clipper.b, (int)poly.vertex_count, vertices.data);
+    release(vertices);
+    if (!hit.intersects) return;
+    float t0 = fmaxf(hit.tmin, 0);
+    float t1 = fminf(hit.tmax, 1);
+    if (t1 - t0 > SAME_T) clipper.clips->push({ref, t0, t1});
+}
+
+static float vertical_distance(const NavMesh &nav_mesh, NodeRef poly_node, Vec3 position) {
+    TileAndPoly tile_and_poly = get_tile_and_poly_by_ref(nav_mesh, poly_node);
+    GetPolyHeightResult height = {};
+    if (tile_and_poly.success) get_poly_height(height, *tile_and_poly.tile, *tile_and_poly.poly, tile_and_poly.poly_index, position);
+    return height.success ? fabsf(height.height - position.y) : INFINITY;
+}
+
+static void sort_breakpoints(Array<float> &breakpoints) {
+    sort::insertion(breakpoints.data, 0, breakpoints.length, [](float x, float y) { return x < y; });
+    uint32_t kept = 0;
+    for (uint32_t i = 0; i < breakpoints.length; i++) {
+        if (kept == 0 || breakpoints[i] - breakpoints[kept - 1] > SAME_T) breakpoints[kept++] = breakpoints[i];
+    }
+    breakpoints.resize(kept);
+}
+
+static void clip_segment_side(Array<SegmentClip> &spans, const NavMesh &nav_mesh, Vec3 a, Vec3 b, float height_tolerance) {
+    Array<SegmentClip> clips = {};
+    SegmentClipper clipper = {a, b, &clips};
+    Box3 bounds = {vec3::min(a, b), vec3::max(a, b)};
+    bounds.min.y -= height_tolerance;
+    bounds.max.y += height_tolerance;
+    visit_polygons(nav_mesh, bounds, DEFAULT_QUERY_FILTER, clip_segment_to_poly, &clipper);
+
+    Array<float> breakpoints = {};
+    for (const SegmentClip &clip : clips) {
+        breakpoints.push(clip.t0);
+        breakpoints.push(clip.t1);
+    }
+    sort_breakpoints(breakpoints);
+
+    spans.clear();
+    for (uint32_t i = 0; i + 1 < breakpoints.length; i++) {
+        float t0 = breakpoints[i];
+        float t1 = breakpoints[i + 1];
+        float middle = (t0 + t1) * 0.5f;
+        Vec3 position = vec3::lerp(a, b, middle);
+        NodeRef best = INVALID_NODE_REF;
+        float best_distance = height_tolerance;
+        for (const SegmentClip &clip : clips) {
+            if (middle < clip.t0 || middle > clip.t1) continue;
+            float distance = vertical_distance(nav_mesh, clip.poly_node, position);
+            if (distance <= best_distance) {
+                best = clip.poly_node;
+                best_distance = distance;
+            }
+        }
+        if (best == INVALID_NODE_REF) continue;
+        if (spans.length > 0 && spans.back().poly_node == best && t0 - spans.back().t1 <= SAME_T) {
+            spans.back().t1 = t1;
+        } else {
+            spans.push({best, t0, t1});
+        }
+    }
+
+    clips.release();
+    breakpoints.release();
+}
+
+static NodeRef span_poly_at(const Array<SegmentClip> &spans, float t) {
+    for (const SegmentClip &span : spans) {
+        if (t >= span.t0 && t <= span.t1) return span.poly_node;
+    }
+    return INVALID_NODE_REF;
 }
 
 static void inset_piece_runs(Array<PlannedPiece> &pieces, float inset, float sliver) {
@@ -941,7 +1012,7 @@ static void inset_piece_runs(Array<PlannedPiece> &pieces, float inset, float sli
     uint32_t run_start = 0;
     while (run_start < pieces.length) {
         uint32_t run_end = run_start + 1;
-        while (run_end < pieces.length && pieces[run_end].t0 - pieces[run_end - 1].t1 < 1e-6f) run_end++;
+        while (run_end < pieces.length && pieces[run_end].t0 - pieces[run_end - 1].t1 <= SAME_T) run_end++;
         float low = pieces[run_start].t0 + inset;
         float high = pieces[run_end - 1].t1 - inset;
         for (uint32_t i = run_start; i < run_end && low < high; i++) {
@@ -965,43 +1036,45 @@ static void inset_piece_runs(Array<PlannedPiece> &pieces, float inset, float sli
 }
 
 static void plan_segment_pieces(Array<PlannedPiece> &pieces, const NavMesh &nav_mesh, const OffMeshConnection &connection) {
-    float spacing = fmaxf(connection.radius * 0.5f, 0.01f);
-    uint32_t steps = (uint32_t)ceilf(segment_length(connection.segment) / spacing);
-    if (steps < 1) steps = 1;
-    if (steps > MAX_SEGMENT_SAMPLES) steps = MAX_SEGMENT_SAMPLES;
+    const OffMeshConnectionSegment &segment = connection.segment;
+    Array<SegmentClip> start_spans = {};
+    Array<SegmentClip> end_spans = {};
+    clip_segment_side(start_spans, nav_mesh, segment.start_a, segment.start_b, connection.radius);
+    clip_segment_side(end_spans, nav_mesh, segment.end_a, segment.end_b, connection.radius);
 
-    SegmentSample current = sample_segment(nav_mesh, connection, 0);
-    float piece_start = 0;
-    float previous_t = 0;
-    for (uint32_t i = 1; i <= steps; i++) {
-        float t = (float)i / (float)steps;
-        SegmentSample next = sample_segment(nav_mesh, connection, t);
-        for (int change = 0; change < MAX_SEGMENT_CHANGES_PER_SAMPLE && !same_sample(current, next); change++) {
-            float low = previous_t;
-            float high = t;
-            SegmentSample high_sample = next;
-            for (int k = 0; k < SEGMENT_REFINE_STEPS; k++) {
-                float middle = (low + high) * 0.5f;
-                SegmentSample middle_sample = sample_segment(nav_mesh, connection, middle);
-                if (same_sample(middle_sample, current)) {
-                    low = middle;
-                } else {
-                    high = middle;
-                    high_sample = middle_sample;
-                }
-            }
-            plan_piece(pieces, current, piece_start, high);
-            piece_start = high;
-            previous_t = high;
-            current = high_sample;
-        }
-        previous_t = t;
+    Array<float> breakpoints = {};
+    for (const SegmentClip &span : start_spans) {
+        breakpoints.push(span.t0);
+        breakpoints.push(span.t1);
     }
-    plan_piece(pieces, current, piece_start, 1);
+    for (const SegmentClip &span : end_spans) {
+        breakpoints.push(span.t0);
+        breakpoints.push(span.t1);
+    }
+    sort_breakpoints(breakpoints);
 
-    float length = segment_length(connection.segment);
+    for (uint32_t i = 0; i + 1 < breakpoints.length; i++) {
+        float t0 = breakpoints[i];
+        float t1 = breakpoints[i + 1];
+        float middle = (t0 + t1) * 0.5f;
+        NodeRef start_poly_node = span_poly_at(start_spans, middle);
+        NodeRef end_poly_node = span_poly_at(end_spans, middle);
+        if (start_poly_node == INVALID_NODE_REF || end_poly_node == INVALID_NODE_REF) continue;
+        if (pieces.length > 0 && pieces.back().start_poly_node == start_poly_node && pieces.back().end_poly_node == end_poly_node &&
+            t0 - pieces.back().t1 <= SAME_T) {
+            pieces.back().t1 = t1;
+        } else {
+            pieces.push({start_poly_node, end_poly_node, t0, t1});
+        }
+    }
+
+    start_spans.release();
+    end_spans.release();
+    breakpoints.release();
+
+    float length = segment_length(segment);
     if (length <= 1e-6f) return;
-    inset_piece_runs(pieces, connection.segment.inset / length, MIN_PIECE_LENGTH / length);
+    inset_piece_runs(pieces, segment.inset / length, MIN_PIECE_LENGTH / length);
 }
 
 static void plan_pieces(Array<PlannedPiece> &pieces, const NavMesh &nav_mesh, const OffMeshConnection &connection) {

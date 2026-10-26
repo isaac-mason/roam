@@ -65,7 +65,7 @@ struct PieceSummary {
 
 static PieceSummary summarise_pieces(const NavMesh &nav_mesh, uint32_t id) {
     PieceSummary summary = {0, 0, true};
-    if (!nav_mesh.off_mesh_connection_attachments[id].attached) return summary;
+    if (id >= nav_mesh.off_mesh_connection_attachments.length || !nav_mesh.off_mesh_connection_attachments[id].attached) return summary;
     float previous_end = 0;
     for (int32_t i = nav_mesh.off_mesh_connection_attachments[id].first_piece; i >= 0; i = nav_mesh.off_mesh_connection_pieces[(uint32_t)i].next) {
         const OffMeshConnectionPiece &piece = nav_mesh.off_mesh_connection_pieces[(uint32_t)i];
@@ -109,20 +109,61 @@ TEST_CASE("segment connections split into pieces along the polys under both segm
     nav_mesh_api::release(nav_mesh);
 }
 
-TEST_CASE("segment connections only cover where both sides have mesh and snap across eroded edges") {
+TEST_CASE("segment connections only cover where both sides have mesh under them") {
     NavMesh nav_mesh = create_ledge();
     OffMeshSegmentConnectionParams params = ledge_link(OFF_MESH_CONNECTION_DIRECTION_START_TO_END);
-    params.start_a = {-5, 2, 4.3f};
-    params.start_b = {15, 2, 4.3f};
-    params.end_a = {-5, 0, 4.7f};
-    params.end_b = {15, 0, 4.7f};
+    params.start_a = {-5, 2, 3.7f};
+    params.start_b = {15, 2, 3.7f};
+    params.end_a = {-5, 0, 5.3f};
+    params.end_b = {15, 0, 5.3f};
     uint32_t id = nav_mesh_api::add_off_mesh_segment_connection(nav_mesh, params);
 
     REQUIRE(nav_mesh_api::is_off_mesh_connection_connected(nav_mesh, id));
     PieceSummary summary = summarise_pieces(nav_mesh, id);
     CHECK(summary.covered > 0.45f);
-    CHECK(summary.covered < 0.6f);
+    CHECK(summary.covered < 0.5f);
     CHECK(segment_pieces_are_consistent(nav_mesh));
+    nav_mesh_api::release(nav_mesh);
+}
+
+TEST_CASE("segment connections do not snap stretches that lie off the mesh") {
+    NavMesh nav_mesh = create_ledge();
+    OffMeshSegmentConnectionParams params = ledge_link(OFF_MESH_CONNECTION_DIRECTION_START_TO_END);
+    params.start_a = {1, 2, 4.3f};
+    params.start_b = {9, 2, 4.3f};
+    params.end_a = {1, 0, 4.7f};
+    params.end_b = {9, 0, 4.7f};
+    uint32_t id = nav_mesh_api::add_off_mesh_segment_connection(nav_mesh, params);
+
+    CHECK_FALSE(nav_mesh_api::is_off_mesh_connection_connected(nav_mesh, id));
+    CHECK(summarise_pieces(nav_mesh, id).count == 0);
+    nav_mesh_api::release(nav_mesh);
+}
+
+TEST_CASE("segment connections attach to the poly nearest in height where polys overlap") {
+    Array<float> positions = {};
+    Array<uint32_t> indices = {};
+    push_strip(positions, indices, 0, 10, 0, 4, 0, 2);
+    push_strip(positions, indices, 0, 10, 0, 4, 3, 2);
+    push_strip(positions, indices, 0, 10, 6, 10, 0, 2);
+    NavMesh nav_mesh = create_nav_mesh_from_triangles(positions.data, positions.length / 3, indices.data, indices.length);
+    positions.release();
+    indices.release();
+    OffMeshSegmentConnectionParams params = ledge_link(OFF_MESH_CONNECTION_DIRECTION_START_TO_END);
+    params.start_a = {1, 3, 3.5f};
+    params.start_b = {9, 3, 3.5f};
+    params.end_a = {1, 0, 6.5f};
+    params.end_b = {9, 0, 6.5f};
+    params.radius = 0.5f;
+    uint32_t id = nav_mesh_api::add_off_mesh_segment_connection(nav_mesh, params);
+
+    REQUIRE(nav_mesh_api::is_off_mesh_connection_connected(nav_mesh, id));
+    for (int32_t i = nav_mesh.off_mesh_connection_attachments[id].first_piece; i >= 0; i = nav_mesh.off_mesh_connection_pieces[(uint32_t)i].next) {
+        const OffMeshConnectionPiece &piece = nav_mesh.off_mesh_connection_pieces[(uint32_t)i];
+        GetClosestPointOnPolyResult closest = {};
+        nav_mesh_api::get_closest_point_on_poly(closest, nav_mesh, piece.start_poly_node, {5, 3, 3.5f});
+        CHECK_NEAR(closest.position.y, 3.0f, 0.1f);
+    }
     nav_mesh_api::release(nav_mesh);
 }
 
@@ -349,13 +390,19 @@ TEST_CASE("saving and loading keeps segment connections and their pieces") {
     nav_mesh_api::release(nav_mesh);
 }
 
+static float closest_t(Vec3 point, Vec3 a, Vec3 b) {
+    float dx = b.x - a.x;
+    float dz = b.z - a.z;
+    return ((point.x - a.x) * dx + (point.z - a.z) * dz) / (dx * dx + dz * dz);
+}
+
 static float path_length(const StraightPathPoint *points, uint32_t count) {
     float length = 0;
     for (uint32_t i = 1; i < count; i++) length += vec3::distance(points[i - 1].position, points[i].position);
     return length;
 }
 
-TEST_CASE("paths cross a segment connection where the whole route is shortest, not just nearest") {
+TEST_CASE("paths cross a segment connection on the link with the exit at the same t, never shorter than the best crossing") {
     NavMesh nav_mesh = create_ledge();
     uint32_t id = nav_mesh_api::add_off_mesh_segment_connection(nav_mesh, ledge_link(OFF_MESH_CONNECTION_DIRECTION_START_TO_END));
     QueryWorkspace workspace = nav_mesh_search::create_query_workspace();
@@ -384,9 +431,10 @@ TEST_CASE("paths cross a segment connection where the whole route is shortest, n
             float length = vec3::distance(points[0].position, a) + vec3::distance(a, b) + vec3::distance(b, points[path.point_count - 1].position);
             if (length < best) best = length;
         }
-        float actual = path_length(points, path.point_count);
-        CHECK(actual <= best * 1.02f + 1e-3f);
-        CHECK(actual >= best - 1e-3f);
+        float t = closest_t(corner.entry.position, segment.start_a, segment.start_b);
+        CHECK(vec3::distance(corner.entry.position, vec3::lerp(segment.start_a, segment.start_b, t)) < 1e-3f);
+        CHECK(vec3::distance(corner.exit.position, vec3::lerp(segment.end_a, segment.end_b, t)) < 1e-3f);
+        CHECK(path_length(points, path.point_count) >= best - 1e-3f);
     }
 
     nav_mesh_search::release(workspace);
