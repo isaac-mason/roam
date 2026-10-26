@@ -180,22 +180,35 @@ TEST_CASE("one way segment connections are only searchable from the start side")
     nav_mesh_api::release(nav_mesh);
 }
 
-TEST_CASE("crossings stay inset from piece ends and land on the end poly") {
+TEST_CASE("the inset trims the ends of covered stretches and crossings land on the end poly") {
     NavMesh nav_mesh = create_ledge();
     uint32_t id = nav_mesh_api::add_off_mesh_segment_connection(nav_mesh, ledge_link(OFF_MESH_CONNECTION_DIRECTION_START_TO_END));
-    const OffMeshConnectionPiece &piece = first_piece(nav_mesh, id);
     float length = 8;
+    const OffMeshConnectionPiece &first = first_piece(nav_mesh, id);
+    CHECK_NEAR(first.t0, 0.2f / length, 2e-3f);
+
+    float previous_end = -1;
+    float last_end = 0;
+    uint32_t gaps = 0;
+    for (int32_t i = nav_mesh.off_mesh_connection_attachments[id].first_piece; i >= 0; i = nav_mesh.off_mesh_connection_pieces[(uint32_t)i].next) {
+        const OffMeshConnectionPiece &piece = nav_mesh.off_mesh_connection_pieces[(uint32_t)i];
+        if (previous_end >= 0 && piece.t0 - previous_end > 1e-5f) gaps++;
+        previous_end = piece.t1;
+        last_end = piece.t1;
+    }
+    CHECK(gaps == 0);
+    CHECK_NEAR(last_end, 1 - 0.2f / length, 2e-3f);
 
     OffMeshCrossing crossing = {};
-    nav_mesh_api::get_off_mesh_crossing(crossing, nav_mesh, piece.start_poly_node, piece.off_mesh_node, {-20, 2, 3});
+    nav_mesh_api::get_off_mesh_crossing(crossing, nav_mesh, first.start_poly_node, first.off_mesh_node, {-20, 2, 3});
     REQUIRE(crossing.success);
     CHECK(crossing.from_start);
-    CHECK_NEAR(crossing.t, piece.t0 + 0.2f / length, 1e-4f);
-    CHECK(crossing.end_poly_ref == piece.end_poly_node);
+    CHECK_NEAR(crossing.t, first.t0, 1e-5f);
+    CHECK(crossing.end_poly_ref == first.end_poly_node);
     CHECK_NEAR(crossing.landing.z, 5.0f, 1e-3f);
 
-    nav_mesh_api::get_off_mesh_crossing(crossing, nav_mesh, piece.start_poly_node, piece.off_mesh_node, {20, 2, 3});
-    CHECK_NEAR(crossing.t, piece.t1 - 0.2f / length, 1e-4f);
+    nav_mesh_api::get_off_mesh_crossing(crossing, nav_mesh, first.start_poly_node, first.off_mesh_node, {20, 2, 3});
+    CHECK_NEAR(crossing.t, first.t1, 1e-5f);
     nav_mesh_api::release(nav_mesh);
 }
 

@@ -911,6 +911,7 @@ struct SegmentSample {
 static const uint32_t MAX_SEGMENT_SAMPLES = 1024;
 static const int SEGMENT_REFINE_STEPS = 12;
 static const int MAX_SEGMENT_CHANGES_PER_SAMPLE = 32;
+static const float MIN_PIECE_LENGTH = 0.01f;
 
 static NodeRef nearest_poly_within(const NavMesh &nav_mesh, Vec3 position, float radius) {
     FindNearestPolyResult nearest = {};
@@ -930,10 +931,37 @@ static float segment_length(const OffMeshConnectionSegment &segment) {
     return fmaxf(vec3::distance(segment.start_a, segment.start_b), vec3::distance(segment.end_a, segment.end_b));
 }
 
-static void plan_piece(Array<PlannedPiece> &pieces, const OffMeshConnection &connection, SegmentSample sample, float t0, float t1) {
-    if (sample.start_poly_node == INVALID_NODE_REF || sample.end_poly_node == INVALID_NODE_REF) return;
-    if ((t1 - t0) * segment_length(connection.segment) <= fmaxf(2 * connection.segment.inset, 1e-4f)) return;
+static void plan_piece(Array<PlannedPiece> &pieces, SegmentSample sample, float t0, float t1) {
+    if (sample.start_poly_node == INVALID_NODE_REF || sample.end_poly_node == INVALID_NODE_REF || t1 <= t0) return;
     pieces.push({sample.start_poly_node, sample.end_poly_node, t0, t1});
+}
+
+static void inset_piece_runs(Array<PlannedPiece> &pieces, float inset, float sliver) {
+    uint32_t kept = 0;
+    uint32_t run_start = 0;
+    while (run_start < pieces.length) {
+        uint32_t run_end = run_start + 1;
+        while (run_end < pieces.length && pieces[run_end].t0 - pieces[run_end - 1].t1 < 1e-6f) run_end++;
+        float low = pieces[run_start].t0 + inset;
+        float high = pieces[run_end - 1].t1 - inset;
+        for (uint32_t i = run_start; i < run_end && low < high; i++) {
+            PlannedPiece piece = pieces[i];
+            piece.t0 = fmaxf(piece.t0, low);
+            piece.t1 = fminf(piece.t1, high);
+            if (piece.t1 <= piece.t0) continue;
+            bool joins_previous = kept > 0 && i > run_start && pieces[kept - 1].t1 >= piece.t0 - 1e-6f;
+            if (joins_previous && piece.t1 - piece.t0 < sliver) {
+                pieces[kept - 1].t1 = piece.t1;
+            } else if (joins_previous && pieces[kept - 1].t1 - pieces[kept - 1].t0 < sliver) {
+                piece.t0 = pieces[kept - 1].t0;
+                pieces[kept - 1] = piece;
+            } else {
+                pieces[kept++] = piece;
+            }
+        }
+        run_start = run_end;
+    }
+    pieces.resize(kept);
 }
 
 static void plan_segment_pieces(Array<PlannedPiece> &pieces, const NavMesh &nav_mesh, const OffMeshConnection &connection) {
@@ -962,14 +990,18 @@ static void plan_segment_pieces(Array<PlannedPiece> &pieces, const NavMesh &nav_
                     high_sample = middle_sample;
                 }
             }
-            plan_piece(pieces, connection, current, piece_start, high);
+            plan_piece(pieces, current, piece_start, high);
             piece_start = high;
             previous_t = high;
             current = high_sample;
         }
         previous_t = t;
     }
-    plan_piece(pieces, connection, current, piece_start, 1);
+    plan_piece(pieces, current, piece_start, 1);
+
+    float length = segment_length(connection.segment);
+    if (length <= 1e-6f) return;
+    inset_piece_runs(pieces, connection.segment.inset / length, MIN_PIECE_LENGTH / length);
 }
 
 static void plan_pieces(Array<PlannedPiece> &pieces, const NavMesh &nav_mesh, const OffMeshConnection &connection) {
@@ -1513,13 +1545,7 @@ void get_off_mesh_crossing(OffMeshCrossing &out, const NavMesh &nav_mesh, NodeRe
         Vec3 entry_b = out.from_start ? segment.start_b : segment.end_b;
         Vec3 exit_a = out.from_start ? segment.end_a : segment.start_a;
         Vec3 exit_b = out.from_start ? segment.end_b : segment.start_b;
-        float length = segment_length(segment);
-        float inset = length > 1e-6f ? segment.inset / length : 0;
-        float low = piece->t0 + inset;
-        float high = piece->t1 - inset;
-        float t = closest_t_on_segment_2d(position, entry_a, entry_b);
-        if (low > high) t = (piece->t0 + piece->t1) * 0.5f;
-        else t = fminf(fmaxf(t, low), high);
+        float t = fminf(fmaxf(closest_t_on_segment_2d(position, entry_a, entry_b), piece->t0), piece->t1);
         out.start = vec3::lerp(entry_a, entry_b, t);
         out.end = vec3::lerp(exit_a, exit_b, t);
         out.t = t;
