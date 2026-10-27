@@ -11,6 +11,7 @@ struct FrameInput {
     float pointer_x;
     float pointer_y;
     sg_swapchain swapchain;
+    bool hide_ui;
 };
 
 namespace shell {

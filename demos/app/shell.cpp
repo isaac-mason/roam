@@ -10,6 +10,10 @@
 #include "sokol_log.h"
 #include "sokol_time.h"
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+#endif
+
 using namespace roam;
 
 static App state;
@@ -49,6 +53,28 @@ void lift(DebugPrimitives &primitives, float height) {
 
 namespace shell {
 
+static void example_id(char *out, size_t capacity, const char *name) {
+    snprintf(out, capacity, "example_%s", name);
+    for (char *c = out; *c; c++) {
+        if (*c == ' ') *c = '_';
+    }
+}
+
+static void show_example_in_url(const char *name) {
+#if defined(__EMSCRIPTEN__)
+    char id[128];
+    example_id(id, sizeof(id), name);
+    char script[256];
+    snprintf(script, sizeof(script),
+             "var url = new URL(window.location.href); url.hash = ''; url.searchParams.set('example', '%s');"
+             " window.history.replaceState(null, '', url.toString());",
+             id);
+    emscripten_run_script(script);
+#else
+    (void)name;
+#endif
+}
+
 App &app() { return state; }
 
 void select_example(int index) {
@@ -58,13 +84,17 @@ void select_example(int index) {
     state.click = {};
     state.want_hover = false;
     EXAMPLES[active_example]->init(state);
+    show_example_in_url(EXAMPLES[active_example]->name);
 }
 
 int current_example() { return active_example; }
 
 int find_example(const char *name) {
+    char id[128];
     for (int i = 0; i < EXAMPLE_COUNT; i++) {
         if (strcmp(EXAMPLES[i]->name, name) == 0) return i;
+        example_id(id, sizeof(id), EXAMPLES[i]->name);
+        if (strcmp(id, name) == 0 || strcmp(id + strlen("example_"), name) == 0) return i;
     }
     return -1;
 }
@@ -172,7 +202,11 @@ void frame(const FrameInput &input) {
     pass.swapchain = input.swapchain;
     sg_begin_pass(&pass);
     renderer::render(state.renderer, state.camera, state.statics.data, state.statics.length, state.show_level);
-    simgui_render();
+    if (input.hide_ui) {
+        ImGui::Render();
+    } else {
+        simgui_render();
+    }
     sg_end_pass();
     sg_commit();
 }

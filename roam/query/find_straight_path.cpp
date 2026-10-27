@@ -264,7 +264,7 @@ static FindStraightPathResult find_straight_path_in(const NavMesh &nav_mesh, Vec
                     portal_apex = portal_left;
                     apex_index = left_index;
 
-                    uint32_t point_flags = left_node_ref == INVALID_NODE_REF ? STRAIGHT_PATH_POINT_END : 0;
+                    uint32_t point_flags = left_node_ref == INVALID_NODE_REF ? (uint32_t)STRAIGHT_PATH_POINT_END : 0u;
                     uint32_t status = append_vertex(portal_apex, left_node_ref, point_flags, path,
                                                     left_node_ref != INVALID_NODE_REF ? left_node_type : NODE_TYPE_POLY, max_points);
                     if (status != APPEND_VERTEX_IN_PROGRESS) return stopped(status, FIND_STRAIGHT_PATH_RESULT_SUCCESS, path);
@@ -295,7 +295,7 @@ static FindStraightPathResult find_straight_path_in(const NavMesh &nav_mesh, Vec
                     portal_apex = portal_right;
                     apex_index = right_index;
 
-                    uint32_t point_flags = right_node_ref == INVALID_NODE_REF ? STRAIGHT_PATH_POINT_END : 0;
+                    uint32_t point_flags = right_node_ref == INVALID_NODE_REF ? (uint32_t)STRAIGHT_PATH_POINT_END : 0u;
                     uint32_t status = append_vertex(portal_apex, right_node_ref, point_flags, path,
                                                     right_node_ref != INVALID_NODE_REF ? right_node_type : NODE_TYPE_POLY, max_points);
                     if (status != APPEND_VERTEX_IN_PROGRESS) return stopped(status, FIND_STRAIGHT_PATH_RESULT_SUCCESS, path);

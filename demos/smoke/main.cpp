@@ -41,7 +41,7 @@ static bool run_example(int index) {
         if (frame == 15) shell::click(WIDTH * 0.6f, HEIGHT * 0.45f, false, false);
         if (frame == 20) shell::click(WIDTH * 0.4f, HEIGHT * 0.55f, true, false);
         if (frame == 10 || frame == 15 || frame == 20) clicks_hit += shell::app().click.hit ? 1 : 0;
-        FrameInput input = {WIDTH, HEIGHT, 1.0f / 60.0f, 1.0f, WIDTH * 0.5f, HEIGHT * 0.5f, headless_swapchain()};
+        FrameInput input = {WIDTH, HEIGHT, 1.0f / 60.0f, 1.0f, WIDTH * 0.5f, HEIGHT * 0.5f, headless_swapchain(), false};
         shell::frame(input);
     }
     bool has_level = shell::app().level.loaded;

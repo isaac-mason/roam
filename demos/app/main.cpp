@@ -66,7 +66,7 @@ static void save_screenshot() {
 static void frame() {
     if (drop_path && frame_count == 1) shell::read_dropped_file(drop_path);
 
-    FrameInput frame_input = {sapp_widthf(), sapp_heightf(), (float)sapp_frame_duration(), sapp_dpi_scale(), input.x, input.y, sglue_swapchain()};
+    FrameInput frame_input = {sapp_widthf(), sapp_heightf(), (float)sapp_frame_duration(), sapp_dpi_scale(), input.x, input.y, sglue_swapchain(), false};
     shell::frame(frame_input);
 
     frame_count++;

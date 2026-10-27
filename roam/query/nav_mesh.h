@@ -152,9 +152,9 @@ struct NavMeshTileParams {
     Span<const NavMeshPolyDetail> detail_meshes;
     Span<const float> detail_vertices;
     Span<const uint8_t> detail_triangles;
-    int tile_x;
-    int tile_y;
-    int tile_layer;
+    int tile_x = 0;
+    int tile_y = 0;
+    int tile_layer = 0;
     float cell_size;
     float cell_height;
     float walkable_height;

@@ -37,8 +37,8 @@ struct FindSmoothPathResult {
 struct FindSmoothPathOptions {
     float step_size;
     float slop;
-    float raycast_distance;
-    Span<NodeRef> node_path;
+    float raycast_distance = 0;
+    Span<NodeRef> node_path = {};
 };
 
 namespace find_smooth_path {

@@ -16,11 +16,11 @@ namespace roam {
 struct SoloNavMeshOptions {
     float cell_size;
     float cell_height;
-    int walkable_radius_voxels;
+    int walkable_radius_voxels = 0;
     float walkable_radius_world;
-    int walkable_climb_voxels;
+    int walkable_climb_voxels = 0;
     float walkable_climb_world;
-    int walkable_height_voxels;
+    int walkable_height_voxels = 0;
     float walkable_height_world;
     float walkable_slope_angle_degrees;
     int border_size;

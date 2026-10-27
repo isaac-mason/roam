@@ -1,0 +1,122 @@
+{
+    "example_crowd_simulation": {
+        "title": "Crowd Simulation",
+        "description": "Example of crowd simulation with agent and wall avoidance"
+    },
+    "example_navmesh_constrained_character_controller": {
+        "title": "NavMesh Constrained Character Controller",
+        "description": "Example of a simple character controller constrained to a navmesh"
+    },
+    "example_area_filters": {
+        "title": "Area Filters",
+        "description": "Example of filtering passable areas in a navmesh"
+    },
+    "example_area_costs": {
+        "title": "Area Costs",
+        "description": "Example of cost-aware pathfinding that prefers a longer green detour over a red slow zone"
+    },
+    "example_doors_and_keys": {
+        "title": "Doors and Keys",
+        "description": "Example of using query filters to create conditional areas in a navmesh"
+    },
+    "example_multiple_agent_sizes": {
+        "title": "Multiple Agent Sizes",
+        "description": "Example of crowd simulation with agents of multiple sizes"
+    },
+    "example_crowd_simulation_stress_test": {
+        "title": "Crowd Simulation Stress Test",
+        "description": "Stress test example of crowd simulation with a large number of agents"
+    },
+    "example_flow_field_pathfinding": {
+        "title": "Flow Field Pathfinding",
+        "description": "Example of flow field pathfinding on a navmesh"
+    },
+    "example_find_path": {
+        "title": "Find Path",
+        "description": "Example of finding a path on the navmesh"
+    },
+    "example_find_node_path": {
+        "title": "Find Node Path",
+        "description": "Example of finding a node path on the navmesh"
+    },
+    "example_find_straight_path": {
+        "title": "Find Straight Path",
+        "description": "Example of using find_node_path and find_straight_path together"
+    },
+    "example_find_smooth_path": {
+        "title": "Find Smooth Path",
+        "description": "Example of finding a smooth path on the navmesh"
+    },
+    "example_find_shortest_paths": {
+        "title": "Find Shortest Paths",
+        "description": "Example of finding shortest paths on the navmesh using Yen's algorithm"
+    },
+    "example_find_diverse_paths": {
+        "title": "Find Diverse Paths",
+        "description": "Example of finding diverse paths on the navmesh with a heuristic method"
+    },
+    "example_raycast": {
+        "title": "Raycast",
+        "description": "Example of a walkability raycast on a navmesh"
+    },
+    "example_off_mesh_connections": {
+        "title": "Off-Mesh Connections",
+        "description": "Example of using off-mesh connections in a navmesh"
+    },
+    "example_segment_off_mesh_connections": {
+        "title": "Segment Off-Mesh Connections",
+        "description": "Example of wide off-mesh connections that join a whole edge to another"
+    },
+    "example_upload_model": {
+        "title": "Upload Model",
+        "description": "Example of uploading a model and generating a navmesh from it"
+    },
+    "example_custom_gltf_nav_mesh": {
+        "title": "Custom GLTF NavMesh",
+        "description": "Example of loading a level model and navmesh from a GLTF file"
+    },
+    "example_solo_nav_mesh": {
+        "title": "Solo NavMesh",
+        "description": "Example of generating a single tile navmesh"
+    },
+    "example_tiled_nav_mesh": {
+        "title": "Tiled NavMesh",
+        "description": "Example of generating a tiled navmesh"
+    },
+    "example_flood_fill_pruning": {
+        "title": "Flood Fill Pruning",
+        "description": "Example of flood fill pruning to remove disconnected polygon regions from a tiled navmesh"
+    },
+    "example_find_nearest_poly": {
+        "title": "Find Nearest Poly",
+        "description": "Example of finding the nearest polygon on the navmesh"
+    },
+    "example_find_random_point": {
+        "title": "Find Random Point",
+        "description": "Example of finding a random point on the navmesh"
+    },
+    "example_find_random_point_around_circle": {
+        "title": "Find Random Point Around Circle",
+        "description": "Example of finding a random point around a circle on the navmesh"
+    },
+    "example_mark_compact_heightfield_areas": {
+        "title": "Mark Compact Heightfield Areas",
+        "description": "Example showcasing marking areas in a compact heightfield"
+    },
+    "example_custom_nav_mesh_generation": {
+        "title": "Custom NavMesh Generation",
+        "description": "Example of generating a navmesh with a custom approach"
+    },
+    "example_move_along_surface": {
+        "title": "Move Along Surface",
+        "description": "Example of moving along the surface of a navmesh"
+    },
+    "example_chunky_tri_mesh": {
+        "title": "Chunky Tri Mesh",
+        "description": "Example of using a chunky triangle mesh for querying triangles within areas"
+    },
+    "example_rasterize_filled_volume": {
+        "title": "Rasterize Filled Volume",
+        "description": "Example of rasterizing filled volumes into a heightfield"
+    }
+}

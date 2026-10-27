@@ -199,19 +199,26 @@ TEST_CASE("generate tiled nav mesh connects tiles across a plane") {
 }
 
 TEST_CASE("derive sizes rounds each agent measure up to whole voxels and sizes tiles in metres") {
-    SoloNavMeshOptions solo = generate_solo_nav_mesh::derive_sizes(
-        {.cell_size = 0.2f, .cell_height = 0.25f, .walkable_radius_world = 0.3f, .walkable_climb_world = 0.5f, .walkable_height_world = 1.8f});
+    SoloNavMeshOptions solo_settings = {};
+    solo_settings.cell_size = 0.2f;
+    solo_settings.cell_height = 0.25f;
+    solo_settings.walkable_radius_world = 0.3f;
+    solo_settings.walkable_climb_world = 0.5f;
+    solo_settings.walkable_height_world = 1.8f;
+    SoloNavMeshOptions solo = generate_solo_nav_mesh::derive_sizes(solo_settings);
     CHECK(solo.walkable_radius_voxels == 2);
     CHECK(solo.walkable_climb_voxels == 2);
     CHECK(solo.walkable_height_voxels == 8);
     CHECK(solo.walkable_radius_world == 0.3f);
 
-    TiledNavMeshOptions tiled = generate_tiled_nav_mesh::derive_sizes({.cell_size = 0.2f,
-                                                                       .cell_height = 0.25f,
-                                                                       .tile_size_voxels = 32,
-                                                                       .walkable_radius_world = 0.3f,
-                                                                       .walkable_climb_world = 0.5f,
-                                                                       .walkable_height_world = 1.8f});
+    TiledNavMeshOptions tiled_settings = {};
+    tiled_settings.cell_size = 0.2f;
+    tiled_settings.cell_height = 0.25f;
+    tiled_settings.tile_size_voxels = 32;
+    tiled_settings.walkable_radius_world = 0.3f;
+    tiled_settings.walkable_climb_world = 0.5f;
+    tiled_settings.walkable_height_world = 1.8f;
+    TiledNavMeshOptions tiled = generate_tiled_nav_mesh::derive_sizes(tiled_settings);
     CHECK(tiled.tile_size_world == doctest::Approx(6.4f));
     CHECK(tiled.walkable_radius_voxels == 2);
     CHECK(tiled.walkable_climb_voxels == 2);

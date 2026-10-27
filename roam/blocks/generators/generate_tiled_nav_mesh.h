@@ -20,12 +20,12 @@ struct TiledNavMeshOptions {
     float cell_size;
     float cell_height;
     int tile_size_voxels;
-    float tile_size_world;
-    int walkable_radius_voxels;
+    float tile_size_world = 0;
+    int walkable_radius_voxels = 0;
     float walkable_radius_world;
-    int walkable_climb_voxels;
+    int walkable_climb_voxels = 0;
     float walkable_climb_world;
-    int walkable_height_voxels;
+    int walkable_height_voxels = 0;
     float walkable_height_world;
     float walkable_slope_angle_degrees;
     int border_size;
