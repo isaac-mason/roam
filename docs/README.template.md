@@ -30,7 +30,7 @@ nothing hidden to untangle. See [Generation presets](#generation-presets-half-li
 
 **Examples**
 
-`demos/` is an app of 30 examples, each one file in [`demos/examples/`](./demos/examples). They are the place to see
+`demos/` is an app of examples, each one file in [`demos/examples/`](./demos/examples). They are the place to see
 roam used in full. Try them in your browser at [isaac-mason.github.io/roam](https://isaac-mason.github.io/roam/):
 each picture below opens its example there, and "source" opens its code. The app also builds natively, see
 [Demos](#demos).
@@ -870,7 +870,7 @@ lines to draw them with whatever you render with, as the demo app does with soko
 
 ## Demos
 
-`demos/` is an app of 30 examples, listed [at the top](#roam). Each is one file in `demos/examples/`. The app builds
+`demos/` is an app of examples, listed [at the top](#roam). Each is one file in `demos/examples/`. The app builds
 natively and with Emscripten, and every push to `main` deploys the web build to
 [isaac-mason.github.io/roam](https://isaac-mason.github.io/roam/). Open an example directly with `?example=<id>`, such
 as [`?example=example_find_path`](https://isaac-mason.github.io/roam/?example=example_find_path); the URL follows the
